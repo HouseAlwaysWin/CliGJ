@@ -3,16 +3,22 @@ import { AppTheme } from "../theme.slint";
 
 export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
+    in property <bool> auto-scroll: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
 
     border-width: 0px;
     background: AppTheme.bg;
 
-    changed terminal-text => {
-        // Scroll to bottom when new output arrives.
-        // Note: TextEdit's viewport coordinates are typically negative when scrolled.
-        viewer_text.viewport-y = min(0px, viewer_text.visible-height - viewer_text.viewport-height);
+    public function scroll_to_bottom() {
+        // Only auto-scroll when content overflows the visible area.
+        // This avoids "big blank gap" when there are only a few lines.
+        if (viewer_text.viewport-height > viewer_text.visible-height) {
+            // TextEdit's viewport-y is typically negative when scrolled.
+            viewer_text.viewport-y = min(0px, viewer_text.visible-height - viewer_text.viewport-height);
+        } else {
+            viewer_text.viewport-y = 0px;
+        }
     }
 
     viewer_text := TextEdit {

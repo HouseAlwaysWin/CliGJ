@@ -4,6 +4,13 @@ use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
 use std::thread;
 
+use std::sync::Arc;
+
+use wezterm_term::config::TerminalConfiguration;
+use wezterm_term::Terminal;
+use wezterm_term::TerminalSize;
+use wezterm_term::color::ColorPalette;
+
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
@@ -13,6 +20,15 @@ use windows::Win32::System::Threading::{
     UpdateProcThreadAttribute, EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST,
     PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTUPINFOEXW,
 };
+
+#[derive(Debug)]
+struct CliGjTermConfig;
+
+impl TerminalConfiguration for CliGjTermConfig {
+    fn color_palette(&self) -> ColorPalette {
+        ColorPalette::default()
+    }
+}
 
 pub struct ConptySession {
     pub writer: std::fs::File,
@@ -155,6 +171,17 @@ pub fn start_reader_thread(
     mut on_chunk: impl FnMut(String) + Send + 'static,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
+        let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
+        let term_size = TerminalSize {
+            rows: 40,
+            cols: 120,
+            pixel_width: 0,
+            pixel_height: 0,
+            dpi: 0,
+        };
+        let writer: Box<dyn Write + Send> = Box::new(std::io::sink());
+        let mut term = Terminal::new(term_size, config, "CliGJ", "0", writer);
+
         let mut buf = [0u8; 8192];
         loop {
             let n = match reader.read(&mut buf) {
@@ -162,11 +189,39 @@ pub fn start_reader_thread(
                 Ok(n) => n,
                 Err(_) => break,
             };
-            let raw = String::from_utf8_lossy(&buf[..n]);
-            let text = normalize_newlines(&strip_ansi_vt(&raw));
-            on_chunk(text);
+            // Feed into terminal emulator; it will parse VT/ANSI and maintain a screen buffer.
+            term.advance_bytes(&buf[..n]);
+
+            // Render the most recent portion of the screen+scrollback to plain text.
+            // We intentionally limit output to avoid huge UI strings.
+            let screen = term.screen();
+            let total = screen.scrollback_rows();
+            let start = total.saturating_sub(300);
+            let lines = screen.lines_in_phys_range(start..total);
+            let mut out = String::new();
+            for (i, line) in lines.iter().enumerate() {
+                if i > 0 {
+                    out.push('\n');
+                }
+                out.push_str(line.as_str().trim_end());
+            }
+
+            // Remove our init noise if it was echoed.
+            let out = filter_init_noise(&out);
+            on_chunk(out);
         }
     })
+}
+
+fn filter_init_noise(s: &str) -> String {
+    // Remove the UTF-8 initialization commands that may get echoed by cmd/PowerShell.
+    // Use substring removal instead of dropping whole lines, because the shell prompt
+    // can appear on the same line as the command echo.
+    s.replace("@chcp 65001 > nul\n", "")
+        .replace("chcp 65001 > nul\n", "")
+        .replace("chcp 65001 > $null\n", "")
+        .replace("[Console]::InputEncoding=[System.Text.UTF8Encoding]::new(); ", "")
+        .replace("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); ", "")
 }
 
 fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {
@@ -182,64 +237,5 @@ chcp 65001 > $null\r\n"
     writer.write_all(cmd.as_bytes())?;
     writer.flush()?;
     Ok(())
-}
-
-fn normalize_newlines(s: &str) -> String {
-    let s = s.replace("\r\n", "\n");
-    s.replace('\r', "")
-}
-
-fn strip_ansi_vt(s: &str) -> String {
-    // Minimal VT/ANSI stripper:
-    // - CSI: ESC [ ... <final>
-    // - OSC: ESC ] ... (BEL | ESC \)
-    // - Other ESC sequences: ESC <char>
-    let bytes = s.as_bytes();
-    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
-    let mut i = 0usize;
-    while i < bytes.len() {
-        if bytes[i] != 0x1b {
-            out.push(bytes[i]);
-            i += 1;
-            continue;
-        }
-
-        if i + 1 >= bytes.len() {
-            break;
-        }
-        let next = bytes[i + 1];
-        if next == b'[' {
-            // CSI
-            i += 2;
-            while i < bytes.len() {
-                let b = bytes[i];
-                i += 1;
-                if (0x40..=0x7e).contains(&b) {
-                    break;
-                }
-            }
-            continue;
-        }
-        if next == b']' {
-            // OSC
-            i += 2;
-            while i < bytes.len() {
-                if bytes[i] == 0x07 {
-                    i += 1;
-                    break;
-                }
-                if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
-                    i += 2;
-                    break;
-                }
-                i += 1;
-            }
-            continue;
-        }
-
-        // Other ESC sequences: drop ESC + one char.
-        i += 2;
-    }
-    String::from_utf8_lossy(&out).to_string()
 }
 

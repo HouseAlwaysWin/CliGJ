@@ -24,6 +24,7 @@ pub fn run_gui() {
         current: 0,
         next_id: 2,
         tx,
+        pending_scroll: false,
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
@@ -40,14 +41,27 @@ pub fn run_gui() {
         move || {
             let Some(ui) = app_weak.upgrade() else { return; };
             let mut s = state_for_stream.borrow_mut();
+            // Defer scrolling by one tick so Slint has time
+            // to update TextEdit's viewport metrics.
+            if s.pending_scroll {
+                ui.invoke_ws_scroll_terminal_to_bottom();
+                s.pending_scroll = false;
+            }
             while let Ok(chunk) = rx.try_recv() {
                 let current_id = s.tabs.get(s.current).map(|t| t.id);
                 let mut updated_current = None;
                 for tab in s.tabs.iter_mut() {
                     if tab.id == chunk.tab_id {
-                        tab.append_terminal(&chunk.text);
+                        if chunk.replace {
+                            tab.terminal_text = chunk.text.clone();
+                        } else {
+                            tab.append_terminal(&chunk.text);
+                        }
                         if current_id == Some(chunk.tab_id) {
                             updated_current = Some(tab.terminal_text.clone());
+                            if tab.auto_scroll {
+                                s.pending_scroll = true;
+                            }
                         }
                         break;
                     }
@@ -132,6 +146,7 @@ struct TabState {
     prompt: SharedString,
     cmd_type: String,
     terminal_text: String,
+    auto_scroll: bool,
 
     #[cfg(target_os = "windows")]
     conpty: Option<windows_conpty::ConptySession>,
@@ -150,6 +165,7 @@ impl TabState {
             prompt: SharedString::new(),
             cmd_type,
             terminal_text: String::new(),
+            auto_scroll: false,
             #[cfg(target_os = "windows")]
             conpty: None,
         };
@@ -160,7 +176,7 @@ impl TabState {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(&me.cmd_type, 120, 40) {
                     let tab_id = me.id;
                     windows_conpty::start_reader_thread(spawn.reader, move |text| {
-                        let _ = tx.send(TerminalChunk { tab_id, text });
+                        let _ = tx.send(TerminalChunk { tab_id, text, replace: true });
                     });
                     me.conpty = Some(spawn.session);
                 }
@@ -173,9 +189,12 @@ impl TabState {
     fn append_terminal(&mut self, chunk: &str) {
         // Keep buffer bounded to avoid unbounded memory.
         const MAX: usize = 1_000_000;
+        // When auto-scroll is enabled, switch to "tail" mode to avoid viewport jumpiness.
+        const TAIL_MAX: usize = 80_000;
         self.terminal_text.push_str(chunk);
-        if self.terminal_text.len() > MAX {
-            let cut = self.terminal_text.len() - MAX;
+        let limit = if self.auto_scroll { TAIL_MAX } else { MAX };
+        if self.terminal_text.len() > limit {
+            let cut = self.terminal_text.len() - limit;
             self.terminal_text.drain(..cut);
         }
     }
@@ -187,6 +206,7 @@ struct GuiState {
     current: usize,
     next_id: u64,
     tx: mpsc::Sender<TerminalChunk>,
+    pending_scroll: bool,
 }
 
 impl GuiState {
@@ -235,12 +255,13 @@ impl GuiState {
             // Restart ConPTY session for interactive shells.
             self.tabs[self.current].conpty = None;
             self.tabs[self.current].terminal_text.clear();
+            self.tabs[self.current].auto_scroll = false;
             if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
                     windows_conpty::start_reader_thread(spawn.reader, move |text| {
-                        let _ = tx.send(TerminalChunk { tab_id, text });
+                        let _ = tx.send(TerminalChunk { tab_id, text, replace: true });
                     });
                     self.tabs[self.current].conpty = Some(spawn.session);
                 }
@@ -283,6 +304,8 @@ impl GuiState {
         }
 
         tab.prompt = SharedString::new();
+        // After the first submit, keep following new output.
+        tab.auto_scroll = true;
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -332,6 +355,7 @@ fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.prompt = ui.get_ws_prompt();
     tab.cmd_type = ui.get_ws_cmd_type().to_string();
     tab.terminal_text = ui.get_ws_terminal_text().to_string();
+    tab.auto_scroll = ui.get_ws_auto_scroll();
 }
 
 fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
@@ -339,6 +363,7 @@ fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_has_image(tab.has_image);
     ui.set_ws_preview_image(tab.preview_image.clone());
     ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
+    ui.set_ws_auto_scroll(tab.auto_scroll);
 
     ui.set_ws_selected_line(tab.selected_line);
     ui.set_ws_selected_context(tab.selected_context.clone());
@@ -358,4 +383,5 @@ fn default_cmd_type() -> &'static str {
 struct TerminalChunk {
     tab_id: u64,
     text: String,
+    replace: bool,
 }

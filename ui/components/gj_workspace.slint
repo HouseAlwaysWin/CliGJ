@@ -8,6 +8,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <image> preview-image;
     in-out property <[string]> code-lines;
     in-out property <string> terminal-text;
+    in-out property <bool> auto-scroll;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     in-out property <string> prompt;
@@ -15,12 +16,17 @@ export component GjWorkspace inherits Rectangle {
 
     background: AppTheme.bg;
 
+    public function scroll_terminal_to_bottom() {
+        viewer.scroll_to_bottom();
+    }
+
     VerticalLayout {
         padding: 0px;
         spacing: 0px;
 
-        GjViewer {
+        viewer := GjViewer {
             terminal-text: root.terminal-text;
+            auto-scroll: root.auto-scroll;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;
             vertical-stretch: 1;
