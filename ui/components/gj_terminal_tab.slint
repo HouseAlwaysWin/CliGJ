@@ -66,16 +66,25 @@ export component GjTerminalTab inherits Rectangle {
             height: 100%;
             background: #00000000;
 
+            Rectangle {
+                x: 3px;
+                y: 4px;
+                width: parent.width - 6px;
+                height: parent.height - 8px;
+                border-radius: 4px;
+                background: close_ta.has-hover ? #2d2d30 : #00000000;
+            }
+
             Text {
                 text: "×";
-                color: AppTheme.text_muted;
+                color: close_ta.has-hover ? AppTheme.text : AppTheme.text_muted;
                 horizontal-alignment: center;
                 vertical-alignment: center;
                 font-size: 16px;
                 font-weight: 400;
             }
 
-            TouchArea {
+            close_ta := TouchArea {
                 clicked => {
                     root.close-requested();
                 }
