@@ -1,70 +1,23 @@
-import { ScrollView } from "std-widgets.slint";
+import { TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 
 export component GjViewer inherits Rectangle {
-    in property <[string]> code-lines;
+    in property <string> terminal-text;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
 
     border-width: 0px;
     background: AppTheme.bg;
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
-
-        ScrollView {
-            horizontal-stretch: 1;
-            vertical-stretch: 1;
-            horizontal-scrollbar-policy: always-off;
-            vertical-scrollbar-policy: always-off;
-
-            VerticalLayout {
-                spacing: 1px;
-
-                for line[index] in root.code-lines : Rectangle {
-                    height: 24px;
-                    background: root.selected-line == index + 1 ? #1d2533 : #00000000;
-
-                    HorizontalLayout {
-                        spacing: 0px;
-
-                        Rectangle {
-                            width: 64px;
-                            background: #101018;
-
-                            Text {
-                                text: "\{index + 1}";
-                                color: AppTheme.text_muted;
-                                horizontal-alignment: right;
-                                vertical-alignment: center;
-                                x: 0px;
-                                width: parent.width - 8px;
-                            }
-                        }
-
-                        Rectangle {
-                            horizontal-stretch: 1;
-                            background: #00000000;
-
-                            Text {
-                                text: line;
-                                color: AppTheme.text;
-                                vertical-alignment: center;
-                                x: 10px;
-                                width: parent.width - 12px;
-                            }
-                        }
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.selected-line = index + 1;
-                            root.selected-context = line;
-                        }
-                    }
-                }
-            }
-        }
+    TextEdit {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        text: root.terminal-text;
+        read-only: true;
+        wrap: no-wrap;
+        font-size: 13px;
+        viewport-y: min(0px, self.visible-height - self.viewport-height);
     }
 }

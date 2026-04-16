@@ -16,13 +16,17 @@ export component AppWindow inherits Window {
     in-out property <bool> ws-has-image: false;
     in-out property <image> ws-preview-image;
     in-out property <[string]> ws-code-lines: [];
+    in-out property <string> ws-terminal-text: "";
     in-out property <int> ws-selected-line: 0;
     in-out property <string> ws-selected-context: "";
     in-out property <string> ws-prompt: "";
+    in-out property <string> ws-cmd-type: "Command Prompt";
 
     callback tab-changed(int);
     callback tab-close-requested(int);
     callback new-tab-requested;
+    callback cmd-type-changed(string);
+    callback submit-prompt;
 
     VerticalLayout {
         spacing: 0px;
@@ -32,6 +36,7 @@ export component AppWindow inherits Window {
             tab-titles: root.tab-titles;
             tab-count: root.tab-count;
             current-tab: root.current-tab;
+            current-cmd-type <=> root.ws-cmd-type;
             select-tab(index) => {
                 root.current-tab = index;
                 root.tab-changed(index);
@@ -41,6 +46,9 @@ export component AppWindow inherits Window {
             }
             new-tab-requested => {
                 root.new-tab-requested();
+            }
+            cmd-type-selected(kind) => {
+                root.cmd-type-changed(kind);
             }
         }
 
@@ -57,9 +65,13 @@ export component AppWindow inherits Window {
                     has-image <=> root.ws-has-image;
                     preview-image <=> root.ws-preview-image;
                     code-lines <=> root.ws-code-lines;
+                    terminal-text <=> root.ws-terminal-text;
                     selected-line <=> root.ws-selected-line;
                     selected-context <=> root.ws-selected-context;
                     prompt <=> root.ws-prompt;
+                    submit-requested => {
+                        root.submit-prompt();
+                    }
                 }
             }
         }

@@ -6,6 +6,7 @@ export component GjTerminalTabBar inherits Rectangle {
     in property <[string]> tab-titles;
     in property <int> tab-count;
     in property <int> current-tab;
+    in-out property <string> current-cmd-type: "Command Prompt";
     callback select-tab(int);
     callback close-tab(int);
     callback new-tab-requested;
@@ -24,7 +25,6 @@ export component GjTerminalTabBar inherits Rectangle {
     // Tab viewport fills from left edge to "+".
     property <length> tab-viewport-width: max(0px, root.plus-x - root.left-pad);
     property <bool> cmd-menu-open: false;
-    property <string> current-cmd-type: "PowerShell";
 
     height: root.bar-h;
     background: AppTheme.tab_bar_bg;
