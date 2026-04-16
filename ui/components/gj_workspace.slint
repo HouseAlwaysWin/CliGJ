@@ -13,6 +13,9 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> selected-context;
     in-out property <string> prompt;
     callback submit-requested;
+    callback history-prev-requested;
+    callback history-next-requested;
+    callback control-sequence-requested(string);
 
     background: AppTheme.bg;
 
@@ -44,6 +47,15 @@ export component GjWorkspace inherits Rectangle {
             selected-context: root.selected-context;
             submit-requested => {
                 root.submit-requested();
+            }
+            history-prev-requested => {
+                root.history-prev-requested();
+            }
+            history-next-requested => {
+                root.history-next-requested();
+            }
+            control-sequence-requested(seq) => {
+                root.control-sequence-requested(seq);
             }
         }
     }

@@ -143,6 +143,36 @@ pub fn run_gui() {
         }
     });
 
+    let state_for_hist_prev = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_history_prev(move || {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_hist_prev.borrow_mut();
+        if let Err(e) = s.history_prev_current_prompt(&ui) {
+            eprintln!("CliGJ: history prev: {e}");
+        }
+    });
+
+    let state_for_hist_next = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_history_next(move || {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_hist_next.borrow_mut();
+        if let Err(e) = s.history_next_current_prompt(&ui) {
+            eprintln!("CliGJ: history next: {e}");
+        }
+    });
+
+    let state_for_ctrl = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_control_sequence(move |seq| {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_ctrl.borrow_mut();
+        if let Err(e) = s.send_control_sequence_current(&ui, seq.as_str()) {
+            eprintln!("CliGJ: control sequence: {e}");
+        }
+    });
+
     let state_for_rename = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_rename_tab_requested(move |index| {
@@ -193,6 +223,9 @@ struct TabState {
     cmd_type: String,
     terminal_text: String,
     auto_scroll: bool,
+    command_history: Vec<String>,
+    history_cursor: Option<usize>,
+    history_draft: String,
 
     #[cfg(target_os = "windows")]
     conpty: Option<windows_conpty::ConptySession>,
@@ -212,6 +245,9 @@ impl TabState {
             cmd_type,
             terminal_text: String::new(),
             auto_scroll: false,
+            command_history: Vec::new(),
+            history_cursor: None,
+            history_draft: String::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
         };
@@ -341,6 +377,15 @@ impl GuiState {
             return Ok(());
         }
 
+        {
+            let history = &mut tab.command_history;
+            if history.last().map(|s| s.as_str()) != Some(command_line.as_str()) {
+                history.push(command_line.clone());
+            }
+            tab.history_cursor = None;
+            tab.history_draft.clear();
+        }
+
         #[cfg(target_os = "windows")]
         {
             if let Some(session) = tab.conpty.as_mut() {
@@ -362,6 +407,78 @@ impl GuiState {
         tab.prompt = SharedString::new();
         // Auto-scroll is enabled once output fills the visible terminal height.
         load_tab_to_ui(ui, tab);
+        Ok(())
+    }
+
+    fn history_prev_current_prompt(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index");
+        }
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let tab = &mut self.tabs[self.current];
+        if tab.command_history.is_empty() {
+            return Ok(());
+        }
+
+        if tab.history_cursor.is_none() {
+            tab.history_draft = tab.prompt.to_string();
+            tab.history_cursor = Some(tab.command_history.len());
+        }
+
+        if let Some(cur) = tab.history_cursor {
+            if cur > 0 {
+                let next = cur - 1;
+                tab.history_cursor = Some(next);
+                tab.prompt = SharedString::from(tab.command_history[next].as_str());
+                load_tab_to_ui(ui, tab);
+            }
+        }
+        Ok(())
+    }
+
+    fn history_next_current_prompt(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index");
+        }
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let tab = &mut self.tabs[self.current];
+        if tab.command_history.is_empty() {
+            return Ok(());
+        }
+
+        let Some(cur) = tab.history_cursor else {
+            return Ok(());
+        };
+
+        if cur + 1 < tab.command_history.len() {
+            let next = cur + 1;
+            tab.history_cursor = Some(next);
+            tab.prompt = SharedString::from(tab.command_history[next].as_str());
+        } else {
+            tab.history_cursor = None;
+            tab.prompt = SharedString::from(tab.history_draft.as_str());
+            tab.history_draft.clear();
+        }
+        load_tab_to_ui(ui, tab);
+        Ok(())
+    }
+
+    fn send_control_sequence_current(&mut self, ui: &AppWindow, seq: &str) -> Result<(), &'static str> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index");
+        }
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let tab = &mut self.tabs[self.current];
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(session) = tab.conpty.as_mut() {
+                let _ = session.writer.write_all(seq.as_bytes());
+                let _ = session.writer.flush();
+                return Ok(());
+            }
+        }
+
         Ok(())
     }
 

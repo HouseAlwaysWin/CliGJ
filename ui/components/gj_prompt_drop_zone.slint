@@ -8,6 +8,9 @@ export component GjPromptDropZone inherits Rectangle {
     in property <image> preview-image;
     in property <string> selected-context;
     callback submit-requested;
+    callback history-prev-requested;
+    callback history-next-requested;
+    callback control-sequence-requested(string);
 
     horizontal-stretch: 1;
     min-height: 116px;
@@ -46,6 +49,18 @@ export component GjPromptDropZone inherits Rectangle {
                     key-pressed(event) => {
                         if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
                             root.submit-requested();
+                            accept
+                        } else if (event.text == Key.UpArrow) {
+                            root.history-prev-requested();
+                            accept
+                        } else if (event.text == Key.DownArrow) {
+                            root.history-next-requested();
+                            accept
+                        } else if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
+                            root.control-sequence-requested("\u{0003}");
+                            accept
+                        } else if (event.text == Key.Tab) {
+                            root.control-sequence-requested("\u{0009}");
                             accept
                         } else {
                             reject
