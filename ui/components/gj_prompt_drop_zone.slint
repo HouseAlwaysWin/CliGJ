@@ -1,73 +1,45 @@
-import { Button, LineEdit } from "std-widgets.slint";
+import { TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 
-/// Bottom panel: same chrome as a drop zone — path / Load / preview + prompt + context.
+/// Bottom prompt bar: a single VS Code-like input.
 export component GjPromptDropZone inherits Rectangle {
-    in-out property <string> file-path;
+    in-out property <string> prompt;
     in property <bool> has-image;
     in property <image> preview-image;
-    in-out property <string> prompt;
     in property <string> selected-context;
-    callback load-requested(string);
 
-    border-width: 1px;
-    border-color: #3b3b4a;
-    border-radius: AppTheme.radius;
-    background: AppTheme.panel_alt;
+    horizontal-stretch: 1;
+    min-height: 92px;
+    background: AppTheme.bg;
+    border-width: 0px;
 
-    VerticalLayout {
-        padding: AppTheme.gap_md;
-        spacing: AppTheme.gap_sm;
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: AppTheme.bg;
 
-        Text {
-            text: "Prompt";
-            color: AppTheme.text;
-            font-weight: 700;
-        }
+        Rectangle {
+            x: 8px;
+            y: 8px;
+            width: parent.width - 16px;
+            height: parent.height - 16px;
+            background: AppTheme.prompt_chrome_bg;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: AppTheme.prompt_chrome_radius;
 
-        Text {
-            text: "拖入檔案或貼上路徑，並在下方輸入補全 Prompt";
-            color: AppTheme.text_muted;
-            font-size: 12px;
-        }
-
-        HorizontalLayout {
-            spacing: AppTheme.gap_sm;
-
-            path_input := LineEdit {
-                text <=> root.file-path;
-                placeholder-text: "D:/path/to/file_or_image";
-                horizontal-stretch: 1;
+            TextEdit {
+                x: 10px;
+                y: 8px;
+                width: parent.width - 20px;
+                height: parent.height - 16px;
+                text <=> root.prompt;
+                placeholder-text: "輸入 Prompt...";
+                font-size: 13px;
+                wrap: word-wrap;
             }
-
-            Button {
-                text: "Load";
-                clicked => {
-                    root.load-requested(path_input.text);
-                }
-            }
-        }
-
-        Text {
-            text: root.file-path == "" ? "<no file>" : root.file-path;
-            color: AppTheme.text_muted;
-        }
-
-        if root.has-image : Image {
-            source: root.preview-image;
-            width: 180px;
-            height: 120px;
-            image-fit: contain;
-        }
-
-        LineEdit {
-            text <=> root.prompt;
-            placeholder-text: "補全框 Prompt...";
-        }
-
-        Text {
-            text: "Selected context: \{root.selected-context}";
-            color: AppTheme.text_muted;
         }
     }
 }

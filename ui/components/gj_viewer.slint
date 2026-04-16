@@ -6,31 +6,25 @@ export component GjViewer inherits Rectangle {
     in-out property <int> selected-line;
     in-out property <string> selected-context;
 
-    border-width: 1px;
-    border-color: #3b3b4a;
-    border-radius: AppTheme.radius;
-    background: AppTheme.panel_alt;
+    border-width: 0px;
+    background: AppTheme.bg;
 
     VerticalLayout {
-        padding: AppTheme.gap_sm;
-        spacing: AppTheme.gap_sm;
-
-        Text {
-            text: "GjViewer (read-only)";
-            color: AppTheme.text;
-            font-weight: 700;
-        }
+        padding: 0px;
+        spacing: 0px;
 
         ScrollView {
             horizontal-stretch: 1;
             vertical-stretch: 1;
+            horizontal-scrollbar-policy: always-off;
+            vertical-scrollbar-policy: always-off;
 
             VerticalLayout {
                 spacing: 1px;
 
                 for line[index] in root.code-lines : Rectangle {
                     height: 24px;
-                    background: root.selected-line == index + 1 ? #2a2230 : AppTheme.panel;
+                    background: root.selected-line == index + 1 ? #1d2533 : #00000000;
 
                     HorizontalLayout {
                         spacing: 0px;

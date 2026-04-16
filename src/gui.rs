@@ -1,6 +1,4 @@
 use std::cell::RefCell;
-use std::fs;
-use std::path::Path;
 use std::rc::Rc;
 
 use slint::{Model, ModelRc, SharedString, VecModel};
@@ -10,18 +8,10 @@ slint::include_modules!();
 pub fn run_gui() {
     let app = AppWindow::new().expect("failed to build app window");
 
-    let titles = Rc::new(VecModel::from(vec![
-        SharedString::from("工作階段 1"),
-        SharedString::from("工作階段 2"),
-        SharedString::from("工作階段 3"),
-    ]));
+    let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
 
     let state = Rc::new(RefCell::new(GuiState {
-        tabs: vec![
-            TabState::default(),
-            TabState::default(),
-            TabState::default(),
-        ],
+        tabs: vec![TabState::default()],
         titles: Rc::clone(&titles),
         current: 0,
     }));
@@ -64,19 +54,6 @@ pub fn run_gui() {
         if let Err(e) = s.add_tab(&ui) {
             eprintln!("CliGJ: new tab: {e}");
         }
-    });
-
-    let state_for_load = Rc::clone(&state);
-    let app_weak = app.as_weak();
-    app.on_request_load_file(move |raw_path| {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = state_for_load.borrow_mut();
-        let idx = s.current;
-        let path_text = raw_path.to_string();
-        load_path_into_tab_state(&mut s.tabs[idx], &path_text);
-        load_tab_to_ui(&ui, &s.tabs[idx]);
     });
 
     app.run().expect("failed to run app window");
@@ -214,67 +191,4 @@ fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_selected_line(tab.selected_line);
     ui.set_ws_selected_context(tab.selected_context.clone());
     ui.set_ws_prompt(tab.prompt.clone());
-}
-
-fn load_path_into_tab_state(tab: &mut TabState, raw_path: &str) {
-    let path_text = raw_path.trim().to_string();
-    if path_text.is_empty() {
-        return;
-    }
-
-    let path = Path::new(&path_text);
-
-    if is_image_file(path) {
-        match slint::Image::load_from_path(path) {
-            Ok(image) => {
-                tab.file_path = path_text;
-                tab.has_image = true;
-                tab.preview_image = image;
-                tab.code_lines = Vec::new();
-                tab.selected_context = SharedString::new();
-                tab.selected_line = 0;
-            }
-            Err(err) => {
-                tab.file_path = path_text;
-                tab.has_image = false;
-                tab.code_lines = vec![format!("Image load failed: {err}")];
-            }
-        }
-        return;
-    }
-
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            let lines: Vec<String> = if content.is_empty() {
-                vec!["<empty file>".to_string()]
-            } else {
-                content.lines().map(ToOwned::to_owned).collect()
-            };
-
-            tab.file_path = path_text;
-            tab.has_image = false;
-            tab.preview_image = slint::Image::default();
-            tab.code_lines = lines;
-            tab.selected_context = SharedString::new();
-            tab.selected_line = 0;
-        }
-        Err(err) => {
-            tab.file_path = path_text;
-            tab.has_image = false;
-            tab.code_lines = vec![format!("File read failed: {err}")];
-            tab.selected_context = SharedString::new();
-            tab.selected_line = 0;
-        }
-    }
-}
-
-fn is_image_file(path: &Path) -> bool {
-    let Some(ext) = path.extension().and_then(|e| e.to_str()) else {
-        return false;
-    };
-
-    matches!(
-        ext.to_ascii_lowercase().as_str(),
-        "png" | "jpg" | "jpeg" | "gif" | "bmp" | "webp"
-    )
 }

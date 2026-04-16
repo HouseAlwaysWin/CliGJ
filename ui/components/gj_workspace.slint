@@ -10,33 +10,26 @@ export component GjWorkspace inherits Rectangle {
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     in-out property <string> prompt;
-    callback load-requested(string);
 
     background: AppTheme.bg;
 
     VerticalLayout {
-        padding: AppTheme.gap_md;
-        spacing: AppTheme.gap_md;
+        padding: 0px;
+        spacing: 0px;
 
-        // Main screen: code / image viewer fills remaining height.
         GjViewer {
             code-lines: root.code-lines;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;
             vertical-stretch: 1;
-            min-height: 200px;
+            min-height: 220px;
         }
 
-        // Bottom: one DropZone-style panel — path + preview + prompt.
         GjPromptDropZone {
-            file-path <=> root.file-path;
+            prompt <=> root.prompt;
             has-image: root.has-image;
             preview-image: root.preview-image;
-            prompt <=> root.prompt;
             selected-context: root.selected-context;
-            load-requested(path) => {
-                root.load-requested(path);
-            }
         }
     }
 }

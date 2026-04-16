@@ -23,7 +23,6 @@ export component AppWindow inherits Window {
     callback tab-changed(int);
     callback tab-close-requested(int);
     callback new-tab-requested;
-    callback request-load-file(string);
 
     VerticalLayout {
         spacing: 0px;
@@ -49,8 +48,8 @@ export component AppWindow inherits Window {
             background: AppTheme.bg;
 
             VerticalLayout {
-                padding: AppTheme.gap_md;
-                spacing: AppTheme.gap_md;
+                padding: 0px;
+                spacing: 0px;
 
                 GjWorkspace {
                     file-path <=> root.ws-file-path;
@@ -60,9 +59,6 @@ export component AppWindow inherits Window {
                     selected-line <=> root.ws-selected-line;
                     selected-context <=> root.ws-selected-context;
                     prompt <=> root.ws-prompt;
-                    load-requested(path) => {
-                        root.request-load-file(path);
-                    }
                 }
             }
         }
