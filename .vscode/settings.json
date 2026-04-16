@@ -1,0 +1,12 @@
+{
+  // Keep diagnostics useful during UI/debug iterations
+  "rust-analyzer.check.command": "check",
+  "rust-analyzer.cargo.allFeatures": true,
+
+  // Make sure build scripts (Slint) are evaluated for accurate errors
+  "rust-analyzer.cargo.buildScripts.enable": true,
+
+  // Windows: avoid file-lock pain by preferring build+run from debugger
+  "terminal.integrated.defaultProfile.windows": "PowerShell"
+}
+
