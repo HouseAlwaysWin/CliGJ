@@ -2,7 +2,10 @@ use std::cell::RefCell;
 use std::process::Command;
 use std::rc::Rc;
 
-use encoding_rs::{BIG5, EUC_KR, GBK, SHIFT_JIS, UTF_8, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255, WINDOWS_1256, WINDOWS_1257, WINDOWS_1258};
+use encoding_rs::{
+    BIG5, EUC_KR, Encoding, GBK, SHIFT_JIS, UTF_8, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252,
+    WINDOWS_1253, WINDOWS_1254, WINDOWS_1255, WINDOWS_1256, WINDOWS_1257, WINDOWS_1258,
+};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
 slint::include_modules!();
@@ -368,15 +371,13 @@ fn run_command_for_shell(
     } else {
         None
     };
-    let mut stdout = decode_output_text_with_cp(shell_kind, &output.stdout, cmd_code_page);
-    let mut next_dir = current_dir.to_string();
-    if cfg!(target_os = "windows") && shell_kind == "Command Prompt" {
-        let (cleaned, detected_dir) = split_cmd_stdout_and_dir(&stdout);
-        stdout = cleaned;
-        if let Some(dir) = detected_dir {
-            next_dir = dir;
-        }
-    }
+    let decoded_stdout = decode_output_text_with_cp(shell_kind, &output.stdout, cmd_code_page);
+    let (stdout, next_dir) = if cfg!(target_os = "windows") && shell_kind == "Command Prompt" {
+        let (cleaned, detected_dir) = split_cmd_stdout_and_dir(&decoded_stdout);
+        (cleaned, detected_dir.unwrap_or_else(|| current_dir.to_string()))
+    } else {
+        (decoded_stdout, current_dir.to_string())
+    };
 
     Ok(CmdExecutionResult {
         exit_code: output.status.code(),
@@ -532,16 +533,21 @@ fn decode_windows_cmd_text(bytes: &[u8], code_page: Option<u16>) -> String {
         return decode_utf16_le(bytes);
     }
 
-    let utf8 = String::from_utf8_lossy(bytes).to_string();
-    if !utf8.contains('\u{fffd}') {
-        return utf8;
-    }
+    let mut candidates: Vec<String> = vec![String::from_utf8_lossy(bytes).to_string()];
 
     if let Some(decoded) = decode_with_code_page(bytes, code_page) {
-        return decoded;
+        candidates.push(decoded);
     }
 
-    utf8
+    // Common Windows East-Asia fallbacks, useful when tool output encoding
+    // differs from current console code page.
+    for enc in [BIG5, GBK, SHIFT_JIS, EUC_KR] {
+        if let Some(decoded) = decode_with_encoding(bytes, enc) {
+            candidates.push(decoded);
+        }
+    }
+
+    choose_best_decoding(&candidates, code_page)
 }
 
 fn decode_utf16_le(bytes: &[u8]) -> String {
@@ -610,4 +616,58 @@ fn decode_with_code_page(bytes: &[u8], code_page: Option<u16>) -> Option<String>
     } else {
         Some(decoded.into_owned())
     }
+}
+
+fn decode_with_encoding(bytes: &[u8], encoding: &'static Encoding) -> Option<String> {
+    let (decoded, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        None
+    } else {
+        Some(decoded.into_owned())
+    }
+}
+
+fn choose_best_decoding(candidates: &[String], code_page: Option<u16>) -> String {
+    if candidates.is_empty() {
+        return String::new();
+    }
+    let mut best = &candidates[0];
+    let mut best_score = quality_score(best, code_page);
+    for text in &candidates[1..] {
+        let score = quality_score(text, code_page);
+        if score > best_score {
+            best = text;
+            best_score = score;
+        }
+    }
+    best.clone()
+}
+
+fn quality_score(text: &str, code_page: Option<u16>) -> i64 {
+    let prefer_cjk = matches!(code_page, Some(950 | 936));
+    let mut score = 0_i64;
+    for ch in text.chars() {
+        if ch == '\u{fffd}' || ch == '□' {
+            score -= 20;
+        } else if ch == '\0' {
+            score -= 10;
+        } else if ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t' {
+            score -= 6;
+        } else if ('\u{ff61}'..='\u{ff9f}').contains(&ch) {
+            // Half-width katakana often appears in mojibake for Big5/GBK text.
+            score -= if prefer_cjk { 8 } else { 2 };
+        } else if ('\u{3040}'..='\u{30ff}').contains(&ch) {
+            // Hiragana/Katakana are unlikely under CP950/CP936 terminals.
+            score -= if prefer_cjk { 4 } else { 0 };
+        } else if ('\u{4e00}'..='\u{9fff}').contains(&ch) {
+            score += if prefer_cjk { 6 } else { 3 };
+        } else if ch.is_ascii_alphanumeric() || ch.is_ascii_whitespace() {
+            score += 2;
+        } else if ch.is_ascii_punctuation() {
+            score += 1;
+        } else {
+            score += 3;
+        }
+    }
+    score
 }
