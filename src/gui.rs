@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::process::Command;
 use std::rc::Rc;
 
+use encoding_rs::{BIG5, EUC_KR, GBK, SHIFT_JIS, UTF_8, WINDOWS_1250, WINDOWS_1251, WINDOWS_1252, WINDOWS_1253, WINDOWS_1254, WINDOWS_1255, WINDOWS_1256, WINDOWS_1257, WINDOWS_1258};
 use slint::{Model, ModelRc, SharedString, VecModel};
 
 slint::include_modules!();
@@ -93,20 +94,23 @@ struct TabState {
     selected_context: SharedString,
     prompt: SharedString,
     cmd_type: String,
+    current_dir: String,
 }
 
 impl Default for TabState {
     fn default() -> Self {
         let cmd_type = default_cmd_type().to_string();
+        let current_dir = default_prompt_dir();
         Self {
             file_path: String::new(),
             has_image: false,
             preview_image: slint::Image::default(),
-            code_lines: initial_terminal_lines(&cmd_type),
+            code_lines: initial_terminal_lines(&cmd_type, &current_dir),
             selected_line: 0,
             selected_context: SharedString::new(),
             prompt: SharedString::new(),
             cmd_type,
+            current_dir,
         }
     }
 }
@@ -126,7 +130,8 @@ impl GuiState {
             return Ok(());
         }
 
-        self.tabs[self.current] = ui_to_tab_state(ui);
+        let old_dir = self.tabs[self.current].current_dir.clone();
+        self.tabs[self.current] = ui_to_tab_state(ui, old_dir);
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
         load_tab_to_ui(ui, &self.tabs[new_index]);
@@ -134,7 +139,8 @@ impl GuiState {
     }
 
     fn add_tab(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
-        self.tabs[self.current] = ui_to_tab_state(ui);
+        let old_dir = self.tabs[self.current].current_dir.clone();
+        self.tabs[self.current] = ui_to_tab_state(ui, old_dir);
 
         let n = self.titles.row_count();
         let label = SharedString::from(format!("工作階段 {}", n + 1));
@@ -153,17 +159,20 @@ impl GuiState {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
         }
-        self.tabs[self.current] = ui_to_tab_state(ui);
+        let old_dir = self.tabs[self.current].current_dir.clone();
+        self.tabs[self.current] = ui_to_tab_state(ui, old_dir);
         self.tabs[self.current].cmd_type = new_cmd_type.to_string();
         if self.tabs[self.current].code_lines.is_empty() {
-            self.tabs[self.current].code_lines = initial_terminal_lines(new_cmd_type);
+            let tab_dir = self.tabs[self.current].current_dir.clone();
+            self.tabs[self.current].code_lines = initial_terminal_lines(new_cmd_type, &tab_dir);
         } else {
             self.tabs[self.current]
                 .code_lines
                 .push(format!("[switched shell => {new_cmd_type}]"));
+            let prompt_dir = self.tabs[self.current].current_dir.clone();
             self.tabs[self.current]
                 .code_lines
-                .push(prompt_line_for_shell(new_cmd_type));
+                .push(prompt_line_for_shell(new_cmd_type, &prompt_dir));
         }
         ui.set_ws_cmd_type(SharedString::from(new_cmd_type));
         load_tab_to_ui(ui, &self.tabs[self.current]);
@@ -174,7 +183,8 @@ impl GuiState {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
         }
-        self.tabs[self.current] = ui_to_tab_state(ui);
+        let old_dir = self.tabs[self.current].current_dir.clone();
+        self.tabs[self.current] = ui_to_tab_state(ui, old_dir);
         let tab = &mut self.tabs[self.current];
         let command_line = tab.prompt.to_string();
         let command_line = command_line.trim().to_string();
@@ -182,20 +192,29 @@ impl GuiState {
             return Ok(());
         }
 
-        append_command_banner(&mut tab.code_lines, &tab.cmd_type, &command_line);
-        match run_command_for_shell(&tab.cmd_type, &command_line) {
+        append_command_banner(
+            &mut tab.code_lines,
+            &tab.cmd_type,
+            &tab.current_dir,
+            &command_line,
+        );
+        match run_command_for_shell(&tab.cmd_type, &command_line, &tab.current_dir) {
             Ok(result) => {
+                tab.current_dir = result.next_dir;
                 append_stream_lines(&mut tab.code_lines, &result.stdout, false);
                 append_stream_lines(&mut tab.code_lines, &result.stderr, true);
-                tab.code_lines
-                    .push(format!("[exit: {}]", result.exit_code.unwrap_or(-1)));
+                if result.exit_code.unwrap_or(-1) != 0 {
+                    tab.code_lines
+                        .push(format!("[exit: {}]", result.exit_code.unwrap_or(-1)));
+                }
             }
             Err(err) => {
                 tab.code_lines.push(format!("[error] {err}"));
             }
         }
         tab.code_lines.push(String::new());
-        tab.code_lines.push(prompt_line_for_shell(&tab.cmd_type));
+        tab.code_lines
+            .push(prompt_line_for_shell(&tab.cmd_type, &tab.current_dir));
         tab.prompt = SharedString::new();
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -209,7 +228,8 @@ impl GuiState {
             return Err("invalid close index");
         }
 
-        self.tabs[self.current] = ui_to_tab_state(ui);
+        let old_dir = self.tabs[self.current].current_dir.clone();
+        self.tabs[self.current] = ui_to_tab_state(ui, old_dir);
 
         self.titles.remove(index);
         self.tabs.remove(index);
@@ -237,7 +257,7 @@ fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
 
-fn ui_to_tab_state(ui: &AppWindow) -> TabState {
+fn ui_to_tab_state(ui: &AppWindow, current_dir: String) -> TabState {
     let lines: Vec<String> = ui
         .get_ws_code_lines()
         .iter()
@@ -253,6 +273,7 @@ fn ui_to_tab_state(ui: &AppWindow) -> TabState {
         selected_context: ui.get_ws_selected_context(),
         prompt: ui.get_ws_prompt(),
         cmd_type: ui.get_ws_cmd_type().to_string(),
+        current_dir,
     }
 }
 
@@ -288,9 +309,14 @@ struct CmdExecutionResult {
     exit_code: Option<i32>,
     stdout: String,
     stderr: String,
+    next_dir: String,
 }
 
-fn run_command_for_shell(shell_kind: &str, command_line: &str) -> Result<CmdExecutionResult, String> {
+fn run_command_for_shell(
+    shell_kind: &str,
+    command_line: &str,
+    current_dir: &str,
+) -> Result<CmdExecutionResult, String> {
     let mut command = if cfg!(target_os = "windows") {
         match shell_kind {
             "PowerShell" => {
@@ -310,7 +336,8 @@ fn run_command_for_shell(shell_kind: &str, command_line: &str) -> Result<CmdExec
             }
             _ => {
                 let mut c = Command::new("cmd");
-                c.args(["/D", "/U", "/C", command_line]);
+                let wrapped = format!("{command_line} & cd");
+                c.args(["/D", "/C", &wrapped]);
                 c
             }
         }
@@ -334,16 +361,41 @@ fn run_command_for_shell(shell_kind: &str, command_line: &str) -> Result<CmdExec
         }
     };
 
+    command.current_dir(current_dir);
     let output = command.output().map_err(|e| e.to_string())?;
+    let cmd_code_page = if cfg!(target_os = "windows") && shell_kind == "Command Prompt" {
+        detect_windows_console_code_page()
+    } else {
+        None
+    };
+    let mut stdout = decode_output_text_with_cp(shell_kind, &output.stdout, cmd_code_page);
+    let mut next_dir = current_dir.to_string();
+    if cfg!(target_os = "windows") && shell_kind == "Command Prompt" {
+        let (cleaned, detected_dir) = split_cmd_stdout_and_dir(&stdout);
+        stdout = cleaned;
+        if let Some(dir) = detected_dir {
+            next_dir = dir;
+        }
+    }
+
     Ok(CmdExecutionResult {
         exit_code: output.status.code(),
-        stdout: decode_output_text(shell_kind, &output.stdout),
-        stderr: decode_output_text(shell_kind, &output.stderr),
+        stdout,
+        stderr: decode_output_text_with_cp(shell_kind, &output.stderr, cmd_code_page),
+        next_dir,
     })
 }
 
-fn append_command_banner(lines: &mut Vec<String>, shell_kind: &str, command_line: &str) {
-    lines.push(format!("{} {command_line}", prompt_line_for_shell(shell_kind)));
+fn append_command_banner(
+    lines: &mut Vec<String>,
+    shell_kind: &str,
+    current_dir: &str,
+    command_line: &str,
+) {
+    lines.push(format!(
+        "{} {command_line}",
+        prompt_line_for_shell(shell_kind, current_dir)
+    ));
 }
 
 fn append_stream_lines(lines: &mut Vec<String>, stream_text: &str, is_stderr: bool) {
@@ -356,26 +408,26 @@ fn append_stream_lines(lines: &mut Vec<String>, stream_text: &str, is_stderr: bo
     }
 }
 
-fn initial_terminal_lines(shell_kind: &str) -> Vec<String> {
+fn initial_terminal_lines(shell_kind: &str, current_dir: &str) -> Vec<String> {
     match shell_kind {
         "Command Prompt" => vec![
             command_prompt_version_line(),
             command_prompt_copyright_line(),
             String::new(),
-            prompt_line_for_shell(shell_kind),
+            prompt_line_for_shell(shell_kind, current_dir),
         ],
         "PowerShell" => vec![
             "Windows PowerShell".to_string(),
             "Copyright (C) Microsoft Corporation. All rights reserved.".to_string(),
             String::new(),
-            prompt_line_for_shell(shell_kind),
+            prompt_line_for_shell(shell_kind, current_dir),
         ],
         "Git Bash" => vec![
             "GNU bash terminal".to_string(),
             String::new(),
-            prompt_line_for_shell(shell_kind),
+            prompt_line_for_shell(shell_kind, current_dir),
         ],
-        _ => vec![prompt_line_for_shell(shell_kind)],
+        _ => vec![prompt_line_for_shell(shell_kind, current_dir)],
     }
 }
 
@@ -385,8 +437,7 @@ fn current_dir_display() -> String {
         .unwrap_or_else(|_| ".".to_string())
 }
 
-fn prompt_line_for_shell(shell_kind: &str) -> String {
-    let cwd = default_prompt_dir();
+fn prompt_line_for_shell(shell_kind: &str, cwd: &str) -> String {
     match shell_kind {
         "PowerShell" => format!("PS {cwd}>"),
         "Git Bash" => format!("{cwd}$"),
@@ -418,15 +469,50 @@ fn lines_to_terminal_text(lines: &[String]) -> String {
     lines.join("\n")
 }
 
-fn decode_output_text(shell_kind: &str, bytes: &[u8]) -> String {
+fn split_cmd_stdout_and_dir(stdout: &str) -> (String, Option<String>) {
+    let mut lines: Vec<String> = stdout
+        .lines()
+        .map(|line| line.trim_end_matches('\r').to_string())
+        .collect();
+
+    while lines.last().is_some_and(|line| line.trim().is_empty()) {
+        lines.pop();
+    }
+
+    let Some(last) = lines.last() else {
+        return (String::new(), None);
+    };
+    let maybe_dir = last.trim();
+    if !looks_like_windows_dir(maybe_dir) {
+        return (stdout.to_string(), None);
+    }
+
+    let next_dir = maybe_dir.to_string();
+    lines.pop();
+    let cleaned = lines.join("\n");
+    (cleaned, Some(next_dir))
+}
+
+fn looks_like_windows_dir(value: &str) -> bool {
+    if value.len() < 3 {
+        return false;
+    }
+    let bytes = value.as_bytes();
+    if !bytes[0].is_ascii_alphabetic() || bytes[1] != b':' {
+        return false;
+    }
+    bytes[2] == b'\\' || bytes[2] == b'/'
+}
+
+fn decode_output_text_with_cp(shell_kind: &str, bytes: &[u8], code_page: Option<u16>) -> String {
     if cfg!(target_os = "windows") && shell_kind == "Command Prompt" {
-        decode_windows_cmd_text(bytes)
+        decode_windows_cmd_text(bytes, code_page)
     } else {
         String::from_utf8_lossy(bytes).to_string()
     }
 }
 
-fn decode_windows_cmd_text(bytes: &[u8]) -> String {
+fn decode_windows_cmd_text(bytes: &[u8], code_page: Option<u16>) -> String {
     if bytes.is_empty() {
         return String::new();
     }
@@ -440,17 +526,22 @@ fn decode_windows_cmd_text(bytes: &[u8]) -> String {
         }
     }
 
+    let zero_count = bytes.iter().filter(|b| **b == 0).count();
+    let looks_utf16_no_bom = bytes.len() % 2 == 0 && zero_count * 100 / bytes.len() >= 20;
+    if looks_utf16_no_bom {
+        return decode_utf16_le(bytes);
+    }
+
     let utf8 = String::from_utf8_lossy(bytes).to_string();
-    if bytes.len() % 2 != 0 {
+    if !utf8.contains('\u{fffd}') {
         return utf8;
     }
 
-    let utf16 = decode_utf16_le(bytes);
-    if quality_score(&utf16) > quality_score(&utf8) {
-        utf16
-    } else {
-        utf8
+    if let Some(decoded) = decode_with_code_page(bytes, code_page) {
+        return decoded;
     }
+
+    utf8
 }
 
 fn decode_utf16_le(bytes: &[u8]) -> String {
@@ -473,20 +564,50 @@ fn decode_utf16_be(bytes: &[u8]) -> String {
         .to_string()
 }
 
-fn quality_score(text: &str) -> i64 {
-    let mut score = 0_i64;
+fn detect_windows_console_code_page() -> Option<u16> {
+    if !cfg!(target_os = "windows") {
+        return None;
+    }
+
+    let output = Command::new("cmd")
+        .args(["/D", "/C", "chcp"])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let mut digits = String::new();
     for ch in text.chars() {
-        if ch == '\u{fffd}' {
-            score -= 8;
-        } else if ch == '\0' {
-            score -= 6;
-        } else if ch.is_control() && ch != '\n' && ch != '\r' && ch != '\t' {
-            score -= 3;
-        } else if ch.is_ascii_graphic() || ch.is_ascii_whitespace() {
-            score += 1;
-        } else {
-            score += 2;
+        if ch.is_ascii_digit() {
+            digits.push(ch);
+        } else if !digits.is_empty() {
+            break;
         }
     }
-    score
+    digits.parse::<u16>().ok()
+}
+
+fn decode_with_code_page(bytes: &[u8], code_page: Option<u16>) -> Option<String> {
+    let cp = code_page?;
+    let encoding = match cp {
+        65001 => UTF_8,
+        950 => BIG5,
+        936 => GBK,
+        932 => SHIFT_JIS,
+        949 => EUC_KR,
+        1250 => WINDOWS_1250,
+        1251 => WINDOWS_1251,
+        1252 => WINDOWS_1252,
+        1253 => WINDOWS_1253,
+        1254 => WINDOWS_1254,
+        1255 => WINDOWS_1255,
+        1256 => WINDOWS_1256,
+        1257 => WINDOWS_1257,
+        1258 => WINDOWS_1258,
+        _ => return None,
+    };
+    let (decoded, _, had_errors) = encoding.decode(bytes);
+    if had_errors {
+        None
+    } else {
+        Some(decoded.into_owned())
+    }
 }
