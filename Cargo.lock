@@ -14,6 +14,7 @@ dependencies = [
  "slint-build",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
+ "windows 0.62.2",
 ]
 
 [[package]]

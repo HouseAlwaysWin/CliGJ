@@ -1,5 +1,6 @@
 mod core;
 mod gui;
+mod terminal;
 
 use crate::core::cli::{Cli, Commands, ConfigCommand};
 use crate::core::config::AppConfig;
