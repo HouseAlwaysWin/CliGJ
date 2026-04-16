@@ -5,6 +5,7 @@ export component GjTerminalTab inherits Rectangle {
     in property <bool> active;
     callback pressed;
     callback close-requested;
+    callback scroll-requested(length, length);
 
     width: AppTheme.tab_width;
     height: 100%;
@@ -53,6 +54,10 @@ export component GjTerminalTab inherits Rectangle {
                 clicked => {
                     root.pressed();
                 }
+                scroll-event(event) => {
+                    root.scroll-requested(event.delta-x, event.delta-y);
+                    accept
+                }
             }
         }
 
@@ -73,6 +78,10 @@ export component GjTerminalTab inherits Rectangle {
             TouchArea {
                 clicked => {
                     root.close-requested();
+                }
+                scroll-event(event) => {
+                    root.scroll-requested(event.delta-x, event.delta-y);
+                    accept
                 }
             }
         }

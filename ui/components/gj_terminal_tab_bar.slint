@@ -11,39 +11,61 @@ export component GjTerminalTabBar inherits Rectangle {
     callback new-tab-requested;
 
     property <length> plus-w: 36px;
+    property <length> left-pad: 4px;
+    property <length> right-pad: 4px;
+    property <length> tabs-content-width: root.tab-count * AppTheme.tab_width;
+    property <length> plus-fixed-x: root.width - root.plus-w - root.right-pad;
+    // "+" follows tab edge initially, then pins right when tabs overflow.
+    property <length> plus-x: min(root.left-pad + root.tabs-content-width, root.plus-fixed-x);
+    // Tab viewport fills from left edge to "+".
+    property <length> tab-viewport-width: max(0px, root.plus-x - root.left-pad);
 
     height: AppTheme.tab_bar_height;
     background: AppTheme.tab_bar_bg;
     border-width: 0px;
 
-    HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 4px;
-        spacing: 0px;
-        // Tabs grow left-to-right; + follows the tab strip. Remaining space stays on the right.
-        alignment: start;
+    function pan-tabs(delta-x: length, delta-y: length) -> EventResult {
+        let max-scroll = scroll-view.viewport-width - scroll-view.visible-width;
+        if (max-scroll <= 0px) {
+            return reject;
+        }
+        // Map vertical wheel to horizontal pan to support normal mouse wheel.
+        let next = scroll-view.viewport-x - delta-y - delta-x;
+        scroll-view.viewport-x = max(-max-scroll, min(0px, next));
+        return accept;
+    }
 
-        // ScrollView: hide scrollbars; vertical wheel maps to horizontal pan (see TouchArea below).
+    // Left tab viewport (absolute geometry to avoid layout binding loops).
+    Rectangle {
+        x: root.left-pad;
+        y: 0px;
+        width: root.tab-viewport-width;
+        height: root.height;
+        background: #00000000;
+
         tab-strip := TouchArea {
-            horizontal-stretch: 0;
+            width: parent.width;
             height: parent.height;
-            width: min(
-                root.width - 8px - root.plus-w,
-                root.tab-count * AppTheme.tab_width
-            );
 
             scroll-view := ScrollView {
                 width: parent.width;
                 height: parent.height;
+                viewport-width: root.tabs-content-width;
+                viewport-height: parent.height;
                 horizontal-scrollbar-policy: always-off;
                 vertical-scrollbar-policy: always-off;
+                mouse-drag-pan-enabled: true;
 
-                HorizontalLayout {
-                    spacing: 0px;
-                    alignment: start;
+                Rectangle {
                     width: root.tab-count * AppTheme.tab_width;
+                    height: parent.height;
+                    background: #00000000;
 
                     for title[index] in root.tab-titles: GjTerminalTab {
+                        x: index * AppTheme.tab_width;
+                        y: 0px;
+                        width: AppTheme.tab_width;
+                        height: parent.height;
                         title: title;
                         active: root.current-tab == index;
                         pressed => {
@@ -52,40 +74,39 @@ export component GjTerminalTabBar inherits Rectangle {
                         close-requested => {
                             root.close-tab(index);
                         }
+                        scroll-requested(dx, dy) => {
+                            root.pan-tabs(dx, dy);
+                        }
                     }
                 }
             }
 
             scroll-event(event) => {
-                let max-scroll = scroll-view.viewport-width - scroll-view.visible-width;
-                if (max-scroll <= 0px) {
-                    return reject;
-                }
-                // Std horizontal scrollbar only uses delta-x; map vertical wheel to horizontal pan.
-                let next = scroll-view.viewport-x - event.delta-y - event.delta-x;
-                scroll-view.viewport-x = max(-max-scroll, min(0px, next));
-                return accept;
+                return root.pan-tabs(event.delta-x, event.delta-y);
             }
         }
+    }
 
-        Rectangle {
-            width: root.plus-w;
-            height: parent.height;
-            background: #00000000;
+    // "+" follows tabs until overflow, then stays pinned right.
+    Rectangle {
+        x: root.plus-x;
+        y: 0px;
+        width: root.plus-w;
+        height: root.height;
+        background: #00000000;
 
-            Text {
-                text: "+";
-                color: AppTheme.text_muted;
-                horizontal-alignment: center;
-                vertical-alignment: center;
-                font-size: 18px;
-                font-weight: 500;
-            }
+        Text {
+            text: "+";
+            color: AppTheme.text_muted;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            font-size: 18px;
+            font-weight: 500;
+        }
 
-            TouchArea {
-                clicked => {
-                    root.new-tab-requested();
-                }
+        TouchArea {
+            clicked => {
+                root.new-tab-requested();
             }
         }
     }

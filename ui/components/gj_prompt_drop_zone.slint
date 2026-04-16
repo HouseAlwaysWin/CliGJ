@@ -1,4 +1,4 @@
-import { LineEdit } from "std-widgets.slint";
+import { TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 
 /// Bottom prompt bar: input + function bar (Cursor/VSCode style).
@@ -7,10 +7,11 @@ export component GjPromptDropZone inherits Rectangle {
     in property <bool> has-image;
     in property <image> preview-image;
     in property <string> selected-context;
+    callback submit-requested;
 
     horizontal-stretch: 1;
-    min-height: 74px;
-    max-height: 74px;
+    min-height: 116px;
+    max-height: 116px;
     background: AppTheme.bg;
     border-width: 0px;
 
@@ -33,14 +34,15 @@ export component GjPromptDropZone inherits Rectangle {
 
             VerticalLayout {
                 padding: 8px;
-                spacing: 6px;
+                spacing: 4px;
 
-                LineEdit {
+                TextEdit {
                     horizontal-stretch: 1;
-                    min-height: 28px;
+                    min-height: 68px;
                     text <=> root.prompt;
                     placeholder-text: "Plan, Build, / for commands, @ for context";
                     font-size: 13px;
+                    wrap: word-wrap;
                 }
 
                 HorizontalLayout {
@@ -133,6 +135,30 @@ export component GjPromptDropZone inherits Rectangle {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        width: 26px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.accent;
+                        border-radius: 11px;
+                        background: AppTheme.accent;
+
+                        Text {
+                            text: "↑";
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.submit-requested();
+                            }
                         }
                     }
                 }
