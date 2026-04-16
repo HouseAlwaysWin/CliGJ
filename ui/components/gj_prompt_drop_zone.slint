@@ -1,0 +1,73 @@
+import { Button, LineEdit } from "std-widgets.slint";
+import { AppTheme } from "../theme.slint";
+
+/// Bottom panel: same chrome as a drop zone — path / Load / preview + prompt + context.
+export component GjPromptDropZone inherits Rectangle {
+    in-out property <string> file-path;
+    in property <bool> has-image;
+    in property <image> preview-image;
+    in-out property <string> prompt;
+    in property <string> selected-context;
+    callback load-requested(string);
+
+    border-width: 1px;
+    border-color: #3b3b4a;
+    border-radius: AppTheme.radius;
+    background: AppTheme.panel_alt;
+
+    VerticalLayout {
+        padding: AppTheme.gap_md;
+        spacing: AppTheme.gap_sm;
+
+        Text {
+            text: "Prompt";
+            color: AppTheme.text;
+            font-weight: 700;
+        }
+
+        Text {
+            text: "拖入檔案或貼上路徑，並在下方輸入補全 Prompt";
+            color: AppTheme.text_muted;
+            font-size: 12px;
+        }
+
+        HorizontalLayout {
+            spacing: AppTheme.gap_sm;
+
+            path_input := LineEdit {
+                text <=> root.file-path;
+                placeholder-text: "D:/path/to/file_or_image";
+                horizontal-stretch: 1;
+            }
+
+            Button {
+                text: "Load";
+                clicked => {
+                    root.load-requested(path_input.text);
+                }
+            }
+        }
+
+        Text {
+            text: root.file-path == "" ? "<no file>" : root.file-path;
+            color: AppTheme.text_muted;
+        }
+
+        if root.has-image : Image {
+            source: root.preview-image;
+            width: 180px;
+            height: 120px;
+            image-fit: contain;
+        }
+
+        LineEdit {
+            text <=> root.prompt;
+            placeholder-text: "補全框 Prompt...";
+        }
+
+        Text {
+            text: "Selected context: \{root.selected-context}";
+            color: AppTheme.text_muted;
+        }
+    }
+}

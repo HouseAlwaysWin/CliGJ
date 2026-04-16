@@ -1,0 +1,42 @@
+import { AppTheme } from "../theme.slint";
+import { GjViewer } from "gj_viewer.slint";
+import { GjPromptDropZone } from "gj_prompt_drop_zone.slint";
+
+export component GjWorkspace inherits Rectangle {
+    in-out property <string> file-path;
+    in-out property <bool> has-image;
+    in-out property <image> preview-image;
+    in-out property <[string]> code-lines;
+    in-out property <int> selected-line;
+    in-out property <string> selected-context;
+    in-out property <string> prompt;
+    callback load-requested(string);
+
+    background: AppTheme.bg;
+
+    VerticalLayout {
+        padding: AppTheme.gap_md;
+        spacing: AppTheme.gap_md;
+
+        // Main screen: code / image viewer fills remaining height.
+        GjViewer {
+            code-lines: root.code-lines;
+            selected-line <=> root.selected-line;
+            selected-context <=> root.selected-context;
+            vertical-stretch: 1;
+            min-height: 200px;
+        }
+
+        // Bottom: one DropZone-style panel — path + preview + prompt.
+        GjPromptDropZone {
+            file-path <=> root.file-path;
+            has-image: root.has-image;
+            preview-image: root.preview-image;
+            prompt <=> root.prompt;
+            selected-context: root.selected-context;
+            load-requested(path) => {
+                root.load-requested(path);
+            }
+        }
+    }
+}

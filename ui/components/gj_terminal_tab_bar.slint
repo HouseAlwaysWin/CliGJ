@@ -23,30 +23,48 @@ export component GjTerminalTabBar inherits Rectangle {
         // Tabs grow left-to-right; + follows the tab strip. Remaining space stays on the right.
         alignment: start;
 
-        // Viewport: only as wide as needed (few tabs) or capped when many tabs → horizontal scroll.
-        scroll-view := ScrollView {
+        // ScrollView: hide scrollbars; vertical wheel maps to horizontal pan (see TouchArea below).
+        tab-strip := TouchArea {
             horizontal-stretch: 0;
-            vertical-stretch: 1;
+            height: parent.height;
             width: min(
                 root.width - 8px - root.plus-w,
                 root.tab-count * AppTheme.tab_width
             );
 
-            HorizontalLayout {
-                spacing: 0px;
-                alignment: start;
-                width: root.tab-count * AppTheme.tab_width;
+            scroll-view := ScrollView {
+                width: parent.width;
+                height: parent.height;
+                horizontal-scrollbar-policy: always-off;
+                vertical-scrollbar-policy: always-off;
 
-                for title[index] in root.tab-titles: GjTerminalTab {
-                    title: title;
-                    active: root.current-tab == index;
-                    pressed => {
-                        root.select-tab(index);
-                    }
-                    close-requested => {
-                        root.close-tab(index);
+                HorizontalLayout {
+                    spacing: 0px;
+                    alignment: start;
+                    width: root.tab-count * AppTheme.tab_width;
+
+                    for title[index] in root.tab-titles: GjTerminalTab {
+                        title: title;
+                        active: root.current-tab == index;
+                        pressed => {
+                            root.select-tab(index);
+                        }
+                        close-requested => {
+                            root.close-tab(index);
+                        }
                     }
                 }
+            }
+
+            scroll-event(event) => {
+                let max-scroll = scroll-view.viewport-width - scroll-view.visible-width;
+                if (max-scroll <= 0px) {
+                    return reject;
+                }
+                // Std horizontal scrollbar only uses delta-x; map vertical wheel to horizontal pan.
+                let next = scroll-view.viewport-x - event.delta-y - event.delta-x;
+                scroll-view.viewport-x = max(-max-scroll, min(0px, next));
+                return accept;
             }
         }
 

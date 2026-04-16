@@ -1,0 +1,76 @@
+import { ScrollView } from "std-widgets.slint";
+import { AppTheme } from "../theme.slint";
+
+export component GjViewer inherits Rectangle {
+    in property <[string]> code-lines;
+    in-out property <int> selected-line;
+    in-out property <string> selected-context;
+
+    border-width: 1px;
+    border-color: #3b3b4a;
+    border-radius: AppTheme.radius;
+    background: AppTheme.panel_alt;
+
+    VerticalLayout {
+        padding: AppTheme.gap_sm;
+        spacing: AppTheme.gap_sm;
+
+        Text {
+            text: "GjViewer (read-only)";
+            color: AppTheme.text;
+            font-weight: 700;
+        }
+
+        ScrollView {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+
+            VerticalLayout {
+                spacing: 1px;
+
+                for line[index] in root.code-lines : Rectangle {
+                    height: 24px;
+                    background: root.selected-line == index + 1 ? #2a2230 : AppTheme.panel;
+
+                    HorizontalLayout {
+                        spacing: 0px;
+
+                        Rectangle {
+                            width: 64px;
+                            background: #101018;
+
+                            Text {
+                                text: "\{index + 1}";
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: right;
+                                vertical-alignment: center;
+                                x: 0px;
+                                width: parent.width - 8px;
+                            }
+                        }
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            background: #00000000;
+
+                            Text {
+                                text: line;
+                                color: AppTheme.text;
+                                vertical-alignment: center;
+                                x: 10px;
+                                width: parent.width - 12px;
+                            }
+                        }
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.selected-line = index + 1;
+                            root.selected-context = line;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
