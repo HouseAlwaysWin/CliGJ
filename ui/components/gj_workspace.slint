@@ -12,10 +12,12 @@ export component GjWorkspace inherits Rectangle {
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     in-out property <string> prompt;
+    in-out property <bool> raw-input-enabled;
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
     callback control-sequence-requested(string);
+    callback raw-input-toggle-requested;
 
     background: AppTheme.bg;
 
@@ -42,6 +44,7 @@ export component GjWorkspace inherits Rectangle {
 
         GjPromptDropZone {
             prompt <=> root.prompt;
+            raw-input-enabled <=> root.raw-input-enabled;
             has-image: root.has-image;
             preview-image: root.preview-image;
             selected-context: root.selected-context;
@@ -56,6 +59,9 @@ export component GjWorkspace inherits Rectangle {
             }
             control-sequence-requested(seq) => {
                 root.control-sequence-requested(seq);
+            }
+            raw-input-toggle-requested => {
+                root.raw-input-toggle-requested();
             }
         }
     }

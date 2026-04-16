@@ -4,6 +4,7 @@ import { AppTheme } from "../theme.slint";
 /// Bottom prompt bar: input + function bar (Cursor/VSCode style).
 export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
+    in property <bool> raw-input-enabled: false;
     in property <bool> has-image;
     in property <image> preview-image;
     in property <string> selected-context;
@@ -11,6 +12,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback history-prev-requested;
     callback history-next-requested;
     callback control-sequence-requested(string);
+    callback raw-input-toggle-requested;
 
     horizontal-stretch: 1;
     min-height: 116px;
@@ -47,13 +49,61 @@ export component GjPromptDropZone inherits Rectangle {
                     font-size: 13px;
                     wrap: word-wrap;
                     key-pressed(event) => {
-                        if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
+                        if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
+                            root.raw-input-toggle-requested();
+                            accept
+                        } else if (event.modifiers.alt && event.text == Key.UpArrow) {
+                            root.control-sequence-requested("\u{001b}[A");
+                            accept
+                        } else if (event.modifiers.alt && event.text == Key.DownArrow) {
+                            root.control-sequence-requested("\u{001b}[B");
+                            accept
+                        } else if (event.modifiers.alt && event.text == Key.RightArrow) {
+                            root.control-sequence-requested("\u{001b}[C");
+                            accept
+                        } else if (event.modifiers.alt && event.text == Key.LeftArrow) {
+                            root.control-sequence-requested("\u{001b}[D");
+                            accept
+                        } else if (root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
+                            root.control-sequence-requested("\u{000d}");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.UpArrow) {
+                            root.control-sequence-requested("\u{001b}[A");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.DownArrow) {
+                            root.control-sequence-requested("\u{001b}[B");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.RightArrow) {
+                            root.control-sequence-requested("\u{001b}[C");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.LeftArrow) {
+                            root.control-sequence-requested("\u{001b}[D");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Home) {
+                            root.control-sequence-requested("\u{001b}[H");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.End) {
+                            root.control-sequence-requested("\u{001b}[F");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.PageUp) {
+                            root.control-sequence-requested("\u{001b}[5~");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.PageDown) {
+                            root.control-sequence-requested("\u{001b}[6~");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Delete) {
+                            root.control-sequence-requested("\u{001b}[3~");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Escape) {
+                            root.control-sequence-requested("\u{001b}");
+                            accept
+                        } else if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
                             root.submit-requested();
                             accept
-                        } else if (event.text == Key.UpArrow) {
+                        } else if (!root.raw-input-enabled && event.text == Key.UpArrow) {
                             root.history-prev-requested();
                             accept
-                        } else if (event.text == Key.DownArrow) {
+                        } else if (!root.raw-input-enabled && event.text == Key.DownArrow) {
                             root.history-next-requested();
                             accept
                         } else if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
@@ -111,19 +161,25 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        min-width: 28px;
+                        min-width: 56px;
                         height: 22px;
                         border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
+                        border-color: root.raw-input-enabled ? AppTheme.accent : AppTheme.prompt_chrome_border;
                         border-radius: 11px;
-                        background: #00000000;
+                        background: root.raw-input-enabled ? #ff4f6f : #00000000;
 
                         Text {
-                            text: "R";
-                            color: AppTheme.text_muted;
+                            text: root.raw-input-enabled ? "R ON" : "R OFF";
+                            color: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 11px;
+                            font-size: 10px;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.raw-input-toggle-requested();
+                            }
                         }
                     }
 

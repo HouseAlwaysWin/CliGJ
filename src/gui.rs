@@ -173,6 +173,16 @@ pub fn run_gui() {
         }
     });
 
+    let state_for_raw_toggle = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_toggle_raw_input_requested(move || {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_raw_toggle.borrow_mut();
+        if let Err(e) = s.toggle_raw_input_current(&ui) {
+            eprintln!("CliGJ: raw input toggle: {e}");
+        }
+    });
+
     let state_for_rename = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_rename_tab_requested(move |index| {
@@ -223,6 +233,7 @@ struct TabState {
     cmd_type: String,
     terminal_text: String,
     auto_scroll: bool,
+    raw_input_mode: bool,
     command_history: Vec<String>,
     history_cursor: Option<usize>,
     history_draft: String,
@@ -245,6 +256,7 @@ impl TabState {
             cmd_type,
             terminal_text: String::new(),
             auto_scroll: false,
+            raw_input_mode: false,
             command_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
@@ -297,6 +309,17 @@ struct GuiState {
 }
 
 impl GuiState {
+    fn toggle_raw_input_current(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index");
+        }
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let tab = &mut self.tabs[self.current];
+        tab.raw_input_mode = !tab.raw_input_mode;
+        load_tab_to_ui(ui, tab);
+        Ok(())
+    }
+
     fn switch_tab(&mut self, new_index: usize, ui: &AppWindow) -> Result<(), &'static str> {
         if new_index >= self.tabs.len() {
             return Err("invalid tab index");
@@ -562,6 +585,7 @@ fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.cmd_type = ui.get_ws_cmd_type().to_string();
     tab.terminal_text = ui.get_ws_terminal_text().to_string();
     tab.auto_scroll = ui.get_ws_auto_scroll();
+    tab.raw_input_mode = ui.get_ws_raw_input();
 }
 
 fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
@@ -578,6 +602,7 @@ fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_selected_context(tab.selected_context.clone());
     ui.set_ws_prompt(tab.prompt.clone());
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
+    ui.set_ws_raw_input(tab.raw_input_mode);
 }
 
 fn default_cmd_type() -> &'static str {

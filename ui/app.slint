@@ -27,6 +27,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-selected-context: "";
     in-out property <string> ws-prompt: "";
     in-out property <string> ws-cmd-type: "Command Prompt";
+    in-out property <bool> ws-raw-input: false;
 
     callback tab-changed(int);
     callback tab-close-requested(int);
@@ -36,6 +37,7 @@ export component AppWindow inherits Window {
     callback prompt-history-prev;
     callback prompt-history-next;
     callback prompt-control-sequence(string);
+    callback toggle-raw-input-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
     callback rename-commit(int, string);
@@ -54,7 +56,10 @@ export component AppWindow inherits Window {
         focus-on-click: true;
         focus-on-tab-navigation: true;
         capture-key-pressed(event) => {
-            if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
+            if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
+                root.toggle-raw-input-requested();
+                accept
+            } else if (!root.ws-raw-input && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
                 root.submit-prompt();
                 accept
             } else {
@@ -110,6 +115,7 @@ export component AppWindow inherits Window {
                         selected-line <=> root.ws-selected-line;
                         selected-context <=> root.ws-selected-context;
                         prompt <=> root.ws-prompt;
+                        raw-input-enabled <=> root.ws-raw-input;
                         submit-requested => {
                             root.submit-prompt();
                         }
@@ -121,6 +127,9 @@ export component AppWindow inherits Window {
                         }
                         control-sequence-requested(seq) => {
                             root.prompt-control-sequence(seq);
+                        }
+                        raw-input-toggle-requested => {
+                            root.toggle-raw-input-requested();
                         }
                     }
                 }
