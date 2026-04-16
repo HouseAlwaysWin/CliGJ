@@ -6,6 +6,10 @@ export component GjTerminalTab inherits Rectangle {
     callback pressed;
     callback close-requested;
     callback scroll-requested(length, length);
+    callback rename-requested;
+    callback drag-started(length);
+    callback drag-moved(length);
+    callback drag-ended;
 
     width: AppTheme.tab_width;
     height: 100%;
@@ -53,6 +57,19 @@ export component GjTerminalTab inherits Rectangle {
             TouchArea {
                 clicked => {
                     root.pressed();
+                }
+                double-clicked => {
+                    root.rename-requested();
+                }
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        root.drag-started(root.x + self.mouse-x);
+                    } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left) {
+                        root.drag-ended();
+                    }
+                }
+                moved => {
+                    root.drag-moved(root.x + self.mouse-x);
                 }
                 scroll-event(event) => {
                     root.scroll-requested(event.delta-x, event.delta-y);

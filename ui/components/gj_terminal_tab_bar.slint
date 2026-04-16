@@ -11,6 +11,8 @@ export component GjTerminalTabBar inherits Rectangle {
     callback close-tab(int);
     callback new-tab-requested;
     callback cmd-type-selected(string);
+    callback rename-tab(int);
+    callback move-tab(int, int);
 
     property <length> plus-w: 32px;
     property <length> cmd-picker-w: 32px;
@@ -25,6 +27,8 @@ export component GjTerminalTabBar inherits Rectangle {
     // Tab viewport fills from left edge to "+".
     property <length> tab-viewport-width: max(0px, root.plus-x - root.left-pad);
     property <bool> cmd-menu-open: false;
+    property <bool> dragging: false;
+    property <int> drag-index: -1;
 
     height: root.bar-h;
     background: AppTheme.tab_bar_bg;
@@ -39,6 +43,24 @@ export component GjTerminalTabBar inherits Rectangle {
         let next = scroll-view.viewport-x - delta-y - delta-x;
         scroll-view.viewport-x = max(-max-scroll, min(0px, next));
         return accept;
+    }
+
+    function clamp_index(i: int) -> int {
+        if (i < 0) { return 0; }
+        if (i >= root.tab-count) { return root.tab-count - 1; }
+        return i;
+    }
+
+    function maybe_reorder_tabs(x: length) {
+        if (!root.dragging || root.drag-index < 0) { return; }
+        // Convert from bar-local x to scroll-view content x.
+        let content_x = (-scroll-view.viewport-x) + (x - root.left-pad);
+        // length/length => float; implicit float->int conversion truncates.
+        let idx = clamp_index(content_x / AppTheme.tab_width);
+        if (idx != root.drag-index) {
+            root.move-tab(root.drag-index, idx);
+            root.drag-index = idx;
+        }
     }
 
     // Left tab viewport (absolute geometry to avoid layout binding loops).
@@ -77,8 +99,23 @@ export component GjTerminalTabBar inherits Rectangle {
                         pressed => {
                             root.select-tab(index);
                         }
+                        rename-requested => {
+                            root.rename-tab(index);
+                        }
                         close-requested => {
                             root.close-tab(index);
+                        }
+                        drag-started(x) => {
+                            root.dragging = true;
+                            root.drag-index = index;
+                            root.maybe_reorder_tabs(x);
+                        }
+                        drag-moved(x) => {
+                            root.maybe_reorder_tabs(x);
+                        }
+                        drag-ended => {
+                            root.dragging = false;
+                            root.drag-index = -1;
                         }
                         scroll-requested(dx, dy) => {
                             root.pan-tabs(dx, dy);

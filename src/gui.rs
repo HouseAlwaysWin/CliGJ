@@ -143,6 +143,42 @@ pub fn run_gui() {
         }
     });
 
+    let state_for_rename = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_rename_tab_requested(move |index| {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let s = state_for_rename.borrow_mut();
+        if index < 0 || (index as usize) >= s.tabs.len() { return; }
+        let title = s.titles.row_data(index as usize).unwrap_or_else(|| SharedString::from("Tab"));
+        ui.set_ws_rename_index(index);
+        ui.set_ws_rename_text(title);
+        ui.set_ws_rename_open(true);
+    });
+
+    let state_for_rename_commit = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_rename_commit(move |index, text| {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let s = state_for_rename_commit.borrow_mut();
+        if index < 0 || (index as usize) >= s.tabs.len() { return; }
+        s.titles.set_row_data(index as usize, SharedString::from(text.as_str()));
+        ui.set_ws_rename_open(false);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_rename_cancel(move || {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        ui.set_ws_rename_open(false);
+    });
+
+    let state_for_move = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_move_tab_requested(move |from, to| {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_move.borrow_mut();
+        let _ = s.move_tab(from as usize, to as usize, &ui);
+    });
+
     app.run().expect("failed to run app window");
 }
 
@@ -357,6 +393,40 @@ impl GuiState {
         ui.set_current_tab(new_current as i32);
         sync_tab_count(ui, self.tabs.len());
         load_tab_to_ui(ui, &self.tabs[new_current]);
+        Ok(())
+    }
+
+    fn move_tab(&mut self, from: usize, to: usize, ui: &AppWindow) -> Result<(), &'static str> {
+        if from >= self.tabs.len() || to >= self.tabs.len() {
+            return Err("invalid move index");
+        }
+        if from == to {
+            return Ok(());
+        }
+
+        // Persist current UI state into current tab before reordering.
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+
+        // Reorder titles model.
+        let title = self.titles.remove(from);
+        self.titles.insert(to, title);
+
+        // Reorder tab states.
+        let tab = self.tabs.remove(from);
+        self.tabs.insert(to, tab);
+
+        // Fix current index.
+        if self.current == from {
+            self.current = to;
+        } else if from < self.current && to >= self.current {
+            self.current -= 1;
+        } else if from > self.current && to <= self.current {
+            self.current += 1;
+        }
+
+        ui.set_current_tab(self.current as i32);
+        sync_tab_count(ui, self.tabs.len());
+        load_tab_to_ui(ui, &self.tabs[self.current]);
         Ok(())
     }
 }

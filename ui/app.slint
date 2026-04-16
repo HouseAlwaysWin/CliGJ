@@ -1,6 +1,7 @@
 import { AppTheme } from "theme.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
+import { TextEdit } from "std-widgets.slint";
 
 export component AppWindow inherits Window {
     title: "CliGJ - UI Foundation";
@@ -19,6 +20,9 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
     in-out property <bool> ws-auto-scroll: false;
+    in-out property <bool> ws-rename-open: false;
+    in-out property <int> ws-rename-index: -1;
+    in-out property <string> ws-rename-text: "";
     in-out property <int> ws-selected-line: 0;
     in-out property <string> ws-selected-context: "";
     in-out property <string> ws-prompt: "";
@@ -29,6 +33,10 @@ export component AppWindow inherits Window {
     callback new-tab-requested;
     callback cmd-type-changed(string);
     callback submit-prompt;
+    callback rename-tab-requested(int);
+    callback move-tab-requested(int, int);
+    callback rename-commit(int, string);
+    callback rename-cancel;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -73,6 +81,12 @@ export component AppWindow inherits Window {
                 cmd-type-selected(kind) => {
                     root.cmd-type-changed(kind);
                 }
+            rename-tab(index) => {
+                root.rename-tab-requested(index);
+            }
+            move-tab(from, to) => {
+                root.move-tab-requested(from, to);
+            }
             }
 
             Rectangle {
@@ -95,6 +109,99 @@ export component AppWindow inherits Window {
                         prompt <=> root.ws-prompt;
                         submit-requested => {
                             root.submit-prompt();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.ws-rename-open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        z: 100;
+
+        Rectangle {
+            width: 360px;
+            height: 140px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: AppTheme.panel;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 10px;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 10px;
+
+                Text {
+                    text: "Rename tab";
+                    color: AppTheme.text;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+
+                TextEdit {
+                    text <=> root.ws-rename-text;
+                    font-size: 13px;
+                    wrap: no-wrap;
+                    key-pressed(event) => {
+                        if (event.text == Key.Return) {
+                            root.rename-commit(root.ws-rename-index, root.ws-rename-text);
+                            accept
+                        } else if (event.text == Key.Escape) {
+                            root.rename-cancel();
+                            accept
+                        } else {
+                            reject
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 8px;
+                        background: #00000000;
+                        Text {
+                            text: "Cancel";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                        }
+                        TouchArea {
+                            clicked => { root.rename-cancel(); }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.accent;
+                        border-radius: 8px;
+                        background: AppTheme.accent;
+                        Text {
+                            text: "OK";
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        TouchArea {
+                            clicked => { root.rename-commit(root.ws-rename-index, root.ws-rename-text); }
                         }
                     }
                 }
