@@ -1,0 +1,81 @@
+import { ScrollView } from "std-widgets.slint";
+import { AppTheme } from "../theme.slint";
+import { GjTerminalTab } from "gj_terminal_tab.slint";
+
+export component GjTerminalTabBar inherits Rectangle {
+    in property <[string]> tab-titles;
+    in property <int> tab-count;
+    in property <int> current-tab;
+    callback select-tab(int);
+    callback close-tab(int);
+    callback new-tab-requested;
+
+    property <length> plus-w: 36px;
+
+    height: AppTheme.tab_bar_height;
+    background: AppTheme.tab_bar_bg;
+    border-width: 0px;
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 0px;
+        // Tabs grow left-to-right; + follows the tab strip. Remaining space stays on the right.
+        alignment: start;
+
+        // Viewport: only as wide as needed (few tabs) or capped when many tabs → horizontal scroll.
+        scroll-view := ScrollView {
+            horizontal-stretch: 0;
+            vertical-stretch: 1;
+            width: min(
+                root.width - 8px - root.plus-w,
+                root.tab-count * AppTheme.tab_width
+            );
+
+            HorizontalLayout {
+                spacing: 0px;
+                alignment: start;
+                width: root.tab-count * AppTheme.tab_width;
+
+                for title[index] in root.tab-titles: GjTerminalTab {
+                    title: title;
+                    active: root.current-tab == index;
+                    pressed => {
+                        root.select-tab(index);
+                    }
+                    close-requested => {
+                        root.close-tab(index);
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: root.plus-w;
+            height: parent.height;
+            background: #00000000;
+
+            Text {
+                text: "+";
+                color: AppTheme.text_muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                font-size: 18px;
+                font-weight: 500;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.new-tab-requested();
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        width: parent.width;
+        background: #3c3c3c;
+    }
+}

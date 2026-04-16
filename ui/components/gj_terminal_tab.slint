@@ -1,0 +1,80 @@
+import { AppTheme } from "../theme.slint";
+
+export component GjTerminalTab inherits Rectangle {
+    in property <string> title;
+    in property <bool> active;
+    callback pressed;
+    callback close-requested;
+
+    width: AppTheme.tab_width;
+    height: 100%;
+    background: active ? AppTheme.tab_active : AppTheme.tab_inactive;
+    border-radius: 4px;
+
+    Rectangle {
+        y: parent.height - 2px;
+        height: 2px;
+        width: parent.width;
+        background: active ? AppTheme.accent : #00000000;
+    }
+
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        height: parent.height;
+        background: AppTheme.tab_separator;
+    }
+
+    HorizontalLayout {
+        spacing: 0px;
+        padding-left: 8px;
+        padding-right: 2px;
+
+        Rectangle {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            height: 100%;
+            clip: true;
+
+            Text {
+                text: title;
+                color: active ? AppTheme.text : AppTheme.text_muted;
+                horizontal-alignment: left;
+                vertical-alignment: center;
+                font-size: 13px;
+                font-weight: active ? 600 : 400;
+                x: 4px;
+                width: parent.width - 8px;
+                wrap: no-wrap;
+                overflow: elide;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.pressed();
+                }
+            }
+        }
+
+        Rectangle {
+            width: 32px;
+            height: 100%;
+            background: #00000000;
+
+            Text {
+                text: "×";
+                color: AppTheme.text_muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                font-size: 16px;
+                font-weight: 400;
+            }
+
+            TouchArea {
+                clicked => {
+                    root.close-requested();
+                }
+            }
+        }
+    }
+}
