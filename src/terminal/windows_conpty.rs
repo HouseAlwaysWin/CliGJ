@@ -101,8 +101,11 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
         )
         .map_err(|e| format!("CreateProcessW: {e}"))?;
 
-        let writer = std::fs::File::from_raw_handle(in_write.0 as *mut _);
+        let mut writer = std::fs::File::from_raw_handle(in_write.0 as *mut _);
         let reader = std::fs::File::from_raw_handle(out_read.0 as *mut _);
+
+        // Best-effort: switch shells to UTF-8 to avoid mojibake on localized Windows installs.
+        let _ = init_shell_utf8(shell, &mut writer);
 
         Ok(ConptySpawn {
             session: ConptySession {
@@ -159,9 +162,84 @@ pub fn start_reader_thread(
                 Ok(n) => n,
                 Err(_) => break,
             };
-            let text = String::from_utf8_lossy(&buf[..n]).to_string();
+            let raw = String::from_utf8_lossy(&buf[..n]);
+            let text = normalize_newlines(&strip_ansi_vt(&raw));
             on_chunk(text);
         }
     })
+}
+
+fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {
+    let cmd = if shell == "PowerShell" {
+        "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new(); \
+[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); \
+chcp 65001 > $null\r\n"
+            .to_string()
+    } else {
+        // Prefix with '@' to suppress cmd's command echo for this initialization line.
+        "@chcp 65001 > nul\r\n".to_string()
+    };
+    writer.write_all(cmd.as_bytes())?;
+    writer.flush()?;
+    Ok(())
+}
+
+fn normalize_newlines(s: &str) -> String {
+    let s = s.replace("\r\n", "\n");
+    s.replace('\r', "")
+}
+
+fn strip_ansi_vt(s: &str) -> String {
+    // Minimal VT/ANSI stripper:
+    // - CSI: ESC [ ... <final>
+    // - OSC: ESC ] ... (BEL | ESC \)
+    // - Other ESC sequences: ESC <char>
+    let bytes = s.as_bytes();
+    let mut out: Vec<u8> = Vec::with_capacity(bytes.len());
+    let mut i = 0usize;
+    while i < bytes.len() {
+        if bytes[i] != 0x1b {
+            out.push(bytes[i]);
+            i += 1;
+            continue;
+        }
+
+        if i + 1 >= bytes.len() {
+            break;
+        }
+        let next = bytes[i + 1];
+        if next == b'[' {
+            // CSI
+            i += 2;
+            while i < bytes.len() {
+                let b = bytes[i];
+                i += 1;
+                if (0x40..=0x7e).contains(&b) {
+                    break;
+                }
+            }
+            continue;
+        }
+        if next == b']' {
+            // OSC
+            i += 2;
+            while i < bytes.len() {
+                if bytes[i] == 0x07 {
+                    i += 1;
+                    break;
+                }
+                if bytes[i] == 0x1b && i + 1 < bytes.len() && bytes[i + 1] == b'\\' {
+                    i += 2;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        // Other ESC sequences: drop ESC + one char.
+        i += 2;
+    }
+    String::from_utf8_lossy(&out).to_string()
 }
 

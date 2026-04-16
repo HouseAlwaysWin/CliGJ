@@ -10,6 +10,8 @@ export component GjViewer inherits Rectangle {
     background: AppTheme.bg;
 
     changed terminal-text => {
+        // Scroll to bottom when new output arrives.
+        // Note: TextEdit's viewport coordinates are typically negative when scrolled.
         viewer_text.viewport-y = min(0px, viewer_text.visible-height - viewer_text.viewport-height);
     }
 

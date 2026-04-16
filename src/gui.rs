@@ -198,8 +198,7 @@ impl GuiState {
             return Ok(());
         }
 
-        let id = self.tabs[self.current].id;
-        self.tabs[self.current] = ui_to_tab_state(ui, id);
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
         load_tab_to_ui(ui, &self.tabs[new_index]);
@@ -207,7 +206,7 @@ impl GuiState {
     }
 
     fn add_tab(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
-        self.tabs[self.current] = ui_to_tab_state(ui, self.tabs[self.current].id);
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
 
         let n = self.titles.row_count();
         let label = SharedString::from(format!("工作階段 {}", n + 1));
@@ -228,8 +227,7 @@ impl GuiState {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
         }
-        let id = self.tabs[self.current].id;
-        self.tabs[self.current] = ui_to_tab_state(ui, id);
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.tabs[self.current].cmd_type = new_cmd_type.to_string();
 
         #[cfg(target_os = "windows")]
@@ -258,8 +256,7 @@ impl GuiState {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
         }
-        let id = self.tabs[self.current].id;
-        self.tabs[self.current] = ui_to_tab_state(ui, id);
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
         let tab = &mut self.tabs[self.current];
         let command_line = tab.prompt.to_string();
         let command_line = command_line.trim().to_string();
@@ -273,8 +270,10 @@ impl GuiState {
                 let mut to_send = command_line.clone();
                 to_send.push_str("\r\n");
                 let _ = session.writer.write_all(to_send.as_bytes());
+                let _ = session.writer.flush();
             } else {
-                tab.append_terminal(&format!("{command_line}\r\n"));
+                // No interactive shell: show the line in the UI buffer.
+                tab.append_terminal(&format!("{command_line}\n"));
             }
         }
 
@@ -296,8 +295,7 @@ impl GuiState {
             return Err("invalid close index");
         }
 
-        let id = self.tabs[self.current].id;
-        self.tabs[self.current] = ui_to_tab_state(ui, id);
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
 
         self.titles.remove(index);
         self.tabs.remove(index);
@@ -325,28 +323,15 @@ fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
 
-fn ui_to_tab_state(ui: &AppWindow, id: u64) -> TabState {
-    let tab = TabState {
-        id,
-        file_path: ui.get_ws_file_path().to_string(),
-        has_image: ui.get_ws_has_image(),
-        preview_image: ui.get_ws_preview_image(),
-        selected_line: ui.get_ws_selected_line(),
-        selected_context: ui.get_ws_selected_context(),
-        prompt: ui.get_ws_prompt(),
-        cmd_type: ui.get_ws_cmd_type().to_string(),
-        terminal_text: ui.get_ws_terminal_text().to_string(),
-        #[cfg(target_os = "windows")]
-        conpty: None,
-    };
-
-    #[cfg(target_os = "windows")]
-    {
-        // Preserve existing session when switching tabs / submitting.
-        // (Caller is responsible for moving it over if needed.)
-    }
-
-    tab
+fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
+    tab.file_path = ui.get_ws_file_path().to_string();
+    tab.has_image = ui.get_ws_has_image();
+    tab.preview_image = ui.get_ws_preview_image();
+    tab.selected_line = ui.get_ws_selected_line();
+    tab.selected_context = ui.get_ws_selected_context();
+    tab.prompt = ui.get_ws_prompt();
+    tab.cmd_type = ui.get_ws_cmd_type().to_string();
+    tab.terminal_text = ui.get_ws_terminal_text().to_string();
 }
 
 fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {

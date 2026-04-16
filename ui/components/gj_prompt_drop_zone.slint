@@ -44,7 +44,7 @@ export component GjPromptDropZone inherits Rectangle {
                     font-size: 13px;
                     wrap: word-wrap;
                     key-pressed(event) => {
-                        if (event.text == "\n" && !event.modifiers.shift) {
+                        if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
                             root.submit-requested();
                             accept
                         } else {
@@ -164,6 +164,8 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         submit_ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
                             clicked => {
                                 root.submit-requested();
                             }

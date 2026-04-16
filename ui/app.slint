@@ -7,6 +7,7 @@ export component AppWindow inherits Window {
     preferred-width: 800px;
     preferred-height: 600px;
     background: AppTheme.bg;
+    forward-focus: root_keys;
 
     in property <[string]> tab-titles;
     in property <int> tab-count: 0;
@@ -28,49 +29,63 @@ export component AppWindow inherits Window {
     callback cmd-type-changed(string);
     callback submit-prompt;
 
-    VerticalLayout {
-        spacing: 0px;
-
-        GjTerminalTabBar {
-            z: 20;
-            tab-titles: root.tab-titles;
-            tab-count: root.tab-count;
-            current-tab: root.current-tab;
-            current-cmd-type <=> root.ws-cmd-type;
-            select-tab(index) => {
-                root.current-tab = index;
-                root.tab-changed(index);
-            }
-            close-tab(index) => {
-                root.tab-close-requested(index);
-            }
-            new-tab-requested => {
-                root.new-tab-requested();
-            }
-            cmd-type-selected(kind) => {
-                root.cmd-type-changed(kind);
+    // Global key capture: more reliable than TextEdit key handlers on Windows.
+    root_keys := FocusScope {
+        focus-on-click: true;
+        focus-on-tab-navigation: true;
+        capture-key-pressed(event) => {
+            if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
+                root.submit-prompt();
+                accept
+            } else {
+                reject
             }
         }
 
-        Rectangle {
-            vertical-stretch: 1;
-            background: AppTheme.bg;
+        VerticalLayout {
+            spacing: 0px;
 
-            VerticalLayout {
-                padding: 0px;
-                spacing: 0px;
+            GjTerminalTabBar {
+                z: 20;
+                tab-titles: root.tab-titles;
+                tab-count: root.tab-count;
+                current-tab: root.current-tab;
+                current-cmd-type <=> root.ws-cmd-type;
+                select-tab(index) => {
+                    root.current-tab = index;
+                    root.tab-changed(index);
+                }
+                close-tab(index) => {
+                    root.tab-close-requested(index);
+                }
+                new-tab-requested => {
+                    root.new-tab-requested();
+                }
+                cmd-type-selected(kind) => {
+                    root.cmd-type-changed(kind);
+                }
+            }
 
-                GjWorkspace {
-                    file-path <=> root.ws-file-path;
-                    has-image <=> root.ws-has-image;
-                    preview-image <=> root.ws-preview-image;
-                    code-lines <=> root.ws-code-lines;
-                    terminal-text <=> root.ws-terminal-text;
-                    selected-line <=> root.ws-selected-line;
-                    selected-context <=> root.ws-selected-context;
-                    prompt <=> root.ws-prompt;
-                    submit-requested => {
-                        root.submit-prompt();
+            Rectangle {
+                vertical-stretch: 1;
+                background: AppTheme.bg;
+
+                VerticalLayout {
+                    padding: 0px;
+                    spacing: 0px;
+
+                    GjWorkspace {
+                        file-path <=> root.ws-file-path;
+                        has-image <=> root.ws-has-image;
+                        preview-image <=> root.ws-preview-image;
+                        code-lines <=> root.ws-code-lines;
+                        terminal-text <=> root.ws-terminal-text;
+                        selected-line <=> root.ws-selected-line;
+                        selected-context <=> root.ws-selected-context;
+                        prompt <=> root.ws-prompt;
+                        submit-requested => {
+                            root.submit-prompt();
+                        }
                     }
                 }
             }

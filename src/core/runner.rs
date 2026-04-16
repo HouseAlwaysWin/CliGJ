@@ -12,8 +12,10 @@ pub struct CommandOutcome {
 
 pub async fn run_shell_command(command_line: &str) -> Result<CommandOutcome> {
     let output = if cfg!(target_os = "windows") {
+        // Force UTF-8 output on Windows to avoid mojibake on localized installs.
+        let command_line = format!("chcp 65001 > nul & {command_line}");
         Command::new("cmd")
-            .args(["/C", command_line])
+            .args(["/C", &command_line])
             .output()
             .await?
     } else {
