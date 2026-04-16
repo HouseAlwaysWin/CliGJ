@@ -1,7 +1,7 @@
-import { TextEdit } from "std-widgets.slint";
+import { LineEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 
-/// Bottom prompt bar: a single VS Code-like input.
+/// Bottom prompt bar: input + function bar (Cursor/VSCode style).
 export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <bool> has-image;
@@ -9,7 +9,8 @@ export component GjPromptDropZone inherits Rectangle {
     in property <string> selected-context;
 
     horizontal-stretch: 1;
-    min-height: 92px;
+    min-height: 74px;
+    max-height: 74px;
     background: AppTheme.bg;
     border-width: 0px;
 
@@ -21,24 +22,120 @@ export component GjPromptDropZone inherits Rectangle {
         background: AppTheme.bg;
 
         Rectangle {
-            x: 8px;
-            y: 8px;
-            width: parent.width - 16px;
-            height: parent.height - 16px;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
             background: AppTheme.prompt_chrome_bg;
             border-width: 1px;
             border-color: AppTheme.prompt_chrome_border;
             border-radius: AppTheme.prompt_chrome_radius;
 
-            TextEdit {
-                x: 10px;
-                y: 8px;
-                width: parent.width - 20px;
-                height: parent.height - 16px;
-                text <=> root.prompt;
-                placeholder-text: "輸入 Prompt...";
-                font-size: 13px;
-                wrap: word-wrap;
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+
+                LineEdit {
+                    horizontal-stretch: 1;
+                    min-height: 28px;
+                    text <=> root.prompt;
+                    placeholder-text: "Plan, Build, / for commands, @ for context";
+                    font-size: 13px;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    Rectangle {
+                        min-width: 78px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "Agent";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 54px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "Auto";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+
+                    Rectangle {
+                        min-width: 28px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "R";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 36px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "Img";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 34px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "Mic";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+                    }
+                }
             }
         }
     }
