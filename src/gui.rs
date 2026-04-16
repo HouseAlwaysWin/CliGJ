@@ -52,6 +52,9 @@ pub fn run_gui() {
                 let mut updated_current = None;
                 for tab in s.tabs.iter_mut() {
                     if tab.id == chunk.tab_id {
+                        if let Some(v) = chunk.set_auto_scroll {
+                            tab.auto_scroll = v;
+                        }
                         if chunk.replace {
                             tab.terminal_text = chunk.text.clone();
                         } else {
@@ -68,6 +71,13 @@ pub fn run_gui() {
                 }
                 if let Some(text) = updated_current {
                     ui.set_ws_terminal_text(SharedString::from(text.as_str()));
+                    // For full-screen replace updates, keep the viewport at the top
+                    // until the user starts interacting (auto_scroll becomes true).
+                    if let Some(current_tab) = s.tabs.get(s.current) {
+                        if !current_tab.auto_scroll {
+                            ui.invoke_ws_scroll_terminal_to_top();
+                        }
+                    }
                 }
             }
         },
@@ -175,8 +185,13 @@ impl TabState {
             if me.cmd_type == "Command Prompt" || me.cmd_type == "PowerShell" {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(&me.cmd_type, 120, 40) {
                     let tab_id = me.id;
-                    windows_conpty::start_reader_thread(spawn.reader, move |text| {
-                        let _ = tx.send(TerminalChunk { tab_id, text, replace: true });
+                    windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                        let _ = tx.send(TerminalChunk {
+                            tab_id,
+                            text: render.text,
+                            replace: true,
+                            set_auto_scroll: if render.filled { Some(true) } else { None },
+                        });
                     });
                     me.conpty = Some(spawn.session);
                 }
@@ -260,8 +275,13 @@ impl GuiState {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
-                    windows_conpty::start_reader_thread(spawn.reader, move |text| {
-                        let _ = tx.send(TerminalChunk { tab_id, text, replace: true });
+                    windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                        let _ = tx.send(TerminalChunk {
+                            tab_id,
+                            text: render.text,
+                            replace: true,
+                            set_auto_scroll: if render.filled { Some(true) } else { None },
+                        });
                     });
                     self.tabs[self.current].conpty = Some(spawn.session);
                 }
@@ -304,8 +324,7 @@ impl GuiState {
         }
 
         tab.prompt = SharedString::new();
-        // After the first submit, keep following new output.
-        tab.auto_scroll = true;
+        // Auto-scroll is enabled once output fills the visible terminal height.
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -364,6 +383,9 @@ fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_preview_image(tab.preview_image.clone());
     ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
     ui.set_ws_auto_scroll(tab.auto_scroll);
+    if !tab.auto_scroll {
+        ui.invoke_ws_scroll_terminal_to_top();
+    }
 
     ui.set_ws_selected_line(tab.selected_line);
     ui.set_ws_selected_context(tab.selected_context.clone());
@@ -384,4 +406,5 @@ struct TerminalChunk {
     tab_id: u64,
     text: String,
     replace: bool,
+    set_auto_scroll: Option<bool>,
 }

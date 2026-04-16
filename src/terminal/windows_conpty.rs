@@ -44,6 +44,11 @@ pub struct ConptySpawn {
     pub reader: std::fs::File,
 }
 
+pub struct TerminalRender {
+    pub text: String,
+    pub filled: bool,
+}
+
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
     unsafe {
         // Pipe for pseudo console input: we write -> console reads.
@@ -168,13 +173,15 @@ impl Drop for ConptySession {
 
 pub fn start_reader_thread(
     mut reader: std::fs::File,
-    mut on_chunk: impl FnMut(String) + Send + 'static,
+    mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
+        let term_rows = 40usize;
+        let term_cols = 120usize;
         let term_size = TerminalSize {
-            rows: 40,
-            cols: 120,
+            rows: term_rows,
+            cols: term_cols,
             pixel_width: 0,
             pixel_height: 0,
             dpi: 0,
@@ -192,11 +199,15 @@ pub fn start_reader_thread(
             // Feed into terminal emulator; it will parse VT/ANSI and maintain a screen buffer.
             term.advance_bytes(&buf[..n]);
 
-            // Render the most recent portion of the screen+scrollback to plain text.
-            // We intentionally limit output to avoid huge UI strings.
+            // Render a portion of the screen+scrollback to plain text.
+            // Keep enough history so the initial cmd banner remains scrollback-visible,
+            // while still bounding memory and UI update cost.
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            let start = total.saturating_sub(300);
+            // Default scrollback size in wezterm-term is 3500 rows; keep more than that
+            // so the initial cmd banner remains visible even after a couple of commands.
+            const MAX_LINES: usize = 4000;
+            let start = total.saturating_sub(MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let mut out = String::new();
             for (i, line) in lines.iter().enumerate() {
@@ -208,7 +219,8 @@ pub fn start_reader_thread(
 
             // Remove our init noise if it was echoed.
             let out = filter_init_noise(&out);
-            on_chunk(out);
+            let filled = total > term_rows;
+            on_chunk(TerminalRender { text: out, filled });
         }
     })
 }

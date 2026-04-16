@@ -34,6 +34,10 @@ export component AppWindow inherits Window {
         workspace.scroll_terminal_to_bottom();
     }
 
+    public function ws_scroll_terminal_to_top() {
+        workspace.scroll_terminal_to_top();
+    }
+
     // Global key capture: more reliable than TextEdit key handlers on Windows.
     root_keys := FocusScope {
         focus-on-click: true;

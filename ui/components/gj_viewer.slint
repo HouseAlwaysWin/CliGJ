@@ -21,6 +21,10 @@ export component GjViewer inherits Rectangle {
         }
     }
 
+    public function scroll_to_top() {
+        viewer_text.viewport-y = 0px;
+    }
+
     viewer_text := TextEdit {
         x: 0px;
         y: 0px;
