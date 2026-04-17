@@ -16,7 +16,10 @@ use super::at_picker::{commit_at_file_pick, sync_at_file_picker};
 use super::composer_sync::sync_composer_line_to_conpty;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TabState, TerminalChunk};
-use super::ui_sync::{colored_lines_to_model, load_tab_to_ui, sync_tab_count, tab_update_from_ui};
+use super::ui_sync::{
+    apply_terminal_v2_frame_to_model, load_tab_to_ui, sync_tab_count, tab_update_from_ui,
+    terminal_lines_model_rc,
+};
 
 pub fn run_gui(inject_file: Option<PathBuf>) {
     #[cfg(target_os = "windows")]
@@ -96,9 +99,14 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                             tab.terminal_text = chunk.text.clone();
                             tab.terminal_lines = chunk.lines.clone();
                             tab.terminal_v2.apply_colored_lines(&tab.terminal_lines);
-                            tab.terminal_v2_dirty_rows = tab.terminal_v2.build_frame().dirty_rows;
+                            let frame = tab.terminal_v2.build_frame();
+                            tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
+                            apply_terminal_v2_frame_to_model(tab, &frame);
                         } else {
                             tab.append_terminal(&chunk.text);
+                            let frame = tab.terminal_v2.build_frame();
+                            tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
+                            apply_terminal_v2_frame_to_model(tab, &frame);
                         }
                         if current_id == Some(chunk.tab_id) {
                             updated_current = Some(tab.terminal_text.clone());
@@ -111,9 +119,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 }
                 if let Some(text) = updated_current {
                     ui.set_ws_terminal_text(SharedString::from(text.as_str()));
-                    ui.set_ws_terminal_lines(colored_lines_to_model(
-                        &s.tabs[s.current].terminal_lines,
-                    ));
+                    ui.set_ws_terminal_lines(terminal_lines_model_rc(&s.tabs[s.current]));
                     if let Some(current_tab) = s.tabs.get(s.current) {
                         if !current_tab.auto_scroll {
                             ui.invoke_ws_scroll_terminal_to_top();
