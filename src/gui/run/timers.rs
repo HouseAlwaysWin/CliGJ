@@ -1,6 +1,7 @@
 //! Slint timers: terminal output pump, composer / `@` picker sync.
 
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -11,10 +12,19 @@ use slint::{ComponentHandle, SharedString, Timer};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk};
 use crate::gui::ui_sync::push_terminal_view_to_ui;
+use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
-/// ~60 FPS: drain ConPTY output and refresh the active tab’s terminal model.
+#[derive(Default)]
+struct PendingTabUpdate {
+    set_auto_scroll: Option<bool>,
+    replace_text: Option<String>,
+    replace_lines: Option<Vec<ColoredLine>>,
+    append_text: String,
+}
+
+/// Batched pump: coalesce ConPTY output and refresh active terminal model.
 pub(crate) fn spawn_terminal_stream_timer(
     app: &AppWindow,
     state: Rc<RefCell<GuiState>>,
@@ -30,24 +40,44 @@ pub(crate) fn spawn_terminal_stream_timer(
         let current_id = s.tabs.get(s.current).map(|t| t.id);
         let mut current_changed = false;
         let mut processed = 0usize;
-        const MAX_CHUNKS_PER_TICK: usize = 96;
+        const MAX_CHUNKS_PER_TICK: usize = 512;
+        let mut pending: HashMap<u64, PendingTabUpdate> = HashMap::new();
         while processed < MAX_CHUNKS_PER_TICK {
             let Ok(chunk) = rx.try_recv() else {
                 break;
             };
             processed += 1;
-            let Some(tab_idx) = s.tabs.iter().position(|t| t.id == chunk.tab_id) else {
+            let entry = pending.entry(chunk.tab_id).or_default();
+            if let Some(v) = chunk.set_auto_scroll {
+                entry.set_auto_scroll = Some(v);
+            }
+            if chunk.replace {
+                entry.replace_text = Some(chunk.text);
+                entry.replace_lines = Some(chunk.lines);
+                entry.append_text.clear();
+            } else if let Some(text) = entry.replace_text.as_mut() {
+                text.push_str(&chunk.text);
+            } else {
+                entry.append_text.push_str(&chunk.text);
+            }
+        }
+
+        for (tab_id, update) in pending {
+            let Some(tab_idx) = s.tabs.iter().position(|t| t.id == tab_id) else {
                 continue;
             };
             let tab = &mut s.tabs[tab_idx];
-            if let Some(v) = chunk.set_auto_scroll {
+            if let Some(v) = update.set_auto_scroll {
                 tab.auto_scroll = v;
             }
-            if chunk.replace {
-                tab.terminal_text = chunk.text;
-                tab.terminal_lines = chunk.lines;
-            } else {
-                tab.append_terminal(&chunk.text);
+            if let Some(text) = update.replace_text {
+                tab.terminal_text = text;
+                tab.terminal_lines = update.replace_lines.unwrap_or_default();
+                if !update.append_text.is_empty() {
+                    tab.append_terminal(&update.append_text);
+                }
+            } else if !update.append_text.is_empty() {
+                tab.append_terminal(&update.append_text);
             }
             if current_id == Some(tab.id) {
                 current_changed = true;
@@ -63,8 +93,6 @@ pub(crate) fn spawn_terminal_stream_timer(
             }
             if auto_scroll {
                 ui.invoke_ws_scroll_terminal_to_bottom();
-            } else {
-                ui.invoke_ws_scroll_terminal_to_top();
             }
             push_terminal_view_to_ui(&ui, tab);
         } else if s.current < s.tabs.len() {

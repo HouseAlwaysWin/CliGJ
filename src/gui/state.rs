@@ -64,6 +64,12 @@ pub struct TabState {
     pub(crate) last_pushed_scroll_top: f32,
     /// Last viewport height used when pushing the terminal window.
     pub(crate) last_pushed_viewport_height: f32,
+    /// Last pushed global first row index for sliced terminal model.
+    pub(crate) last_window_first: usize,
+    /// Last pushed global last row index for sliced terminal model.
+    pub(crate) last_window_last: usize,
+    /// Last pushed full terminal line count.
+    pub(crate) last_window_total: usize,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
 
@@ -98,6 +104,9 @@ impl TabState {
             terminal_view_height_px: 600.0,
             last_pushed_scroll_top: -1.0,
             last_pushed_viewport_height: -1.0,
+            last_window_first: usize::MAX,
+            last_window_last: usize::MAX,
+            last_window_total: usize::MAX,
             composer_pty_mirror: String::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
@@ -137,6 +146,9 @@ impl TabState {
         self.terminal_lines.clear();
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
+        self.last_window_first = usize::MAX;
+        self.last_window_last = usize::MAX;
+        self.last_window_total = usize::MAX;
     }
 }
 

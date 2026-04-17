@@ -103,24 +103,29 @@ fn empty_term_line() -> TermLine {
 }
 
 /// Incremental cache: only rebuild rows inside [first, last] whose VT content changed.
-pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, last: usize) {
+/// Returns true when cached rows in this window changed.
+pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, last: usize) -> bool {
     let n = tab.terminal_lines.len();
+    let mut changed = false;
     if n == 0 || first > last {
+        changed = !tab.terminal_model_rows.is_empty() || !tab.terminal_model_hashes.is_empty();
         tab.terminal_model_rows.clear();
         tab.terminal_model_hashes.clear();
-        return;
+        return changed;
     }
     if tab.terminal_model_rows.len() > n {
         tab.terminal_model_rows.truncate(n);
         tab.terminal_model_hashes.truncate(n);
+        changed = true;
     } else if tab.terminal_model_rows.len() < n {
         tab.terminal_model_rows.resize_with(n, empty_term_line);
         tab.terminal_model_hashes.resize(n, u64::MAX);
+        changed = true;
     }
     let first = first.min(n - 1);
     let last = last.min(n - 1);
     if first > last {
-        return;
+        return changed;
     }
     for idx in first..=last {
         let line = &tab.terminal_lines[idx];
@@ -132,7 +137,9 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
         let built = build_term_line(line);
         tab.terminal_model_rows[idx] = built;
         tab.terminal_model_hashes[idx] = fp;
+        changed = true;
     }
+    changed
 }
 
 pub(crate) fn terminal_model_window(tab: &TabState, first: usize, last: usize) -> ModelRc<TermLine> {
@@ -158,9 +165,14 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
     let n = tab.terminal_lines.len();
     if n == 0 {
-        ui.set_ws_terminal_line_offset(0);
-        ui.set_ws_terminal_total_lines(0);
-        ui.set_ws_terminal_lines(ModelRc::new(VecModel::from(Vec::<TermLine>::new())));
+        if tab.last_window_total != 0 {
+            ui.set_ws_terminal_line_offset(0);
+            ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_lines(ModelRc::new(VecModel::from(Vec::<TermLine>::new())));
+        }
+        tab.last_window_first = 0;
+        tab.last_window_last = 0;
+        tab.last_window_total = 0;
         tab.last_pushed_scroll_top = scroll_top;
         tab.last_pushed_viewport_height = vh;
         return;
@@ -174,12 +186,22 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
     let last_visible = (last_visible_bottom / TERMINAL_ROW_HEIGHT_PX).ceil() as isize;
     let last = (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, n as isize - 1) as usize;
     let first = first.min(last);
-    sync_terminal_model_cache_range(tab, first, last);
+    let window_changed = tab.last_window_first != first || tab.last_window_last != last;
+    let total_changed = tab.last_window_total != n;
+    let content_changed = sync_terminal_model_cache_range(tab, first, last);
+    if window_changed {
+        ui.set_ws_terminal_line_offset(first as i32);
+    }
+    if total_changed {
+        ui.set_ws_terminal_total_lines(n as i32);
+    }
+    if window_changed || content_changed {
+        ui.set_ws_terminal_lines(terminal_model_window(tab, first, last));
+    }
 
-    ui.set_ws_terminal_line_offset(first as i32);
-    ui.set_ws_terminal_total_lines(n as i32);
-    ui.set_ws_terminal_lines(terminal_model_window(tab, first, last));
-
+    tab.last_window_first = first;
+    tab.last_window_last = last;
+    tab.last_window_total = n;
     tab.last_pushed_scroll_top = scroll_top;
     tab.last_pushed_viewport_height = vh;
 }
