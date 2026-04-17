@@ -8,6 +8,7 @@ use std::time::Duration;
 use slint::{Color, Model, ModelRc, SharedString, Timer, VecModel};
 
 use crate::terminal::key_encoding;
+use crate::terminal::prompt_key::PromptKeyAction;
 use crate::terminal::render::ColoredLine;
 
 #[cfg(target_os = "windows")]
@@ -196,18 +197,57 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         }
     });
 
-    let state_for_pty = Rc::clone(&state);
+    let state_for_prompt_keys = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_prompt_pty_key(move |mod_mask, key| {
+    app.on_prompt_key_route(move |raw_tty, mod_mask, key, shift| {
         let Some(ui) = app_weak.upgrade() else {
-            return;
+            return false;
         };
-        let Some(bytes) = key_encoding::encode_for_pty(mod_mask as u32, key.as_str()) else {
-            return;
-        };
-        let mut s = state_for_pty.borrow_mut();
-        if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
-            eprintln!("CliGJ: pty key: {e}");
+        match crate::terminal::prompt_key::route_prompt_key(
+            raw_tty,
+            mod_mask as u32,
+            key.as_str(),
+            shift,
+        ) {
+            PromptKeyAction::Reject => false,
+            PromptKeyAction::ToggleRawInput => {
+                let mut s = state_for_prompt_keys.borrow_mut();
+                if let Err(e) = s.toggle_raw_input_current(&ui) {
+                    eprintln!("CliGJ: raw input toggle: {e}");
+                }
+                true
+            }
+            PromptKeyAction::Submit => {
+                let mut s = state_for_prompt_keys.borrow_mut();
+                if let Err(e) = s.submit_current_prompt(&ui) {
+                    eprintln!("CliGJ: prompt submit: {e}");
+                }
+                true
+            }
+            PromptKeyAction::HistoryPrev => {
+                let mut s = state_for_prompt_keys.borrow_mut();
+                if let Err(e) = s.history_prev_current_prompt(&ui) {
+                    eprintln!("CliGJ: history prev: {e}");
+                }
+                true
+            }
+            PromptKeyAction::HistoryNext => {
+                let mut s = state_for_prompt_keys.borrow_mut();
+                if let Err(e) = s.history_next_current_prompt(&ui) {
+                    eprintln!("CliGJ: history next: {e}");
+                }
+                true
+            }
+            PromptKeyAction::PtyKey(k) => {
+                let Some(bytes) = key_encoding::encode_for_pty(mod_mask as u32, k.as_str()) else {
+                    return false;
+                };
+                let mut s = state_for_prompt_keys.borrow_mut();
+                if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
+                    eprintln!("CliGJ: pty key: {e}");
+                }
+                true
+            }
         }
     });
 

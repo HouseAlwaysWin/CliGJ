@@ -18,7 +18,7 @@ export component GjWorkspace inherits Rectangle {
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
-    callback pty-key-requested(int, string);
+    callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
 
@@ -61,8 +61,8 @@ export component GjWorkspace inherits Rectangle {
             history-next-requested => {
                 root.history-next-requested();
             }
-            pty-key-requested(mod, key) => {
-                root.pty-key-requested(mod, key);
+            prompt-key-route(raw, mods, key, shift) => {
+                root.prompt-key-route(raw, mods, key, shift);
             }
             raw-input-toggle-requested => {
                 root.raw-input-toggle-requested();

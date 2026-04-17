@@ -1,0 +1,36 @@
+// TTY key routing: on Windows, `event.text` for arrow/navigation keys is often wrong or empty,
+// while `event.text == Key.UpArrow` etc. still match — we emit stable names for Rust (`prompt_key` / `key_encoding`).
+
+export global LogicalKey {
+    public function tty_text(event: KeyEvent) -> string {
+        if (event.text == Key.UpArrow) {
+            "UpArrow"
+        } else if (event.text == Key.DownArrow) {
+            "DownArrow"
+        } else if (event.text == Key.LeftArrow) {
+            "LeftArrow"
+        } else if (event.text == Key.RightArrow) {
+            "RightArrow"
+        } else if (event.text == Key.Home) {
+            "Home"
+        } else if (event.text == Key.End) {
+            "End"
+        } else if (event.text == Key.PageUp) {
+            "PageUp"
+        } else if (event.text == Key.PageDown) {
+            "PageDown"
+        } else if (event.text == Key.Delete) {
+            "Delete"
+        } else if (event.text == Key.Backspace) {
+            "Backspace"
+        } else if (event.text == Key.Escape) {
+            "Escape"
+        } else if (event.text == Key.Tab) {
+            "Tab"
+        } else if (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") {
+            "Return"
+        } else {
+            event.text
+        }
+    }
+}

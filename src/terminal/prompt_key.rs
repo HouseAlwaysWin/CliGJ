@@ -1,0 +1,129 @@
+//! Composer / TTY prompt key routing (formerly `gj_prompt_drop_zone` `key-pressed` rules).
+
+use super::key_encoding::{normalize_tty_key_token, MOD_ALT, MOD_CTRL};
+
+/// What to do for one `TextEdit` `key-pressed` event (`accept` vs `reject` decided in Slint).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PromptKeyAction {
+    /// Let `TextEdit` handle the key (insert character, etc.).
+    Reject,
+    ToggleRawInput,
+    Submit,
+    HistoryPrev,
+    HistoryNext,
+    /// Encode with `key_encoding::encode_for_pty(mod_mask, …)` then write to ConPTY.
+    PtyKey(String),
+}
+
+#[must_use]
+pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, shift: bool) -> PromptKeyAction {
+    let key = normalize_tty_key_token(key);
+    if mod_mask & MOD_CTRL != 0 && matches!(key, "r" | "R") {
+        return PromptKeyAction::ToggleRawInput;
+    }
+
+    if mod_mask & MOD_ALT != 0 {
+        match key {
+            "UpArrow" => return pty("UpArrow"),
+            "DownArrow" => return pty("DownArrow"),
+            "RightArrow" => return pty("RightArrow"),
+            "LeftArrow" => return pty("LeftArrow"),
+            _ => {}
+        }
+    }
+
+    if !raw_tty {
+        if is_enter_key(key) && !shift {
+            return PromptKeyAction::Submit;
+        }
+        if key == "UpArrow" {
+            return PromptKeyAction::HistoryPrev;
+        }
+        if key == "DownArrow" {
+            return PromptKeyAction::HistoryNext;
+        }
+    }
+
+    if raw_tty {
+        if is_enter_key(key) {
+            return pty("Return");
+        }
+        match key {
+            "UpArrow" | "DownArrow" | "RightArrow" | "LeftArrow" | "Home" | "End" | "PageUp"
+            | "PageDown" | "Delete" | "Escape" | "Backspace" => return pty(key),
+            _ => {}
+        }
+    }
+
+    if mod_mask & MOD_CTRL != 0 && matches!(key, "c" | "C") {
+        return pty("c");
+    }
+    if key == "Tab" {
+        return pty("Tab");
+    }
+
+    if raw_tty {
+        return pty(key);
+    }
+
+    PromptKeyAction::Reject
+}
+
+fn pty(s: &str) -> PromptKeyAction {
+    PromptKeyAction::PtyKey(s.to_string())
+}
+
+fn is_enter_key(key: &str) -> bool {
+    matches!(key, "\n" | "\r" | "Return")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::terminal::key_encoding;
+
+    fn m(ctrl: bool, shift: bool, alt: bool, meta: bool) -> u32 {
+        key_encoding::mod_bits(ctrl, shift, alt, meta)
+    }
+
+    #[test]
+    fn ctrl_r_toggles_raw() {
+        assert_eq!(
+            route_prompt_key(false, m(true, false, false, false), "r", false),
+            PromptKeyAction::ToggleRawInput
+        );
+    }
+
+    #[test]
+    fn composer_enter_submits() {
+        assert_eq!(
+            route_prompt_key(false, m(false, false, false, false), "Return", false),
+            PromptKeyAction::Submit
+        );
+        assert_eq!(
+            route_prompt_key(false, m(false, true, false, false), "Return", true),
+            PromptKeyAction::Reject
+        );
+    }
+
+    #[test]
+    fn composer_arrows_are_history() {
+        assert_eq!(
+            route_prompt_key(false, m(false, false, false, false), "UpArrow", false),
+            PromptKeyAction::HistoryPrev
+        );
+    }
+
+    #[test]
+    fn raw_sends_named_keys() {
+        let a = route_prompt_key(true, m(false, false, false, false), "UpArrow", false);
+        assert!(matches!(a, PromptKeyAction::PtyKey(ref s) if s == "UpArrow"));
+    }
+
+    /// Slint on Windows often reports arrows as Unicode glyphs, not the token `UpArrow`.
+    #[test]
+    fn raw_unicode_arrow_routes_like_up_arrow() {
+        let a = route_prompt_key(true, m(false, false, false, false), "\u{2191}", false);
+        assert!(matches!(a, PromptKeyAction::PtyKey(ref s) if s == "UpArrow"));
+    }
+}

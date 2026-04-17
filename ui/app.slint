@@ -1,4 +1,5 @@
 import { AppTheme } from "theme.slint";
+import { LogicalKey } from "key_labels.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { TextEdit } from "std-widgets.slint";
@@ -38,7 +39,8 @@ export component AppWindow inherits Window {
     callback submit-prompt;
     callback prompt-history-prev;
     callback prompt-history-next;
-    callback prompt-pty-key(int, string);
+    /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
+    callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
     callback inject-file-requested;
     callback rename-tab-requested(int);
@@ -54,20 +56,22 @@ export component AppWindow inherits Window {
         workspace.scroll_terminal_to_top();
     }
 
+    // Same mask as `GjPromptDropZone.pty_mod` / Rust `key_encoding::mod_bits`.
+    function ws_pty_mod(event: KeyEvent) -> int {
+        (event.modifiers.control ? 1 : 0)
+        + (event.modifiers.shift ? 2 : 0)
+        + (event.modifiers.alt ? 4 : 0)
+        + (event.modifiers.meta ? 8 : 0)
+    }
+
     // Global key capture: more reliable than TextEdit key handlers on Windows.
     root_keys := FocusScope {
         focus-on-click: true;
         focus-on-tab-navigation: true;
         capture-key-pressed(event) => {
-            if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
-                root.toggle-raw-input-requested();
-                accept
-            } else if (!root.ws-raw-input && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
-                root.submit-prompt();
-                accept
-            } else {
-                reject
-            }
+            root.prompt-key-route(root.ws-raw-input, ws_pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
+                ? accept
+                : reject
         }
 
         VerticalLayout {
@@ -129,8 +133,8 @@ export component AppWindow inherits Window {
                         history-next-requested => {
                             root.prompt-history-next();
                         }
-                        pty-key-requested(mod, key) => {
-                            root.prompt-pty-key(mod, key);
+                        prompt-key-route(raw, mods, key, shift) => {
+                            root.prompt-key-route(raw, mods, key, shift);
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();

@@ -1,5 +1,6 @@
 import { TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
+import { LogicalKey } from "../key_labels.slint";
 
 /// Bottom prompt bar: input + function bar (Cursor/VSCode style).
 export component GjPromptDropZone inherits Rectangle {
@@ -11,8 +12,9 @@ export component GjPromptDropZone inherits Rectangle {
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
+    /// Returns true to `accept` the key (consume); false to `reject` (default editor handling).
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
-    callback pty-key-requested(int, string);
+    callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
 
@@ -60,78 +62,9 @@ export component GjPromptDropZone inherits Rectangle {
                     font-size: 13px;
                     wrap: word-wrap;
                     key-pressed(event) => {
-                        if (event.modifiers.control && (event.text == "r" || event.text == "R")) {
-                            root.raw-input-toggle-requested();
-                            accept
-                        } else if (event.modifiers.alt && event.text == Key.UpArrow) {
-                            root.pty-key-requested(pty_mod(event), "UpArrow");
-                            accept
-                        } else if (event.modifiers.alt && event.text == Key.DownArrow) {
-                            root.pty-key-requested(pty_mod(event), "DownArrow");
-                            accept
-                        } else if (event.modifiers.alt && event.text == Key.RightArrow) {
-                            root.pty-key-requested(pty_mod(event), "RightArrow");
-                            accept
-                        } else if (event.modifiers.alt && event.text == Key.LeftArrow) {
-                            root.pty-key-requested(pty_mod(event), "LeftArrow");
-                            accept
-                        } else if (!root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
-                            root.submit-requested();
-                            accept
-                        } else if (!root.raw-input-enabled && event.text == Key.UpArrow) {
-                            root.history-prev-requested();
-                            accept
-                        } else if (!root.raw-input-enabled && event.text == Key.DownArrow) {
-                            root.history-next-requested();
-                            accept
-                        } else if (root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}")) {
-                            root.pty-key-requested(pty_mod(event), "Return");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.UpArrow) {
-                            root.pty-key-requested(pty_mod(event), "UpArrow");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.DownArrow) {
-                            root.pty-key-requested(pty_mod(event), "DownArrow");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.RightArrow) {
-                            root.pty-key-requested(pty_mod(event), "RightArrow");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.LeftArrow) {
-                            root.pty-key-requested(pty_mod(event), "LeftArrow");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Home) {
-                            root.pty-key-requested(pty_mod(event), "Home");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.End) {
-                            root.pty-key-requested(pty_mod(event), "End");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.PageUp) {
-                            root.pty-key-requested(pty_mod(event), "PageUp");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.PageDown) {
-                            root.pty-key-requested(pty_mod(event), "PageDown");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Delete) {
-                            root.pty-key-requested(pty_mod(event), "Delete");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Escape) {
-                            root.pty-key-requested(pty_mod(event), "Escape");
-                            accept
-                        } else if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
-                            root.pty-key-requested(pty_mod(event), "c");
-                            accept
-                        } else if (event.text == Key.Tab) {
-                            root.pty-key-requested(pty_mod(event), "Tab");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Backspace) {
-                            root.pty-key-requested(pty_mod(event), "Backspace");
-                            accept
-                        } else if (root.raw-input-enabled) {
-                            root.pty-key-requested(pty_mod(event), event.text);
-                            accept
-                        } else {
-                            reject
-                        }
+                        root.prompt-key-route(root.raw-input-enabled, pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
+                            ? accept
+                            : reject
                     }
                 }
 

@@ -19,10 +19,25 @@ pub const fn mod_bits(ctrl: bool, shift: bool, alt: bool, meta: bool) -> u32 {
         | (if meta { MOD_META } else { 0 })
 }
 
+/// Map Slint / platform key names and Unicode arrow glyphs to tokens understood by
+/// [`encode_for_pty`]. (Windows often reports arrows as `↑↓←→`, not the string `UpArrow`.)
+#[must_use]
+pub fn normalize_tty_key_token(key: &str) -> &str {
+    match key {
+        // Unicode arrows (common for UI toolkits)
+        "\u{2191}" => "UpArrow",
+        "\u{2193}" => "DownArrow",
+        "\u{2190}" => "LeftArrow",
+        "\u{2192}" => "RightArrow",
+        _ => key,
+    }
+}
+
 /// Encode one logical key for TTY/ConPTY input.
 /// `key` is either a **token** (`Return`, `UpArrow`, …) or UTF-8 **text** (typed character or paste).
 #[must_use]
 pub fn encode_for_pty(mod_mask: u32, key: &str) -> Option<Vec<u8>> {
+    let key = normalize_tty_key_token(key);
     if key.is_empty() {
         return None;
     }
@@ -211,6 +226,13 @@ mod tests {
     fn plain_arrow() {
         let v = encode_for_pty(0, "UpArrow").unwrap();
         assert_eq!(v, vec![0x1b, b'[', b'A']);
+    }
+
+    #[test]
+    fn unicode_arrow_glyph_same_as_up_arrow_token() {
+        let expected = encode_for_pty(0, "UpArrow").unwrap();
+        assert_eq!(encode_for_pty(0, "\u{2191}").unwrap(), expected);
+        assert_eq!(encode_for_pty(0, "\u{2193}").unwrap(), encode_for_pty(0, "DownArrow").unwrap());
     }
 
     #[test]
