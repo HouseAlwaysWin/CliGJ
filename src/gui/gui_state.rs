@@ -104,7 +104,6 @@ impl GuiState {
         {
             self.tabs[self.current].conpty = None;
             self.tabs[self.current].terminal_text.clear();
-            self.tabs[self.current].terminal_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
             if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {

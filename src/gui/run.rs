@@ -83,49 +83,54 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         move || {
             let Some(ui) = app_weak.upgrade() else { return; };
             let mut s = state_for_stream.borrow_mut();
+            let current_id = s.tabs.get(s.current).map(|t| t.id);
+            let mut current_changed = false;
+            let mut processed = 0usize;
+            const MAX_CHUNKS_PER_TICK: usize = 96;
+            while processed < MAX_CHUNKS_PER_TICK {
+                let Ok(chunk) = rx.try_recv() else { break; };
+                processed += 1;
+                for tab in s.tabs.iter_mut() {
+                    if tab.id != chunk.tab_id {
+                        continue;
+                    }
+                    if let Some(v) = chunk.set_auto_scroll {
+                        tab.auto_scroll = v;
+                    }
+                    if chunk.replace {
+                        tab.terminal_text = chunk.text.clone();
+                        tab.terminal_v2.apply_colored_lines(&chunk.lines);
+                        let frame = tab.terminal_v2.build_frame();
+                        tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
+                        apply_terminal_v2_frame_to_model(tab, &frame);
+                    } else {
+                        tab.append_terminal(&chunk.text);
+                        let frame = tab.terminal_v2.build_frame();
+                        tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
+                        apply_terminal_v2_frame_to_model(tab, &frame);
+                    }
+                    if current_id == Some(chunk.tab_id) {
+                        current_changed = true;
+                        if tab.auto_scroll {
+                            s.pending_scroll = true;
+                        }
+                    }
+                    break;
+                }
+            }
+
+            if current_changed {
+                let text = s.tabs[s.current].terminal_text.clone();
+                ui.set_ws_terminal_text(SharedString::from(text.as_str()));
+                ui.set_ws_terminal_lines(terminal_lines_model_rc(&s.tabs[s.current]));
+                if !s.tabs[s.current].auto_scroll {
+                    ui.invoke_ws_scroll_terminal_to_top();
+                }
+            }
+
             if s.pending_scroll {
                 ui.invoke_ws_scroll_terminal_to_bottom();
                 s.pending_scroll = false;
-            }
-            while let Ok(chunk) = rx.try_recv() {
-                let current_id = s.tabs.get(s.current).map(|t| t.id);
-                let mut updated_current = None;
-                for tab in s.tabs.iter_mut() {
-                    if tab.id == chunk.tab_id {
-                        if let Some(v) = chunk.set_auto_scroll {
-                            tab.auto_scroll = v;
-                        }
-                        if chunk.replace {
-                            tab.terminal_text = chunk.text.clone();
-                            tab.terminal_lines = chunk.lines.clone();
-                            tab.terminal_v2.apply_colored_lines(&tab.terminal_lines);
-                            let frame = tab.terminal_v2.build_frame();
-                            tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
-                            apply_terminal_v2_frame_to_model(tab, &frame);
-                        } else {
-                            tab.append_terminal(&chunk.text);
-                            let frame = tab.terminal_v2.build_frame();
-                            tab.terminal_v2_dirty_rows = frame.dirty_rows.clone();
-                            apply_terminal_v2_frame_to_model(tab, &frame);
-                        }
-                        if current_id == Some(chunk.tab_id) {
-                            updated_current = Some(tab.terminal_text.clone());
-                            if tab.auto_scroll {
-                                s.pending_scroll = true;
-                            }
-                        }
-                        break;
-                    }
-                }
-                if let Some(text) = updated_current {
-                    ui.set_ws_terminal_text(SharedString::from(text.as_str()));
-                    ui.set_ws_terminal_lines(terminal_lines_model_rc(&s.tabs[s.current]));
-                    if let Some(current_tab) = s.tabs.get(s.current) {
-                        if !current_tab.auto_scroll {
-                            ui.invoke_ws_scroll_terminal_to_top();
-                        }
-                    }
-                }
             }
         },
     );

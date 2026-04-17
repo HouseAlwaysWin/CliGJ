@@ -52,8 +52,6 @@ pub struct TabState {
     pub(crate) history_draft: String,
     /// Absolute paths selected from `@` picker; shown as chips, appended on submit.
     pub(crate) prompt_picked_files_abs: Vec<String>,
-    /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
-    pub(crate) terminal_lines: Vec<ColoredLine>,
     /// Reusable terminal line model to avoid rebuilding full UI model every frame.
     pub(crate) terminal_lines_model: Rc<VecModel<TermLine>>,
     /// Terminal v2 session (phase 2: connected data pipeline).
@@ -87,7 +85,6 @@ impl TabState {
             history_cursor: None,
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
-            terminal_lines: Vec::new(),
             terminal_lines_model: Rc::new(VecModel::from(Vec::<TermLine>::new())),
             terminal_v2: TerminalSession::new(40, 120),
             terminal_v2_dirty_rows: Vec::new(),
@@ -121,7 +118,6 @@ impl TabState {
     pub fn append_terminal(&mut self, chunk: &str) {
         const MAX: usize = 1_000_000;
         const TAIL_MAX: usize = 80_000;
-        self.terminal_lines.clear();
         self.terminal_text.push_str(chunk);
         let limit = if self.auto_scroll { TAIL_MAX } else { MAX };
         if self.terminal_text.len() > limit {
