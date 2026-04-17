@@ -72,6 +72,9 @@ fn apply_pending_updates(
         if let Some(lines) = update.replace_lines {
             replaced_with_vt_lines = !lines.is_empty();
             tab.terminal_lines = lines;
+            let n = tab.terminal_lines.len();
+            tab.terminal_model_rows.retain(|&k, _| k < n);
+            tab.terminal_model_hashes.retain(|&k, _| k < n);
             if replaced_with_vt_lines {
                 // VT mode renders from `terminal_lines`; keep fallback text empty to avoid
                 // repeatedly moving large strings on high-frequency updates.

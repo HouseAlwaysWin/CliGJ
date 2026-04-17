@@ -1,4 +1,6 @@
+use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
+use std::hash::{Hash, Hasher};
 use std::io::{Read, Write};
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
@@ -176,6 +178,37 @@ impl Drop for ConptySession {
     }
 }
 
+/// Screen + scrollback window pulled into Slint (matches UI row windowing budget).
+const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
+
+/// Raw-line fingerprint before ANSI→span work; skips rebuild on no-op ConPTY reads.
+fn snapshot_content_fingerprint(total_rows: usize, collapsed: &[&Line]) -> u64 {
+    let mut h = DefaultHasher::new();
+    total_rows.hash(&mut h);
+    collapsed.len().hash(&mut h);
+    for line in collapsed {
+        line.as_str().hash(&mut h);
+    }
+    h.finish()
+}
+
+fn terminal_render_from_collapsed(
+    collapsed: &[&Line],
+    total_scrollback_rows: usize,
+    term_screen_rows: usize,
+    palette: &ColorPalette,
+) -> TerminalRender {
+    let mut lines = Vec::with_capacity(collapsed.len());
+    for line in collapsed {
+        lines.push(line_to_colored_spans(line, palette));
+    }
+    TerminalRender {
+        text: String::new(),
+        lines,
+        filled: total_scrollback_rows > term_screen_rows,
+    }
+}
+
 pub fn start_reader_thread(
     mut reader: std::fs::File,
     mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
@@ -195,6 +228,7 @@ pub fn start_reader_thread(
         let palette = config.color_palette();
         let mut term = Terminal::new(term_size, config, "CliGJ", "0", writer);
 
+        let mut last_snapshot_fp: Option<u64> = None;
         let mut buf = [0u8; 8192];
         loop {
             let n = match reader.read(&mut buf) {
@@ -202,35 +236,28 @@ pub fn start_reader_thread(
                 Ok(n) => n,
                 Err(_) => break,
             };
-            // Feed into terminal emulator; it will parse VT/ANSI and maintain a screen buffer.
             term.advance_bytes(&buf[..n]);
 
-            // Render only a bounded window of screen+scrollback.
-            // Large snapshots are expensive because we rebuild colored spans every chunk.
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            // ~40 rows are visible; keep a moderate buffer for context.
-            const MAX_LINES: usize = 240;
-            let start = total.saturating_sub(MAX_LINES);
+            let start = total.saturating_sub(CONPTY_SNAPSHOT_MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
-            // ConPTY / full-screen TUIs often leave multiple adjacent blank physical rows after
-            // prompts; we render one Slint row per phys line (~18px each), so duplicates read as
-            // extra "empty lines" (e.g. after composer `Submit` in non-Raw mode).
             let collapsed = collapse_adjacent_empty_phys_lines(&line_refs);
             let collapsed = trim_trailing_empty_phys_lines(collapsed);
-            let mut colored: Vec<ColoredLine> = Vec::with_capacity(collapsed.len());
-            for line in collapsed.iter() {
-                colored.push(line_to_colored_spans(line, &palette));
+
+            let fp = snapshot_content_fingerprint(total, &collapsed);
+            if last_snapshot_fp == Some(fp) {
+                continue;
             }
-            // VT mode uses `lines`; avoid rebuilding huge plain-text snapshots every chunk.
-            let out = String::new();
-            let filled = total > term_rows;
-            on_chunk(TerminalRender {
-                text: out,
-                lines: colored,
-                filled,
-            });
+            last_snapshot_fp = Some(fp);
+
+            on_chunk(terminal_render_from_collapsed(
+                &collapsed,
+                total,
+                term_rows,
+                &palette,
+            ));
         }
     })
 }
