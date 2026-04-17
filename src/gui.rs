@@ -36,6 +36,75 @@ fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     }
 }
 
+/// Incrementally sync UI composer text to ConPTY when the line contains `@` (file picker / path).
+/// Uses backspace + UTF-8 so the shell line matches the bottom prompt (path appears in the terminal).
+fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
+    #[cfg(not(target_os = "windows"))]
+    let _ = (ui, s);
+
+    #[cfg(target_os = "windows")]
+    {
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        tab_update_from_ui(&mut s.tabs[s.current], ui);
+        let tab = &mut s.tabs[s.current];
+        if tab.raw_input_mode {
+            return;
+        }
+        let Some(session) = tab.conpty.as_mut() else {
+            return;
+        };
+
+        let cur = tab.prompt.to_string();
+        let prev = tab.composer_pty_mirror.as_str();
+
+        if !cur.contains('@') {
+            if prev.is_empty() {
+                return;
+            }
+            let bytes = diff_composer_to_conpty(prev, "");
+            if !bytes.is_empty() {
+                let _ = session.writer.write_all(&bytes);
+                let _ = session.writer.flush();
+            }
+            tab.composer_pty_mirror.clear();
+            return;
+        }
+
+        let bytes = diff_composer_to_conpty(prev, &cur);
+        if bytes.is_empty() {
+            return;
+        }
+        let _ = session.writer.write_all(&bytes);
+        let _ = session.writer.flush();
+        tab.composer_pty_mirror = cur;
+    }
+}
+
+/// Common-prefix diff: delete tail of `prev` with backspaces, append tail of `cur` as UTF-8 bytes.
+fn diff_composer_to_conpty(prev: &str, cur: &str) -> Vec<u8> {
+    if prev == cur {
+        return Vec::new();
+    }
+    let pa: Vec<char> = prev.chars().collect();
+    let ca: Vec<char> = cur.chars().collect();
+    let mut i = 0usize;
+    while i < pa.len() && i < ca.len() && pa[i] == ca[i] {
+        i += 1;
+    }
+    let mut out = Vec::new();
+    for _ in 0..pa.len().saturating_sub(i) {
+        out.push(0x08);
+    }
+    for c in ca.iter().skip(i) {
+        let mut buf = [0u8; 4];
+        let t = c.encode_utf8(&mut buf);
+        out.extend_from_slice(t.as_bytes());
+    }
+    out
+}
+
 fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
     if ui.get_ws_raw_input() {
         ui.set_ws_at_picker_open(false);
@@ -102,10 +171,12 @@ fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize) {
         return;
     };
     let prompt = ui.get_ws_prompt().to_string();
-    let new_p = workspace_files::apply_at_file_pick(&prompt, picked.as_str());
+    let root = workspace_root_for_tab(&s.tabs[s.current]);
+    let new_p = workspace_files::apply_at_file_pick(&prompt, picked.as_str(), &root);
     ui.set_ws_prompt(SharedString::from(new_p.as_str()));
     ui.set_ws_at_picker_open(false);
     tab_update_from_ui(&mut s.tabs[s.current], ui);
+    sync_composer_line_to_conpty(ui, s);
 }
 
 fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
@@ -334,6 +405,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                     let mut s = state_for_prompt_keys.borrow_mut();
                     let idx = s.current;
                     tab_update_from_ui(&mut s.tabs[idx], &ui);
+                    sync_composer_line_to_conpty(&ui, &mut *s);
                     return true;
                 }
                 _ => {}
@@ -411,6 +483,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 return;
             };
             let mut s = state_for_at_sync.borrow_mut();
+            sync_composer_line_to_conpty(&ui, &mut *s);
             sync_at_file_picker(&ui, &mut *s);
         },
     );
@@ -535,6 +608,8 @@ struct TabState {
     history_draft: String,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     terminal_lines: Vec<ColoredLine>,
+    /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
+    composer_pty_mirror: String,
 
     #[cfg(target_os = "windows")]
     conpty: Option<windows_conpty::ConptySession>,
@@ -559,6 +634,7 @@ impl TabState {
             history_cursor: None,
             history_draft: String::new(),
             terminal_lines: Vec::new(),
+            composer_pty_mirror: String::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
         };
@@ -623,6 +699,19 @@ impl GuiState {
         tab.raw_input_mode = !tab.raw_input_mode;
         // TTY mode: keys go straight to ConPTY; drop composer text so it is not confused with the shell.
         if tab.raw_input_mode {
+            #[cfg(target_os = "windows")]
+            {
+                let prev = std::mem::take(&mut tab.composer_pty_mirror);
+                if !prev.is_empty() {
+                    let bytes = diff_composer_to_conpty(prev.as_str(), "");
+                    if !bytes.is_empty() {
+                        if let Some(session) = tab.conpty.as_mut() {
+                            let _ = session.writer.write_all(&bytes);
+                            let _ = session.writer.flush();
+                        }
+                    }
+                }
+            }
             tab.prompt = SharedString::new();
         }
         load_tab_to_ui(ui, tab);
@@ -676,6 +765,7 @@ impl GuiState {
             self.tabs[self.current].terminal_text.clear();
             self.tabs[self.current].terminal_lines.clear();
             self.tabs[self.current].auto_scroll = false;
+            self.tabs[self.current].composer_pty_mirror.clear();
             if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
                     let tab_id = self.tabs[self.current].id;
@@ -723,9 +813,17 @@ impl GuiState {
         #[cfg(target_os = "windows")]
         {
             if let Some(session) = tab.conpty.as_mut() {
-                let mut to_send = command_line.clone();
-                to_send.push_str("\r\n");
-                let _ = session.writer.write_all(to_send.as_bytes());
+                let mirrored_full_line = !tab.raw_input_mode
+                    && tab.prompt.contains('@')
+                    && !tab.composer_pty_mirror.is_empty()
+                    && tab.composer_pty_mirror == tab.prompt.to_string();
+                if mirrored_full_line {
+                    let _ = session.writer.write_all(b"\r\n");
+                } else {
+                    let mut to_send = command_line.clone();
+                    to_send.push_str("\r\n");
+                    let _ = session.writer.write_all(to_send.as_bytes());
+                }
                 let _ = session.writer.flush();
             } else {
                 // No interactive shell: show the line in the UI buffer.
@@ -739,6 +837,7 @@ impl GuiState {
         }
 
         tab.prompt = SharedString::new();
+        tab.composer_pty_mirror.clear();
         // Auto-scroll is enabled once output fills the visible terminal height.
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -935,6 +1034,35 @@ fn default_cmd_type() -> &'static str {
 /// Normalize newlines for Windows ConPTY (cmd/PowerShell expect CRLF).
 fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
     text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
+}
+
+#[cfg(test)]
+mod composer_diff_tests {
+    use super::diff_composer_to_conpty;
+
+    #[test]
+    fn append_from_empty() {
+        assert_eq!(diff_composer_to_conpty("", "ab"), b"ab");
+    }
+
+    #[test]
+    fn shrink_one_char() {
+        assert_eq!(diff_composer_to_conpty("ab", "a"), vec![0x08]);
+    }
+
+    #[test]
+    fn common_prefix_replace_tail() {
+        let d = diff_composer_to_conpty("hello@x", "hello@yz");
+        assert!(d.iter().any(|&b| b == b'y' || b == b'z'));
+    }
+
+    #[test]
+    fn clear_all() {
+        assert_eq!(
+            diff_composer_to_conpty("abc", "").as_slice(),
+            &[0x08, 0x08, 0x08]
+        );
+    }
 }
 
 #[derive(Debug)]

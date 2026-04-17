@@ -96,9 +96,17 @@ fn path_depth(p: &str) -> usize {
     p.chars().filter(|&c| c == '/' || c == '\\').count()
 }
 
-/// `prompt` has `@` segment: replace `@{query}` on current line with `@{chosen}` (+ trailing space).
+fn resolve_under_workspace(workspace_root: &Path, chosen_rel: &str) -> std::path::PathBuf {
+    chosen_rel
+        .split(|c| c == '/' || c == '\\')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .fold(workspace_root.to_path_buf(), |acc, seg| acc.join(seg))
+}
+
+/// Replace `@{query}` on the current line with the **absolute file path** under `workspace_root`
+/// (no `@` — the shell / CLI 收到的是實際路徑).
 #[must_use]
-pub fn apply_at_file_pick(prompt: &str, chosen_rel: &str) -> String {
+pub fn apply_at_file_pick(prompt: &str, chosen_rel: &str, workspace_root: &Path) -> String {
     let Some(at) = prompt.rfind('@') else {
         return prompt.to_string();
     };
@@ -106,9 +114,11 @@ pub fn apply_at_file_pick(prompt: &str, chosen_rel: &str) -> String {
         .find(['\r', '\n'])
         .map(|i| at + 1 + i)
         .unwrap_or(prompt.len());
-    let mut s = String::with_capacity(prompt.len() + chosen_rel.len());
-    s.push_str(&prompt[..at + 1]);
-    s.push_str(chosen_rel);
+    let abs = resolve_under_workspace(workspace_root, chosen_rel);
+    let path_str = abs.display().to_string();
+    let mut s = String::with_capacity(prompt.len() + path_str.len());
+    s.push_str(&prompt[..at]);
+    s.push_str(&path_str);
     s.push(' ');
     s.push_str(&prompt[line_end..]);
     s
@@ -134,9 +144,13 @@ mod tests {
     use super::*;
 
     #[test]
-    fn apply_pick() {
-        let out = apply_at_file_pick("hi @f", "src/x.rs");
-        assert_eq!(out, "hi @src/x.rs ");
+    fn apply_pick_inserts_absolute_path_no_at() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        let out = apply_at_file_pick("hi @f", "Cargo.toml", root);
+        assert!(!out.contains('@'), "picker should replace @ segment with path only: {out:?}");
+        assert!(out.starts_with("hi "));
+        let abs = root.join("Cargo.toml");
+        assert!(out.contains(abs.to_string_lossy().as_ref()));
     }
 
     #[test]
