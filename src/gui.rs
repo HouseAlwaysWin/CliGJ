@@ -34,6 +34,7 @@ fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
                 })
                 .collect();
             TermLine {
+                blank: line.blank,
                 spans: ModelRc::new(VecModel::from(spans)),
             }
         })

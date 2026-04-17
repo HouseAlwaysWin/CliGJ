@@ -7,6 +7,7 @@ use std::thread;
 use std::sync::Arc;
 
 use wezterm_term::config::TerminalConfiguration;
+use wezterm_term::Line;
 use wezterm_term::Terminal;
 use wezterm_term::TerminalSize;
 use wezterm_term::color::ColorPalette;
@@ -214,9 +215,15 @@ pub fn start_reader_thread(
             const MAX_LINES: usize = 4000;
             let start = total.saturating_sub(MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
+            let line_refs: Vec<&Line> = lines.iter().collect();
+            // ConPTY / full-screen TUIs often leave multiple adjacent blank physical rows after
+            // prompts; we render one Slint row per phys line (~18px each), so duplicates read as
+            // extra "empty lines" (e.g. after composer `Submit` in non-Raw mode).
+            let collapsed = collapse_adjacent_empty_phys_lines(&line_refs);
+            let collapsed = trim_trailing_empty_phys_lines(collapsed);
             let mut out = String::new();
-            let mut colored: Vec<ColoredLine> = Vec::with_capacity(lines.len());
-            for (i, line) in lines.iter().enumerate() {
+            let mut colored: Vec<ColoredLine> = Vec::with_capacity(collapsed.len());
+            for (i, line) in collapsed.iter().enumerate() {
                 if i > 0 {
                     out.push('\n');
                 }
@@ -234,6 +241,37 @@ pub fn start_reader_thread(
             });
         }
     })
+}
+
+fn phys_line_is_effectively_empty(line: &Line) -> bool {
+    line.as_str().trim_end().is_empty()
+}
+
+/// Keep at most one blank row per run of blank physical lines from the emulator buffer.
+fn collapse_adjacent_empty_phys_lines<'a>(lines: &[&'a Line]) -> Vec<&'a Line> {
+    let mut out = Vec::with_capacity(lines.len());
+    let mut prev_empty = false;
+    for &line in lines {
+        let empty = phys_line_is_effectively_empty(line);
+        if empty {
+            if !prev_empty {
+                out.push(line);
+            }
+            prev_empty = true;
+        } else {
+            prev_empty = false;
+            out.push(line);
+        }
+    }
+    out
+}
+
+/// Drop blank rows at the end of the snapshot (except leave a single line if everything is blank).
+fn trim_trailing_empty_phys_lines(mut lines: Vec<&Line>) -> Vec<&Line> {
+    while lines.len() > 1 && lines.last().is_some_and(|l| phys_line_is_effectively_empty(l)) {
+        lines.pop();
+    }
+    lines
 }
 
 fn filter_init_noise(s: &str) -> String {

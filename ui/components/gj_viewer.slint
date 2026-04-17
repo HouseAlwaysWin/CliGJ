@@ -65,7 +65,8 @@ export component GjViewer inherits Rectangle {
             alignment: start;
 
             for line in root.terminal-lines: HorizontalLayout {
-                min-height: 18px;
+                visible: !line.blank;
+                min-height: line.blank ? 0px : 18px;
                 spacing: 0px;
                 padding: 0px;
                 alignment: start;
