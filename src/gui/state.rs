@@ -82,6 +82,9 @@ pub struct TabState {
     pub(crate) conpty: Option<windows_conpty::ConptySession>,
 }
 
+pub(crate) const MAX_TERMINAL_LINES: usize = 2000;
+pub(crate) const TRUNCATE_THRESHOLD: usize = 2500;
+
 impl TabState {
     pub fn new(id: u64, tx: mpsc::Sender<TerminalChunk>) -> Self {
         let cmd_type = default_cmd_type().to_string();
@@ -130,6 +133,7 @@ impl TabState {
                             text: render.text,
                             lines: render.lines,
                             full_len: render.full_len,
+                            first_line_idx: render.first_line_idx,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                             changed_indices: render.changed_indices,
@@ -141,6 +145,21 @@ impl TabState {
         }
 
         me
+    }
+
+    pub fn truncate_terminal_lines(&mut self) {
+        if self.terminal_lines.len() > TRUNCATE_THRESHOLD {
+            let to_remove = self.terminal_lines.len() - MAX_TERMINAL_LINES;
+            self.terminal_lines.drain(0..to_remove);
+            
+            // 由於索引位移，清空緩存
+            self.terminal_model_rows.clear();
+            self.terminal_model_hashes.clear();
+            self.terminal_model_dirty.clear();
+            self.last_window_first = usize::MAX;
+            self.last_window_last = usize::MAX;
+            self.last_window_total = usize::MAX;
+        }
     }
 
     pub fn append_terminal(&mut self, chunk: &str) {
@@ -183,6 +202,7 @@ pub struct TerminalChunk {
     pub(crate) text: String,
     pub(crate) lines: Vec<ColoredLine>,
     pub(crate) full_len: usize,
+    pub(crate) first_line_idx: usize,
     pub(crate) replace: bool,
     pub(crate) set_auto_scroll: Option<bool>,
     /// Which line indices changed (from reader thread diff); empty = treat all as changed.

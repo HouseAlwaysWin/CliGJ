@@ -54,6 +54,7 @@ pub struct TerminalRender {
     /// ONLY lines that changed (matches changed_indices length).
     pub lines: Vec<ColoredLine>,
     pub full_len: usize,
+    pub first_line_idx: usize,
     pub filled: bool,
     /// Indices of lines that changed since last render (for downstream diff).
     pub changed_indices: Vec<usize>,
@@ -61,13 +62,11 @@ pub struct TerminalRender {
 
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
     unsafe {
-        // Pipe for pseudo console input: we write -> console reads.
         let mut in_read = HANDLE::default();
         let mut in_write = HANDLE::default();
         CreatePipe(&mut in_read, &mut in_write, None, 0)
             .map_err(|e| format!("CreatePipe(in): {e}"))?;
 
-        // Pipe for pseudo console output: console writes -> we read.
         let mut out_read = HANDLE::default();
         let mut out_write = HANDLE::default();
         CreatePipe(&mut out_read, &mut out_write, None, 0)
@@ -81,13 +80,10 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
         )
         .map_err(|e| format!("CreatePseudoConsole: {e}"))?;
 
-        // The ConPTY now owns these ends.
         let _ = CloseHandle(in_read);
         let _ = CloseHandle(out_write);
 
-        // Setup attribute list with PSEUDOCONSOLE.
         let mut attr_size: usize = 0;
-        // This will fail with INSUFFICIENT_BUFFER and set attr_size.
         let _ = InitializeProcThreadAttributeList(None, 1, Some(0), &mut attr_size);
         let mut attr_list_buf: Box<[u8]> = vec![0u8; attr_size].into_boxed_slice();
         let attr_list = attr_list_buf.as_mut_ptr() as *mut std::ffi::c_void;
@@ -135,7 +131,6 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
         let mut writer = std::fs::File::from_raw_handle(in_write.0 as *mut _);
         let reader = std::fs::File::from_raw_handle(out_read.0 as *mut _);
 
-        // Best-effort: switch shells to UTF-8 to avoid mojibake on localized Windows installs.
         let _ = init_shell_utf8(shell, &mut writer);
 
         Ok(ConptySpawn {
@@ -169,7 +164,6 @@ fn to_wide_null(s: impl AsRef<OsStr>) -> Vec<u16> {
 impl Drop for ConptySession {
     fn drop(&mut self) {
         unsafe {
-            // Best-effort cleanup.
             let _ = self.writer.flush();
             let _ = CloseHandle(self._child_thread);
             let _ = CloseHandle(self._child_process);
@@ -181,53 +175,47 @@ impl Drop for ConptySession {
     }
 }
 
-/// Screen + scrollback window pulled into Slint (matches UI row windowing budget).
 const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
 
-/// Raw-line fingerprint before ANSI→span work; skips rebuild on no-op ConPTY reads.
-fn snapshot_content_fingerprint(total_rows: usize, collapsed: &[&Line]) -> u64 {
+fn snapshot_content_fingerprint(total_rows: usize, lines: &[&Line]) -> u64 {
     let mut h = DefaultHasher::new();
     total_rows.hash(&mut h);
-    collapsed.len().hash(&mut h);
-    for line in collapsed {
+    lines.len().hash(&mut h);
+    for line in lines {
         line.as_str().hash(&mut h);
     }
     h.finish()
 }
 
-/// Per-line fingerprint for a raw wezterm `Line`.
 fn line_fingerprint_raw(line: &Line) -> u64 {
     let mut h = DefaultHasher::new();
     line.as_str().hash(&mut h);
     h.finish()
 }
 
-/// Cached version: only rebuild ColoredLine for lines whose content changed.
-fn terminal_render_from_collapsed_cached(
-    collapsed: &[&Line],
+fn terminal_render_from_lines_cached(
+    lines: &[&Line],
     total_scrollback_rows: usize,
     term_screen_rows: usize,
     palette: &ColorPalette,
     cache: &mut Vec<(u64, ColoredLine)>,
 ) -> TerminalRender {
     let mut changed_indices = Vec::new();
-    let new_len = collapsed.len();
+    let new_len = lines.len();
     let old_len = cache.len();
 
-    // 1. 處理共同範圍內有變化的行
     let common = old_len.min(new_len);
     for i in 0..common {
-        let fp = line_fingerprint_raw(collapsed[i]);
+        let fp = line_fingerprint_raw(lines[i]);
         if cache[i].0 != fp {
-            let built = line_to_colored_spans(collapsed[i], palette);
+            let built = line_to_colored_spans(lines[i], palette);
             cache[i] = (fp, built);
             changed_indices.push(i);
         }
     }
 
-    // 2. 處理長度變化
     if new_len > old_len {
-        for (i, line) in collapsed.iter().enumerate().skip(old_len) {
+        for (i, line) in lines.iter().enumerate().skip(old_len) {
             let fp = line_fingerprint_raw(line);
             let built = line_to_colored_spans(line, palette);
             cache.push((fp, built));
@@ -235,11 +223,8 @@ fn terminal_render_from_collapsed_cached(
         }
     } else if new_len < old_len {
         cache.truncate(new_len);
-        // 縮短時，UI 執行緒需要知道長度變了，但這裡我們透過 full_len 傳達。
-        // changed_indices 僅用於標記內容有變的「現存」行。
     }
 
-    // 3. 僅收集有變動的行進行傳輸（clone）
     let changed_lines: Vec<ColoredLine> = changed_indices
         .iter()
         .map(|&i| cache[i].1.clone())
@@ -249,6 +234,7 @@ fn terminal_render_from_collapsed_cached(
         text: String::new(),
         lines: changed_lines,
         full_len: new_len,
+        first_line_idx: 0, 
         filled: total_scrollback_rows > term_screen_rows,
         changed_indices,
     }
@@ -260,7 +246,6 @@ pub fn start_reader_thread(
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
-        // 加大預設大小，減少換行帶來的重新排版開銷
         let term_rows = 60usize;
         let term_cols = 200usize;
         let term_size = TerminalSize {
@@ -276,7 +261,7 @@ pub fn start_reader_thread(
 
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
-        let mut buf = [0u8; 65536]; // 加大緩衝區
+        let mut buf = [0u8; 65536];
         loop {
             let n = match reader.read(&mut buf) {
                 Ok(0) => break,
@@ -285,66 +270,31 @@ pub fn start_reader_thread(
             };
             term.advance_bytes(&buf[..n]);
 
-            // 如果還有數據待讀取，先繼續讀，減少渲染次數
-            // 這裡使用 try_clone + set_nonblocking 是 Windows 特有，
-            // 但我們可以簡單地檢查剩下的數據，或者設定一個極短的等待。
-            // 為了穩定性，我們至少處理完當前緩衝區後，
-            // 進行一次 snapshot。
-
             let screen = term.screen();
             let total = screen.scrollback_rows();
             let start = total.saturating_sub(CONPTY_SNAPSHOT_MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
-            let collapsed = collapse_adjacent_empty_phys_lines(&line_refs);
-            let collapsed = trim_trailing_empty_phys_lines(collapsed);
 
-            let fp = snapshot_content_fingerprint(total, &collapsed);
+            let fp = snapshot_content_fingerprint(total, &line_refs);
             if last_snapshot_fp == Some(fp) {
                 continue;
             }
             last_snapshot_fp = Some(fp);
 
-            on_chunk(terminal_render_from_collapsed_cached(
-                &collapsed,
-                total,
-                term_rows,
-                &palette,
-                &mut line_cache,
-            ));
+            on_chunk({
+                let mut render = terminal_render_from_lines_cached(
+                    &line_refs,
+                    total,
+                    term_rows,
+                    &palette,
+                    &mut line_cache,
+                );
+                render.first_line_idx = start;
+                render
+            });
         }
     })
-}
-
-fn phys_line_is_effectively_empty(line: &Line) -> bool {
-    line.as_str().trim_end().is_empty()
-}
-
-/// Keep at most one blank row per run of blank physical lines from the emulator buffer.
-fn collapse_adjacent_empty_phys_lines<'a>(lines: &[&'a Line]) -> Vec<&'a Line> {
-    let mut out = Vec::with_capacity(lines.len());
-    let mut prev_empty = false;
-    for &line in lines {
-        let empty = phys_line_is_effectively_empty(line);
-        if empty {
-            if !prev_empty {
-                out.push(line);
-            }
-            prev_empty = true;
-        } else {
-            prev_empty = false;
-            out.push(line);
-        }
-    }
-    out
-}
-
-/// Drop blank rows at the end of the snapshot (except leave a single line if everything is blank).
-fn trim_trailing_empty_phys_lines(mut lines: Vec<&Line>) -> Vec<&Line> {
-    while lines.len() > 1 && lines.last().is_some_and(|l| phys_line_is_effectively_empty(l)) {
-        lines.pop();
-    }
-    lines
 }
 
 fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {
@@ -354,11 +304,9 @@ fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<(
 chcp 65001 > $null\r\n"
             .to_string()
     } else {
-        // Prefix with '@' to suppress cmd's command echo for this initialization line.
         "@chcp 65001 > nul\r\n".to_string()
     };
     writer.write_all(cmd.as_bytes())?;
     writer.flush()?;
     Ok(())
 }
-

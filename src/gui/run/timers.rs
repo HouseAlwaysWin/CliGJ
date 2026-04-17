@@ -24,6 +24,7 @@ struct PendingTabUpdate {
     replace_text: Option<String>,
     replace_lines: Option<Vec<ColoredLine>>,
     full_len: Option<usize>,
+    first_line_idx: Option<usize>,
     /// Changed line indices from reader thread; empty = unknown, diff all.
     changed_indices: Vec<usize>,
     append_text: String,
@@ -40,21 +41,25 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
         let indices = chunk.changed_indices;
         
         if let Some(existing_lines) = entry.replace_lines.as_mut() {
-            // 合併邏輯：將新變動的行插入到現有的待處理清單中
-            let existing_indices = &mut entry.changed_indices;
-            for (i, &new_idx) in indices.iter().enumerate() {
-                if let Some(pos) = existing_indices.iter().position(|&x| x == new_idx) {
-                    // 已存在該索引的變動，更新它
-                    existing_lines[pos] = std::mem::take(&mut lines[i]);
-                } else {
-                    // 新的變動索引
-                    existing_indices.push(new_idx);
-                    existing_lines.push(std::mem::take(&mut lines[i]));
+            if entry.first_line_idx == Some(chunk.first_line_idx) {
+                let existing_indices = &mut entry.changed_indices;
+                for (i, &new_idx) in indices.iter().enumerate() {
+                    if let Some(pos) = existing_indices.iter().position(|&x| x == new_idx) {
+                        existing_lines[pos] = std::mem::take(&mut lines[i]);
+                    } else {
+                        existing_indices.push(new_idx);
+                        existing_lines.push(std::mem::take(&mut lines[i]));
+                    }
                 }
+            } else {
+                entry.replace_lines = Some(lines);
+                entry.changed_indices = indices;
+                entry.first_line_idx = Some(chunk.first_line_idx);
             }
         } else {
             entry.replace_lines = Some(lines);
             entry.changed_indices = indices;
+            entry.first_line_idx = Some(chunk.first_line_idx);
         }
         
         entry.full_len = Some(chunk.full_len);
@@ -93,42 +98,36 @@ fn apply_pending_updates(
 
         let mut replaced_with_vt_lines = false;
         if let Some(mut new_lines) = update.replace_lines {
-            let full_len = update.full_len.unwrap_or(0);
-            replaced_with_vt_lines = full_len > 0;
+            let chunk_first_idx = update.first_line_idx.unwrap_or(0);
+            let chunk_len = update.full_len.unwrap_or(0);
+            let total_needed = chunk_first_idx + chunk_len;
+            replaced_with_vt_lines = total_needed > 0;
+            
             if replaced_with_vt_lines {
                 let old_len = tab.terminal_lines.len();
 
-                // 處理長度變化
-                if full_len > old_len {
-                    // 擴展
-                    tab.terminal_lines.resize(full_len, ColoredLine::default());
-                    for i in old_len..full_len {
+                if total_needed > old_len {
+                    tab.terminal_lines.resize(total_needed, ColoredLine::default());
+                    for i in old_len..total_needed {
                         tab.terminal_model_dirty.insert(i);
                     }
-                } else if full_len < old_len {
-                    // 縮減
-                    tab.terminal_lines.truncate(full_len);
-                    tab.terminal_model_rows.retain(|&k, _| k < full_len);
-                    tab.terminal_model_hashes.retain(|&k, _| k < full_len);
-                    tab.terminal_model_dirty.retain(|&k| k < full_len);
                 }
 
-                // 用 changed_indices 直接 swap 有變化的行
                 let indices = &update.changed_indices;
-                if indices.is_empty() && full_len == old_len && !new_lines.is_empty() {
-                    // 回退機制：如果沒有 indices 但有 lines，且長度未變，視為全量更新（舊邏輯相容性）
-                    for i in 0..full_len {
-                        if i < new_lines.len() {
-                            std::mem::swap(&mut tab.terminal_lines[i], &mut new_lines[i]);
-                            tab.terminal_model_rows.remove(&i);
-                            tab.terminal_model_hashes.remove(&i);
-                            tab.terminal_model_dirty.insert(i);
+                if indices.is_empty() && chunk_len > 0 && !new_lines.is_empty() {
+                    for i in 0..chunk_len {
+                        let real_idx = chunk_first_idx + i;
+                        if real_idx < tab.terminal_lines.len() && i < new_lines.len() {
+                            std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[i]);
+                            tab.terminal_model_rows.remove(&real_idx);
+                            tab.terminal_model_hashes.remove(&real_idx);
+                            tab.terminal_model_dirty.insert(real_idx);
                         }
                     }
                 } else {
-                    // Delta 更新
-                    for (delta_idx, &real_idx) in indices.iter().enumerate() {
-                        if real_idx < full_len && delta_idx < new_lines.len() {
+                    for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
+                        let real_idx = chunk_first_idx + snapshot_idx;
+                        if real_idx < tab.terminal_lines.len() && delta_idx < new_lines.len() {
                             std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[delta_idx]);
                             tab.terminal_model_rows.remove(&real_idx);
                             tab.terminal_model_hashes.remove(&real_idx);
@@ -137,9 +136,9 @@ fn apply_pending_updates(
                     }
                 }
 
+                tab.truncate_terminal_lines();
                 tab.terminal_text.clear();
             } else if update.full_len.is_some() {
-                // full_len 為 0 且 replace 模式
                 tab.terminal_lines.clear();
                 tab.terminal_model_rows.clear();
                 tab.terminal_model_hashes.clear();
@@ -202,9 +201,6 @@ fn flush_pending_scroll(ui: &AppWindow, s: &mut GuiState) {
     s.pending_scroll = false;
 }
 
-/// Event-driven terminal updates:
-/// - background thread blocks on `rx.recv()`
-/// - UI work is scheduled only when new chunks arrive.
 pub(crate) fn spawn_terminal_stream_dispatcher(
     app: &AppWindow,
     state: Rc<RefCell<GuiState>>,
@@ -276,7 +272,6 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
     })
 }
 
-/// Composer → ConPTY mirror and `@` file picker refresh.
 pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<GuiState>>) -> Timer {
     use crate::gui::at_picker::sync_at_file_picker;
     use crate::gui::composer_sync::sync_composer_line_to_conpty;

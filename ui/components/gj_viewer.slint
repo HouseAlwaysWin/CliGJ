@@ -181,11 +181,11 @@ export component GjViewer inherits Rectangle {
         width: max(0px, parent.width - root.terminal-left-inset);
         height: parent.height;
         viewport-width: parent.width;
-        viewport-height: content.height;
+        viewport-height: max(root.row-height, root.terminal-total-lines * root.row-height);
 
         content := Rectangle {
             width: parent.width;
-            height: max(root.row-height, root.terminal-total-lines * root.row-height);
+            height: parent.viewport-height;
 
             if (root.terminal-total-lines == 0) : Text {
                 x: 0px;
