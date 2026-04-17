@@ -192,15 +192,38 @@ fn snapshot_content_fingerprint(total_rows: usize, collapsed: &[&Line]) -> u64 {
     h.finish()
 }
 
-fn terminal_render_from_collapsed(
+/// Per-line fingerprint for a raw wezterm `Line`.
+fn line_fingerprint_raw(line: &Line) -> u64 {
+    let mut h = DefaultHasher::new();
+    line.as_str().hash(&mut h);
+    h.finish()
+}
+
+/// Cached version: only rebuild ColoredLine for lines whose content changed.
+fn terminal_render_from_collapsed_cached(
     collapsed: &[&Line],
     total_scrollback_rows: usize,
     term_screen_rows: usize,
     palette: &ColorPalette,
+    cache: &mut Vec<(u64, ColoredLine)>,
 ) -> TerminalRender {
     let mut lines = Vec::with_capacity(collapsed.len());
-    for line in collapsed {
-        lines.push(line_to_colored_spans(line, palette));
+    for (i, line) in collapsed.iter().enumerate() {
+        let fp = line_fingerprint_raw(line);
+        if i < cache.len() && cache[i].0 == fp {
+            // 行內容未變化 → 直接 clone 快取
+            lines.push(cache[i].1.clone());
+        } else {
+            // 行內容有變化 → 重新建立 spans
+            lines.push(line_to_colored_spans(line, palette));
+        }
+    }
+    // 更新快取
+    cache.clear();
+    cache.reserve(lines.len());
+    for (i, line) in collapsed.iter().enumerate() {
+        let fp = line_fingerprint_raw(line);
+        cache.push((fp, lines[i].clone()));
     }
     TerminalRender {
         text: String::new(),
@@ -229,7 +252,8 @@ pub fn start_reader_thread(
         let mut term = Terminal::new(term_size, config, "CliGJ", "0", writer);
 
         let mut last_snapshot_fp: Option<u64> = None;
-        let mut buf = [0u8; 8192];
+        let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
+        let mut buf = [0u8; 32768];
         loop {
             let n = match reader.read(&mut buf) {
                 Ok(0) => break,
@@ -252,11 +276,12 @@ pub fn start_reader_thread(
             }
             last_snapshot_fp = Some(fp);
 
-            on_chunk(terminal_render_from_collapsed(
+            on_chunk(terminal_render_from_collapsed_cached(
                 &collapsed,
                 total,
                 term_rows,
                 &palette,
+                &mut line_cache,
             ));
         }
     })

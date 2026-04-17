@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use slint::{SharedString, VecModel};
 
@@ -57,6 +57,10 @@ pub struct TabState {
     /// Cached converted Slint rows + fingerprints to avoid rebuilding unchanged lines.
     pub(crate) terminal_model_rows: HashMap<usize, TermLine>,
     pub(crate) terminal_model_hashes: HashMap<usize, u64>,
+    /// 哪些行在上次 push 之後有變化，需要 set_row_data
+    pub(crate) terminal_model_dirty: HashSet<usize>,
+    /// 持久 Slint terminal model — 用 set_row_data 差異更新
+    pub(crate) terminal_slint_model: Rc<VecModel<TermLine>>,
     /// Last scroll position used for terminal windowing (px, content top).
     pub(crate) terminal_scroll_top_px: f32,
     /// Viewport height in px (for row windowing).
@@ -101,6 +105,8 @@ impl TabState {
             terminal_lines: Vec::new(),
             terminal_model_rows: HashMap::new(),
             terminal_model_hashes: HashMap::new(),
+            terminal_model_dirty: HashSet::new(),
+            terminal_slint_model: Rc::new(VecModel::default()),
             terminal_scroll_top_px: 0.0,
             terminal_view_height_px: 600.0,
             last_pushed_scroll_top: -1.0,
@@ -147,6 +153,7 @@ impl TabState {
         self.terminal_lines.clear();
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
+        self.terminal_model_dirty.clear();
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;

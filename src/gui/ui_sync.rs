@@ -1,4 +1,5 @@
-use slint::{Color, ModelRc, SharedString, VecModel};
+use std::rc::Rc;
+use slint::{Color, Model, ModelRc, SharedString, VecModel};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -131,24 +132,10 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
         let built = build_term_line(line);
         tab.terminal_model_rows.insert(idx, built);
         tab.terminal_model_hashes.insert(idx, fp);
+        tab.terminal_model_dirty.insert(idx);
         changed = true;
     }
     changed
-}
-
-pub(crate) fn terminal_model_window(tab: &TabState, first: usize, last: usize) -> ModelRc<TermLine> {
-    if first > last {
-        return ModelRc::new(VecModel::from(Vec::<TermLine>::new()));
-    }
-    let mut rows: Vec<TermLine> = Vec::with_capacity(last - first + 1);
-    for idx in first..=last {
-        if let Some(line) = tab.terminal_model_rows.get(&idx) {
-            rows.push(line.clone());
-        } else {
-            rows.push(empty_term_line());
-        }
-    }
-    ModelRc::new(VecModel::from(rows))
 }
 
 /// Push only the visible (+ overscan) slice into Slint; set global offset and total line count.
@@ -163,7 +150,12 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
         if tab.last_window_total != 0 {
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_lines(ModelRc::new(VecModel::from(Vec::<TermLine>::new())));
+            // 清空持久 model
+            let model = &tab.terminal_slint_model;
+            while model.row_count() > 0 {
+                model.remove(0);
+            }
+            ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
         }
         tab.last_window_first = 0;
         tab.last_window_last = 0;
@@ -184,14 +176,55 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != n;
     let content_changed = sync_terminal_model_cache_range(tab, first, last);
+
     if window_changed {
         ui.set_ws_terminal_line_offset(first as i32);
     }
     if total_changed {
         ui.set_ws_terminal_total_lines(n as i32);
     }
-    if window_changed || content_changed {
-        ui.set_ws_terminal_lines(terminal_model_window(tab, first, last));
+
+    let model = &tab.terminal_slint_model;
+    let window_len = last - first + 1;
+
+    if window_changed || model.row_count() != window_len {
+        // 視窗範圍改變 → 重建 model 內容
+        let rows: Vec<TermLine> = (first..=last)
+            .map(|idx| {
+                tab.terminal_model_rows
+                    .get(&idx)
+                    .cloned()
+                    .unwrap_or_else(empty_term_line)
+            })
+            .collect();
+
+        if model.row_count() == window_len {
+            // 同樣長度，直接 set_row_data
+            for (model_idx, row) in rows.into_iter().enumerate() {
+                model.set_row_data(model_idx, row);
+            }
+        } else {
+            // 長度不同，重建 model
+            while model.row_count() > 0 {
+                model.remove(0);
+            }
+            for row in rows {
+                model.push(row);
+            }
+        }
+        ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
+        tab.terminal_model_dirty.clear();
+    } else if content_changed {
+        // 視窗未變，只更新 dirty 行
+        for &line_idx in &tab.terminal_model_dirty {
+            if line_idx >= first && line_idx <= last {
+                let model_idx = line_idx - first;
+                if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
+                    model.set_row_data(model_idx, row.clone());
+                }
+            }
+        }
+        tab.terminal_model_dirty.clear();
     }
 
     tab.last_window_first = first;
@@ -247,6 +280,8 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
     let n = tab.terminal_lines.len();
     ui.set_ws_terminal_total_lines(n as i32);
+    // 綁定持久 model
+    ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
     if !tab.auto_scroll {
         ui.invoke_ws_scroll_terminal_to_top();
     }
