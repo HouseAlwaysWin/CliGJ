@@ -7,6 +7,7 @@ export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
+    in property <bool> terminal-select-enabled: false;
     in property <bool> has-image;
     in property <image> preview-image;
     in property <string> selected-context;
@@ -17,6 +18,7 @@ export component GjPromptDropZone inherits Rectangle {
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
+    callback terminal-select-toggle-requested;
     callback inject-file-requested;
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
@@ -210,6 +212,29 @@ export component GjPromptDropZone inherits Rectangle {
                         TouchArea {
                             clicked => {
                                 root.raw-input-toggle-requested();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 56px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: root.terminal-select-enabled ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: root.terminal-select-enabled ? #2f7ad9 : #00000000;
+
+                        Text {
+                            text: root.terminal-select-enabled ? "選取 ON" : "選取 OFF";
+                            color: root.terminal-select-enabled ? AppTheme.text : AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 10px;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.terminal-select-toggle-requested();
                             }
                         }
                     }

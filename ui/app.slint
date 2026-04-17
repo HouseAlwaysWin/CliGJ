@@ -23,6 +23,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-terminal-text: "";
     in-out property <[TermLine]> ws-terminal-lines: [];
     in-out property <bool> ws-auto-scroll: false;
+    in-out property <bool> ws-terminal-select-mode: false;
     in-out property <bool> ws-rename-open: false;
     in-out property <int> ws-rename-index: -1;
     in-out property <string> ws-rename-text: "";
@@ -49,6 +50,7 @@ export component AppWindow inherits Window {
     /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
+    callback toggle-terminal-select-mode-requested;
     callback inject-file-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
@@ -134,6 +136,7 @@ export component AppWindow inherits Window {
                         terminal-text <=> root.ws-terminal-text;
                         terminal-lines <=> root.ws-terminal-lines;
                         auto-scroll <=> root.ws-auto-scroll;
+                        terminal-select-mode <=> root.ws-terminal-select-mode;
                         selected-line <=> root.ws-selected-line;
                         selected-context <=> root.ws-selected-context;
                         prompt <=> root.ws-prompt;
@@ -157,6 +160,9 @@ export component AppWindow inherits Window {
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();
+                        }
+                        terminal-select-toggle-requested => {
+                            root.toggle-terminal-select-mode-requested();
                         }
                         inject-file-requested => {
                             root.inject-file-requested();

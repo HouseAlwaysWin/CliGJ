@@ -206,13 +206,12 @@ pub fn start_reader_thread(
             term.advance_bytes(&buf[..n]);
 
             // Render a portion of the screen+scrollback to plain text.
-            // Keep enough history so the initial cmd banner remains scrollback-visible,
-            // while still bounding memory and UI update cost.
+            // Keep enough history so the initial cmd banner remains visible,
+            // while still bounding redraw cost for high-frequency TUI updates.
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            // Default scrollback size in wezterm-term is 3500 rows; keep more than that
-            // so the initial cmd banner remains visible even after a couple of commands.
-            const MAX_LINES: usize = 4000;
+            // Large snapshots (e.g. 4000) are expensive when full-screen CLIs redraw per key.
+            const MAX_LINES: usize = 1200;
             let start = total.saturating_sub(MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();

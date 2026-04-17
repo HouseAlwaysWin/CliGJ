@@ -177,6 +177,11 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             return false;
         };
         let key_str = key.as_str();
+        if raw_tty && is_local_prompt_edit_key(mod_mask as u32, key_str) && !ui.get_ws_prompt().is_empty() {
+            // If user has text in the composer, let TextEdit handle basic edit keys even in Raw.
+            // This restores mouse-select + delete behavior in the prompt box.
+            return false;
+        }
         if raw_tty && contains_cjk_char(key_str) {
             let mut s = state_for_prompt_keys.borrow_mut();
             if let Err(e) = s.toggle_raw_input_current(&ui) {
@@ -354,6 +359,16 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         }
     });
 
+    let state_for_select_toggle = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_toggle_terminal_select_mode_requested(move || {
+        let Some(ui) = app_weak.upgrade() else { return; };
+        let mut s = state_for_select_toggle.borrow_mut();
+        if let Err(e) = s.toggle_terminal_select_mode_current(&ui) {
+            eprintln!("CliGJ: terminal select mode toggle: {e}");
+        }
+    });
+
     let state_for_rename = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_rename_tab_requested(move |index| {
@@ -479,4 +494,14 @@ fn contains_cjk_char(text: &str) -> bool {
                 | 0xFF00..=0xFFEF // Halfwidth and Fullwidth Forms
         )
     })
+}
+
+fn is_local_prompt_edit_key(mod_mask: u32, key: &str) -> bool {
+    if mod_mask & (key_encoding::MOD_CTRL | key_encoding::MOD_ALT | key_encoding::MOD_META) != 0 {
+        return false;
+    }
+    matches!(
+        key,
+        "Backspace" | "Delete" | "LeftArrow" | "RightArrow" | "Home" | "End"
+    )
 }

@@ -12,6 +12,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
     in-out property <bool> auto-scroll;
+    in-out property <bool> terminal-select-mode;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     in-out property <string> prompt;
@@ -26,6 +27,7 @@ export component GjWorkspace inherits Rectangle {
     callback history-next-requested;
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
+    callback terminal-select-toggle-requested;
     callback inject-file-requested;
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
@@ -53,6 +55,7 @@ export component GjWorkspace inherits Rectangle {
             terminal-text: root.terminal-text;
             terminal-lines <=> root.terminal-lines;
             auto-scroll: root.auto-scroll;
+            selection-mode: root.terminal-select-mode;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;
             vertical-stretch: 1;
@@ -73,6 +76,7 @@ export component GjWorkspace inherits Rectangle {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
             raw-input-enabled <=> root.raw-input-enabled;
+            terminal-select-enabled: root.terminal-select-mode;
             has-image: root.has-image;
             preview-image: root.preview-image;
             selected-context: root.selected-context;
@@ -90,6 +94,9 @@ export component GjWorkspace inherits Rectangle {
             }
             raw-input-toggle-requested => {
                 root.raw-input-toggle-requested();
+            }
+            terminal-select-toggle-requested => {
+                root.terminal-select-toggle-requested();
             }
             inject-file-requested => {
                 root.inject-file-requested();

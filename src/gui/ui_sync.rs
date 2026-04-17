@@ -47,6 +47,7 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.cmd_type = ui.get_ws_cmd_type().to_string();
     tab.terminal_text = ui.get_ws_terminal_text().to_string();
     tab.auto_scroll = ui.get_ws_auto_scroll();
+    tab.terminal_select_mode = ui.get_ws_terminal_select_mode();
     tab.raw_input_mode = ui.get_ws_raw_input();
 }
 
@@ -57,6 +58,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
     ui.set_ws_terminal_lines(colored_lines_to_model(&tab.terminal_lines));
     ui.set_ws_auto_scroll(tab.auto_scroll);
+    ui.set_ws_terminal_select_mode(tab.terminal_select_mode);
     if !tab.auto_scroll {
         ui.invoke_ws_scroll_terminal_to_top();
     }

@@ -6,6 +6,7 @@ export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
     in property <bool> auto-scroll: false;
+    in property <bool> selection-mode: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
 
@@ -13,7 +14,7 @@ export component GjViewer inherits Rectangle {
     background: AppTheme.bg;
 
     public function scroll_to_bottom() {
-        if (root.terminal-lines.length > 0) {
+        if (root.terminal-lines.length > 0 && !root.selection-mode) {
             if (color-flick.viewport-height > color-flick.height) {
                 color-flick.viewport-y = min(0px, color-flick.height - color-flick.viewport-height);
             } else {
@@ -29,7 +30,7 @@ export component GjViewer inherits Rectangle {
     }
 
     public function scroll_to_top() {
-        if (root.terminal-lines.length > 0) {
+        if (root.terminal-lines.length > 0 && !root.selection-mode) {
             color-flick.viewport-y = 0px;
         } else {
             plain-text.viewport-y = 0px;
@@ -38,7 +39,7 @@ export component GjViewer inherits Rectangle {
 
     // Plain fallback (no ANSI / non-ConPTY).
     plain-text := TextEdit {
-        visible: root.terminal-lines.length == 0;
+        visible: root.selection-mode || root.terminal-lines.length == 0;
         x: 0px;
         y: 0px;
         width: parent.width;
@@ -52,7 +53,7 @@ export component GjViewer inherits Rectangle {
 
     // VT colors resolved in Rust (wezterm-term + ColorPalette).
     color-flick := Flickable {
-        visible: root.terminal-lines.length > 0;
+        visible: root.terminal-lines.length > 0 && !root.selection-mode;
         x: 0px;
         y: 0px;
         width: parent.width;
@@ -88,4 +89,5 @@ export component GjViewer inherits Rectangle {
             }
         }
     }
+
 }
