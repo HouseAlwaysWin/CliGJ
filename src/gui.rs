@@ -1,12 +1,13 @@
 use std::cell::RefCell;
 use std::io::Write;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
 use slint::{Color, Model, ModelRc, SharedString, Timer, VecModel};
 
+use crate::workspace_files;
 use crate::terminal::key_encoding;
 use crate::terminal::prompt_key::PromptKeyAction;
 use crate::terminal::render::ColoredLine;
@@ -18,6 +19,93 @@ slint::include_modules!();
 
 fn rgb_color(rgb: [u8; 3]) -> Color {
     Color::from_rgb_u8(rgb[0], rgb[1], rgb[2])
+}
+
+fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
+    let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
+    if tab.file_path.is_empty() {
+        return cwd;
+    }
+    let p = Path::new(&tab.file_path);
+    if p.is_file() {
+        p.parent().map(Path::to_path_buf).unwrap_or(cwd)
+    } else if p.is_dir() {
+        p.to_path_buf()
+    } else {
+        cwd
+    }
+}
+
+fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
+    if ui.get_ws_raw_input() {
+        ui.set_ws_at_picker_open(false);
+        return;
+    }
+    let prompt = ui.get_ws_prompt().to_string();
+    if !prompt.contains('@') {
+        ui.set_ws_at_picker_open(false);
+        s.at_picker_query_snapshot.clear();
+        return;
+    }
+    let query = prompt
+        .rsplit_once('@')
+        .map(|(_, q)| q.split(['\r', '\n']).next().unwrap_or(""))
+        .unwrap_or("")
+        .to_string();
+    let tab = &s.tabs[s.current];
+    let root = workspace_root_for_tab(tab);
+    if s.workspace_file_cache_root.as_ref() != Some(&root) {
+        s.workspace_file_cache = workspace_files::scan_workspace_files(&root);
+        s.workspace_file_cache_root = Some(root.clone());
+    }
+    if s.at_picker_query_snapshot != query {
+        s.at_picker_query_snapshot = query.clone();
+        ui.set_ws_at_selected(0);
+    }
+    let choices = workspace_files::filter_paths(
+        &s.workspace_file_cache,
+        &query,
+        workspace_files::CHOICES_DISPLAY,
+    );
+    let model: Vec<SharedString> = choices
+        .iter()
+        .map(|x| SharedString::from(x.as_str()))
+        .collect();
+    let n = model.len() as i32;
+    ui.set_ws_at_choices(ModelRc::new(VecModel::from(model)));
+    ui.set_ws_at_picker_open(true);
+    let sel = ui.get_ws_at_selected();
+    let clamped = if n <= 0 {
+        0
+    } else {
+        sel.max(0).min(n - 1)
+    };
+    ui.set_ws_at_selected(clamped);
+    ui.invoke_ws_scroll_at_picker_into_view();
+    let total_in_tree = s.workspace_file_cache.len();
+    let label = format!(
+        "@ 檔案 · {} · {}/{} 筆（可捲動）",
+        root.display(),
+        choices.len(),
+        total_in_tree
+    );
+    ui.set_ws_workspace_root_label(SharedString::from(label.as_str()));
+}
+
+fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize) {
+    let m = ui.get_ws_at_choices();
+    let n = m.row_count();
+    if n == 0 || index >= n {
+        return;
+    }
+    let Some(picked) = m.row_data(index) else {
+        return;
+    };
+    let prompt = ui.get_ws_prompt().to_string();
+    let new_p = workspace_files::apply_at_file_pick(&prompt, picked.as_str());
+    ui.set_ws_prompt(SharedString::from(new_p.as_str()));
+    ui.set_ws_at_picker_open(false);
+    tab_update_from_ui(&mut s.tabs[s.current], ui);
 }
 
 fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
@@ -56,6 +144,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         next_id: 2,
         tx,
         pending_scroll: false,
+        workspace_file_cache: Vec::new(),
+        workspace_file_cache_root: None,
+        at_picker_query_snapshot: String::new(),
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
@@ -204,10 +295,54 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         let Some(ui) = app_weak.upgrade() else {
             return false;
         };
+        let key_str = key.as_str();
+        if ui.get_ws_at_picker_open() && !raw_tty {
+            match key_str {
+                "UpArrow" => {
+                    let m = ui.get_ws_at_choices();
+                    let n = m.row_count() as i32;
+                    if n <= 0 {
+                        return true;
+                    }
+                    let cur = ui.get_ws_at_selected();
+                    ui.set_ws_at_selected((cur - 1).max(0));
+                    ui.invoke_ws_scroll_at_picker_into_view();
+                    return true;
+                }
+                "DownArrow" => {
+                    let m = ui.get_ws_at_choices();
+                    let n = m.row_count() as i32;
+                    if n <= 0 {
+                        return true;
+                    }
+                    let cur = ui.get_ws_at_selected();
+                    ui.set_ws_at_selected((cur + 1).min(n - 1));
+                    ui.invoke_ws_scroll_at_picker_into_view();
+                    return true;
+                }
+                "Return" | "\n" | "\r" => {
+                    let mut s = state_for_prompt_keys.borrow_mut();
+                    let idx = ui.get_ws_at_selected() as usize;
+                    commit_at_file_pick(&ui, &mut *s, idx);
+                    return true;
+                }
+                "Escape" => {
+                    let prompt = ui.get_ws_prompt().to_string();
+                    let new_p = workspace_files::strip_active_at_segment(&prompt);
+                    ui.set_ws_prompt(SharedString::from(new_p.as_str()));
+                    ui.set_ws_at_picker_open(false);
+                    let mut s = state_for_prompt_keys.borrow_mut();
+                    let idx = s.current;
+                    tab_update_from_ui(&mut s.tabs[idx], &ui);
+                    return true;
+                }
+                _ => {}
+            }
+        }
         match crate::terminal::prompt_key::route_prompt_key(
             raw_tty,
             mod_mask as u32,
-            key.as_str(),
+            key_str,
             shift,
         ) {
             PromptKeyAction::Reject => false,
@@ -251,6 +386,34 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             }
         }
     });
+
+    let state_for_at_pick = Rc::clone(&state);
+    let app_weak_atpick = app.as_weak();
+    app.on_at_picker_choose(move |index| {
+        let Some(ui) = app_weak_atpick.upgrade() else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        let mut s = state_for_at_pick.borrow_mut();
+        commit_at_file_pick(&ui, &mut *s, index as usize);
+    });
+
+    let state_for_at_sync = Rc::clone(&state);
+    let app_weak_atsync = app.as_weak();
+    let timer_at = Timer::default();
+    timer_at.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(120),
+        move || {
+            let Some(ui) = app_weak_atsync.upgrade() else {
+                return;
+            };
+            let mut s = state_for_at_sync.borrow_mut();
+            sync_at_file_picker(&ui, &mut *s);
+        },
+    );
 
     let state_for_raw_toggle = Rc::clone(&state);
     let app_weak = app.as_weak();
@@ -350,6 +513,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         timer
     });
 
+    let _at_file_sync_timer = timer_at;
+
     app.run().expect("failed to run app window");
 }
 
@@ -443,6 +608,9 @@ struct GuiState {
     next_id: u64,
     tx: mpsc::Sender<TerminalChunk>,
     pending_scroll: bool,
+    workspace_file_cache: Vec<String>,
+    workspace_file_cache_root: Option<PathBuf>,
+    at_picker_query_snapshot: String,
 }
 
 impl GuiState {

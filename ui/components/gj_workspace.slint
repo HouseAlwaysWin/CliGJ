@@ -2,6 +2,7 @@ import { AppTheme } from "../theme.slint";
 import { TermLine } from "../term_types.slint";
 import { GjViewer } from "gj_viewer.slint";
 import { GjPromptDropZone } from "gj_prompt_drop_zone.slint";
+import { GjAtFilePicker } from "gj_at_file_picker.slint";
 
 export component GjWorkspace inherits Rectangle {
     in-out property <string> file-path;
@@ -15,12 +16,17 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> selected-context;
     in-out property <string> prompt;
     in-out property <bool> raw-input-enabled;
+    in-out property <bool> at-picker-open;
+    in-out property <[string]> at-choices;
+    in-out property <int> at-selected;
+    in property <string> workspace-root-label;
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
+    callback at-picker-choose(int);
 
     background: AppTheme.bg;
 
@@ -30,6 +36,10 @@ export component GjWorkspace inherits Rectangle {
 
     public function scroll_terminal_to_top() {
         viewer.scroll_to_top();
+    }
+
+    public function scroll_at_picker_into_view() {
+        at-picker.ensure_selection_visible();
     }
 
     VerticalLayout {
@@ -44,6 +54,16 @@ export component GjWorkspace inherits Rectangle {
             selected-context <=> root.selected-context;
             vertical-stretch: 1;
             min-height: 220px;
+        }
+
+        at-picker := GjAtFilePicker {
+            open: root.at-picker-open && !root.raw-input-enabled;
+            root-label: root.workspace-root-label;
+            choices: root.at-choices;
+            selected-index <=> root.at-selected;
+            choose(index) => {
+                root.at-picker-choose(index);
+            }
         }
 
         GjPromptDropZone {

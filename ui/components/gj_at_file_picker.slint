@@ -1,0 +1,87 @@
+import { AppTheme } from "../theme.slint";
+
+/// Optional `@` file list (workspace-relative paths). Shown above the prompt `TextEdit`.
+export component GjAtFilePicker inherits Rectangle {
+    in property <bool> open: false;
+    in property <string> root-label;
+    in property <[string]> choices;
+    in-out property <int> selected-index: 0;
+    callback choose(int);
+
+    private property <length> row-h: 22px;
+    /// Visible rows in the list viewport (rest is scroll / wheel).
+    private property <int> visible-rows-cap: 8;
+    // Cap list viewport; inner list can be longer — Flickable scrolls.
+    private property <length> list-view-h: min(row-h * visible-rows-cap, row-h * choices.length);
+
+    visible: open;
+    height: open ? min(280px, 34px + list-view-h) : 0px;
+    background: AppTheme.panel;
+    border-width: 1px;
+    border-color: AppTheme.prompt_chrome_border;
+    border-radius: 8px;
+    clip: true;
+
+    VerticalLayout {
+        padding: 6px;
+        spacing: 4px;
+
+        if (root-label != ""): Text {
+            text: root-label;
+            font-size: 11px;
+            color: AppTheme.text_muted;
+            wrap: word-wrap;
+        }
+
+        at-flick := Flickable {
+            height: root.list-view-h;
+            viewport-width: parent.width - 12px;
+            viewport-height: inner.preferred-height;
+
+            inner := VerticalLayout {
+                spacing: 0px;
+                alignment: start;
+
+                for path[idx] in choices: Rectangle {
+                    background: idx == selected-index ? AppTheme.picker_row_selected : #00000000;
+                    border-radius: 3px;
+                    height: root.row-h;
+
+                    TouchArea {
+                        clicked => {
+                            root.selected-index = idx;
+                            root.choose(idx);
+                        }
+
+                        Text {
+                            width: parent.width;
+                            height: parent.height;
+                            text: path;
+                            color: AppTheme.text;
+                            font-size: 12px;
+                            font-family: "Consolas";
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Call after `selected-index` changes (e.g. keyboard) so the row stays in view.
+    public function ensure_selection_visible() {
+        if choices.length <= 0 {
+            return;
+        }
+        let vis = at-flick.height;
+        let ch = at-flick.viewport-height;
+        if ch <= vis {
+            at-flick.viewport-y = 0px;
+            return;
+        }
+        let sel-top = selected-index * row-h;
+        let max-doc = ch - vis;
+        let doc-top = min(sel-top, max-doc);
+        at-flick.viewport-y = 0px - doc-top;
+    }
+}

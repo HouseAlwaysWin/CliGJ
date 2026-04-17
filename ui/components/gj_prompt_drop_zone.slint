@@ -58,7 +58,7 @@ export component GjPromptDropZone inherits Rectangle {
                     text <=> root.prompt;
                     placeholder-text: root.raw-input-enabled
                         ? "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-                        : "Plan, Build, / for commands, @ for context — File / --inject-file for GUI inject";
+                        : "Plan, Build, / — 輸入 @ 搜尋並插入工作區檔案（關鍵字篩選）— File 按鈕可注入檔";
                     font-size: 13px;
                     wrap: word-wrap;
                     key-pressed(event) => {

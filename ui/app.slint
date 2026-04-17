@@ -32,6 +32,12 @@ export component AppWindow inherits Window {
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <bool> ws-raw-input: false;
 
+    /// `@` workspace file picker (composer only; hidden in Raw TTY).
+    in-out property <bool> ws-at-picker-open: false;
+    in-out property <[string]> ws-at-choices: [];
+    in-out property <int> ws-at-selected: 0;
+    in property <string> ws-workspace-root-label: "";
+
     callback tab-changed(int);
     callback tab-close-requested(int);
     callback new-tab-requested;
@@ -47,6 +53,7 @@ export component AppWindow inherits Window {
     callback move-tab-requested(int, int);
     callback rename-commit(int, string);
     callback rename-cancel;
+    callback at-picker-choose(int);
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -54,6 +61,10 @@ export component AppWindow inherits Window {
 
     public function ws_scroll_terminal_to_top() {
         workspace.scroll_terminal_to_top();
+    }
+
+    public function ws_scroll_at_picker_into_view() {
+        workspace.scroll_at_picker_into_view();
     }
 
     // Same mask as `GjPromptDropZone.pty_mod` / Rust `key_encoding::mod_bits`.
@@ -124,6 +135,10 @@ export component AppWindow inherits Window {
                         selected-context <=> root.ws-selected-context;
                         prompt <=> root.ws-prompt;
                         raw-input-enabled <=> root.ws-raw-input;
+                        at-picker-open <=> root.ws-at-picker-open;
+                        at-choices <=> root.ws-at-choices;
+                        at-selected <=> root.ws-at-selected;
+                        workspace-root-label: root.ws-workspace-root-label;
                         submit-requested => {
                             root.submit-prompt();
                         }
@@ -141,6 +156,9 @@ export component AppWindow inherits Window {
                         }
                         inject-file-requested => {
                             root.inject-file-requested();
+                        }
+                        at-picker-choose(index) => {
+                            root.at-picker-choose(index);
                         }
                     }
                 }
