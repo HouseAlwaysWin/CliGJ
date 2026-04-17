@@ -1,6 +1,7 @@
 mod core;
 mod gui;
 mod terminal;
+mod terminal_v2;
 mod workspace_files;
 
 use crate::core::cli::{Cli, Commands, ConfigCommand};
