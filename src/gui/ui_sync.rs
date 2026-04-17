@@ -113,15 +113,6 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
         tab.terminal_model_hashes.clear();
         return changed;
     }
-    if tab.terminal_model_rows.len() > n {
-        tab.terminal_model_rows.truncate(n);
-        tab.terminal_model_hashes.truncate(n);
-        changed = true;
-    } else if tab.terminal_model_rows.len() < n {
-        tab.terminal_model_rows.resize_with(n, empty_term_line);
-        tab.terminal_model_hashes.resize(n, u64::MAX);
-        changed = true;
-    }
     let first = first.min(n - 1);
     let last = last.min(n - 1);
     if first > last {
@@ -130,30 +121,34 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
     for idx in first..=last {
         let line = &tab.terminal_lines[idx];
         let fp = line_fingerprint(line);
-        let unchanged = tab.terminal_model_hashes[idx] == fp;
+        let unchanged = tab
+            .terminal_model_hashes
+            .get(&idx)
+            .is_some_and(|cached| *cached == fp);
         if unchanged {
             continue;
         }
         let built = build_term_line(line);
-        tab.terminal_model_rows[idx] = built;
-        tab.terminal_model_hashes[idx] = fp;
+        tab.terminal_model_rows.insert(idx, built);
+        tab.terminal_model_hashes.insert(idx, fp);
         changed = true;
     }
     changed
 }
 
 pub(crate) fn terminal_model_window(tab: &TabState, first: usize, last: usize) -> ModelRc<TermLine> {
-    if tab.terminal_model_rows.is_empty() || first > last {
+    if first > last {
         return ModelRc::new(VecModel::from(Vec::<TermLine>::new()));
     }
-    let n = tab.terminal_model_rows.len();
-    let first = first.min(n.saturating_sub(1));
-    let last = last.min(n - 1);
-    if first > last {
-        return ModelRc::new(VecModel::from(Vec::new()));
+    let mut rows: Vec<TermLine> = Vec::with_capacity(last - first + 1);
+    for idx in first..=last {
+        if let Some(line) = tab.terminal_model_rows.get(&idx) {
+            rows.push(line.clone());
+        } else {
+            rows.push(empty_term_line());
+        }
     }
-    let slice: Vec<TermLine> = tab.terminal_model_rows[first..=last].to_vec();
-    ModelRc::new(VecModel::from(slice))
+    ModelRc::new(VecModel::from(rows))
 }
 
 /// Push only the visible (+ overscan) slice into Slint; set global offset and total line count.

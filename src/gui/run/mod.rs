@@ -58,7 +58,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     #[cfg(target_os = "windows")]
     register_windows_file_drop(&app, Rc::clone(&state));
 
-    let _terminal_stream_timer = timers::spawn_terminal_stream_timer(&app, Rc::clone(&state), rx);
+    let _terminal_stream_dispatcher =
+        timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);
     callbacks::connect(&app, Rc::clone(&state));
     let _composer_at_sync_timer = timers::spawn_composer_at_sync_timer(&app, Rc::clone(&state));
 

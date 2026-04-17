@@ -205,13 +205,12 @@ pub fn start_reader_thread(
             // Feed into terminal emulator; it will parse VT/ANSI and maintain a screen buffer.
             term.advance_bytes(&buf[..n]);
 
-            // Render a portion of the screen+scrollback to plain text.
-            // Keep enough history so the initial cmd banner remains visible,
-            // while still bounding redraw cost for high-frequency TUI updates.
+            // Render only a bounded window of screen+scrollback.
+            // Large snapshots are expensive because we rebuild colored spans every chunk.
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            // Large snapshots (e.g. 4000) are expensive when full-screen CLIs redraw per key.
-            const MAX_LINES: usize = 1200;
+            // ~40 rows are visible; keep a moderate buffer for context.
+            const MAX_LINES: usize = 240;
             let start = total.saturating_sub(MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
@@ -220,18 +219,12 @@ pub fn start_reader_thread(
             // extra "empty lines" (e.g. after composer `Submit` in non-Raw mode).
             let collapsed = collapse_adjacent_empty_phys_lines(&line_refs);
             let collapsed = trim_trailing_empty_phys_lines(collapsed);
-            let mut out = String::new();
             let mut colored: Vec<ColoredLine> = Vec::with_capacity(collapsed.len());
-            for (i, line) in collapsed.iter().enumerate() {
-                if i > 0 {
-                    out.push('\n');
-                }
-                out.push_str(line.as_str().trim_end());
+            for line in collapsed.iter() {
                 colored.push(line_to_colored_spans(line, &palette));
             }
-
-            // Remove our init noise if it was echoed.
-            let out = filter_init_noise(&out);
+            // VT mode uses `lines`; avoid rebuilding huge plain-text snapshots every chunk.
+            let out = String::new();
             let filled = total > term_rows;
             on_chunk(TerminalRender {
                 text: out,
@@ -271,17 +264,6 @@ fn trim_trailing_empty_phys_lines(mut lines: Vec<&Line>) -> Vec<&Line> {
         lines.pop();
     }
     lines
-}
-
-fn filter_init_noise(s: &str) -> String {
-    // Remove the UTF-8 initialization commands that may get echoed by cmd/PowerShell.
-    // Use substring removal instead of dropping whole lines, because the shell prompt
-    // can appear on the same line as the command echo.
-    s.replace("@chcp 65001 > nul\n", "")
-        .replace("chcp 65001 > nul\n", "")
-        .replace("chcp 65001 > $null\n", "")
-        .replace("[Console]::InputEncoding=[System.Text.UTF8Encoding]::new(); ", "")
-        .replace("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); ", "")
 }
 
 fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {

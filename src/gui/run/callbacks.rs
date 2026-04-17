@@ -3,7 +3,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{spawn_local, ComponentHandle, Model, SharedString};
 
 use crate::terminal::key_encoding;
 use crate::terminal::prompt_key::PromptKeyAction;
@@ -13,7 +13,7 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
-use crate::gui::ui_sync::{load_tab_to_ui, tab_update_from_ui};
+use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
 
 use super::helpers::{
     contains_cjk_char, copy_to_clipboard, is_local_prompt_edit_key, selected_text_from_terminal_lines,
@@ -24,6 +24,7 @@ pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     connect_prompt_and_picker(app, Rc::clone(&state));
     connect_chips(app, Rc::clone(&state));
     connect_terminal_selection(app, Rc::clone(&state));
+    connect_terminal_viewport(app, Rc::clone(&state));
     connect_toggles(app, Rc::clone(&state));
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
@@ -306,6 +307,29 @@ fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     });
 }
 
+fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    let st_vp = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_viewport_changed(move || {
+        let app_weak2 = app_weak.clone();
+        let st_vp2 = Rc::clone(&st_vp);
+        // Defer to after this Slint callback returns: avoids `RefCell` reborrow when
+        // `viewport-changed` fires during another handler that already borrowed `state`.
+        let _ = spawn_local(async move {
+            let Some(ui) = app_weak2.upgrade() else {
+                return;
+            };
+            let mut s = st_vp2.borrow_mut();
+            if s.current >= s.tabs.len() {
+                return;
+            }
+            let cur = s.current;
+            let tab = &mut s.tabs[cur];
+            push_terminal_view_to_ui(&ui, tab);
+        });
+    });
+}
+
 fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_raw = Rc::clone(&state);
     let app_weak = app.as_weak();
@@ -319,17 +343,6 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
     });
 
-    let st_term_sel = Rc::clone(&state);
-    let app_weak = app.as_weak();
-    app.on_toggle_terminal_select_mode_requested(move || {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = st_term_sel.borrow_mut();
-        if let Err(e) = s.toggle_terminal_select_mode_current(&ui) {
-            eprintln!("CliGJ: terminal select mode toggle: {e}");
-        }
-    });
 }
 
 fn connect_rename(app: &AppWindow, state: Rc<RefCell<GuiState>>) {

@@ -29,12 +29,12 @@ export component GjWorkspace inherits Rectangle {
     callback history-next-requested;
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
-    callback terminal-select-toggle-requested;
     callback inject-file-requested;
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     callback terminal-selection-committed(int, int, int, int);
+    callback terminal-viewport-changed;
 
     background: AppTheme.bg;
 
@@ -66,6 +66,9 @@ export component GjWorkspace inherits Rectangle {
             selection-committed(sr, sc, er, ec) => {
                 root.terminal-selection-committed(sr, sc, er, ec);
             }
+            viewport-changed => {
+                root.terminal-viewport-changed();
+            }
             vertical-stretch: 1;
             min-height: 220px;
         }
@@ -84,7 +87,6 @@ export component GjWorkspace inherits Rectangle {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
             raw-input-enabled <=> root.raw-input-enabled;
-            terminal-select-enabled: root.terminal-select-mode;
             has-image: root.has-image;
             preview-image: root.preview-image;
             selected-context: root.selected-context;
@@ -102,9 +104,6 @@ export component GjWorkspace inherits Rectangle {
             }
             raw-input-toggle-requested => {
                 root.raw-input-toggle-requested();
-            }
-            terminal-select-toggle-requested => {
-                root.terminal-select-toggle-requested();
             }
             inject-file-requested => {
                 root.inject-file-requested();

@@ -11,20 +11,6 @@ use super::state::{GuiState, TerminalChunk};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
 impl GuiState {
-    pub(crate) fn toggle_terminal_select_mode_current(
-        &mut self,
-        ui: &AppWindow,
-    ) -> Result<(), &'static str> {
-        if self.current >= self.tabs.len() {
-            return Err("invalid current tab index");
-        }
-        tab_update_from_ui(&mut self.tabs[self.current], ui);
-        let tab = &mut self.tabs[self.current];
-        tab.terminal_select_mode = !tab.terminal_select_mode;
-        load_tab_to_ui(ui, tab);
-        Ok(())
-    }
-
     pub(crate) fn toggle_raw_input_current(
         &mut self,
         ui: &AppWindow,

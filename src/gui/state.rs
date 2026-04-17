@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
+use std::collections::HashMap;
 
 use slint::{SharedString, VecModel};
 
@@ -54,8 +55,8 @@ pub struct TabState {
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
     /// Cached converted Slint rows + fingerprints to avoid rebuilding unchanged lines.
-    pub(crate) terminal_model_rows: Vec<TermLine>,
-    pub(crate) terminal_model_hashes: Vec<u64>,
+    pub(crate) terminal_model_rows: HashMap<usize, TermLine>,
+    pub(crate) terminal_model_hashes: HashMap<usize, u64>,
     /// Last scroll position used for terminal windowing (px, content top).
     pub(crate) terminal_scroll_top_px: f32,
     /// Viewport height in px (for row windowing).
@@ -98,8 +99,8 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
-            terminal_model_rows: Vec::new(),
-            terminal_model_hashes: Vec::new(),
+            terminal_model_rows: HashMap::new(),
+            terminal_model_hashes: HashMap::new(),
             terminal_scroll_top_px: 0.0,
             terminal_view_height_px: 600.0,
             last_pushed_scroll_top: -1.0,

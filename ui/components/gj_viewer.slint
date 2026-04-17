@@ -17,6 +17,7 @@ export component GjViewer inherits Rectangle {
     private property <length> char-width: 7.8px;
     private property <length> stripe-width: 3px;
     callback selection-committed(int, int, int, int);
+    callback viewport-changed;
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px;
     private property <bool> drag-active: false;
@@ -162,10 +163,12 @@ export component GjViewer inherits Rectangle {
         } else {
             sv.viewport-y = 0px;
         }
+        root.viewport-changed();
     }
 
     public function scroll_to_top() {
         sv.viewport-y = 0px;
+        root.viewport-changed();
     }
 
     sv := ScrollView {
@@ -285,6 +288,7 @@ export component GjViewer inherits Rectangle {
             let next = sv.viewport-y + event.delta-y;
             let max-y = min(0px, sv.height - sv.viewport-height);
             sv.viewport-y = max(max-y, min(0px, next));
+            root.viewport-changed();
             return accept;
         }
     }

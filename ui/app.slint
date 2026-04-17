@@ -52,7 +52,6 @@ export component AppWindow inherits Window {
     /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
-    callback toggle-terminal-select-mode-requested;
     callback inject-file-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
@@ -62,6 +61,8 @@ export component AppWindow inherits Window {
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     callback terminal-selection-committed(int, int, int, int);
+    callback terminal-viewport-changed;
+    callback terminal-data-ready;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -179,9 +180,6 @@ export component AppWindow inherits Window {
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();
                         }
-                        terminal-select-toggle-requested => {
-                            root.toggle-terminal-select-mode-requested();
-                        }
                         inject-file-requested => {
                             root.inject-file-requested();
                         }
@@ -196,6 +194,9 @@ export component AppWindow inherits Window {
                         }
                         terminal-selection-committed(sr, sc, er, ec) => {
                             root.terminal-selection-committed(sr, sc, er, ec);
+                        }
+                        terminal-viewport-changed => {
+                            root.terminal-viewport-changed();
                         }
                     }
                 }
