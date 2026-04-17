@@ -13,6 +13,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback history-next-requested;
     callback control-sequence-requested(string);
     callback raw-input-toggle-requested;
+    callback inject-file-requested;
 
     horizontal-stretch: 1;
     min-height: 116px;
@@ -179,6 +180,31 @@ export component GjPromptDropZone inherits Rectangle {
                         TouchArea {
                             clicked => {
                                 root.raw-input-toggle-requested();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 40px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: "File";
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+
+                        inject_file_ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => {
+                                root.inject-file-requested();
                             }
                         }
                     }

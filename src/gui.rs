@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::io::Write;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -11,7 +12,7 @@ use crate::terminal::windows_conpty;
 
 slint::include_modules!();
 
-pub fn run_gui() {
+pub fn run_gui(inject_file: Option<PathBuf>) {
     let app = AppWindow::new().expect("failed to build app window");
 
     let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
@@ -217,6 +218,58 @@ pub fn run_gui() {
         let Some(ui) = app_weak.upgrade() else { return; };
         let mut s = state_for_move.borrow_mut();
         let _ = s.move_tab(from as usize, to as usize, &ui);
+    });
+
+    let state_for_inject = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_inject_file_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new().pick_file() else {
+            return;
+        };
+        let text = match std::fs::read_to_string(&path) {
+            Ok(t) => t,
+            Err(e) => {
+                eprintln!("CliGJ: inject file {}: {e}", path.display());
+                return;
+            }
+        };
+        let bytes = normalize_text_for_conpty(&text);
+        let mut s = state_for_inject.borrow_mut();
+        if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
+            eprintln!("CliGJ: inject: {e}");
+        }
+    });
+
+    // Hold until `app.run()` returns so the single-shot callback can fire first.
+    let _inject_startup_timer: Option<Timer> = inject_file.map(|path| {
+        let state_inj = Rc::clone(&state);
+        let app_weak = app.as_weak();
+        let timer = Timer::default();
+        timer.start(
+            slint::TimerMode::SingleShot,
+            Duration::from_millis(500),
+            move || {
+                let Some(ui) = app_weak.upgrade() else {
+                    return;
+                };
+                let text = match std::fs::read_to_string(&path) {
+                    Ok(t) => t,
+                    Err(e) => {
+                        eprintln!("CliGJ: --inject-file {}: {e}", path.display());
+                        return;
+                    }
+                };
+                let bytes = normalize_text_for_conpty(&text);
+                let mut s = state_inj.borrow_mut();
+                if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
+                    eprintln!("CliGJ: inject: {e}");
+                }
+            },
+        );
+        timer
     });
 
     app.run().expect("failed to run app window");
@@ -505,6 +558,32 @@ impl GuiState {
         Ok(())
     }
 
+    /// Write raw bytes to the active ConPTY session (or append to the buffer if no PTY).
+    fn inject_bytes_into_current(&mut self, ui: &AppWindow, data: &[u8]) -> Result<(), String> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index".into());
+        }
+        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let tab = &mut self.tabs[self.current];
+
+        #[cfg(target_os = "windows")]
+        {
+            if let Some(session) = tab.conpty.as_mut() {
+                session
+                    .writer
+                    .write_all(data)
+                    .map_err(|e| e.to_string())?;
+                session.writer.flush().map_err(|e| e.to_string())?;
+                return Ok(());
+            }
+        }
+
+        let preview = String::from_utf8_lossy(data);
+        tab.append_terminal(&format!("\n[inject]\n{preview}"));
+        load_tab_to_ui(ui, tab);
+        Ok(())
+    }
+
     fn close_tab(&mut self, index: usize, ui: &AppWindow) -> Result<(), &'static str> {
         if self.tabs.len() <= 1 {
             return Ok(());
@@ -611,6 +690,11 @@ fn default_cmd_type() -> &'static str {
     } else {
         "Shell"
     }
+}
+
+/// Normalize newlines for Windows ConPTY (cmd/PowerShell expect CRLF).
+fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
+    text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
 }
 
 #[derive(Debug)]

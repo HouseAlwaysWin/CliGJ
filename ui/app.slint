@@ -38,6 +38,7 @@ export component AppWindow inherits Window {
     callback prompt-history-next;
     callback prompt-control-sequence(string);
     callback toggle-raw-input-requested;
+    callback inject-file-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
     callback rename-commit(int, string);
@@ -130,6 +131,9 @@ export component AppWindow inherits Window {
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();
+                        }
+                        inject-file-requested => {
+                            root.inject-file-requested();
                         }
                     }
                 }

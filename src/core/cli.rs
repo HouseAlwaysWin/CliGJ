@@ -1,9 +1,15 @@
+use std::path::PathBuf;
+
 use clap::{Parser, Subcommand};
 
 #[derive(Parser, Debug)]
 #[command(name = "CliGJ")]
 #[command(about = "CliGJ core engine")]
 pub struct Cli {
+    /// After the window opens, read this UTF-8 file and write its bytes to the active terminal (ConPTY on Windows).
+    #[arg(long, value_name = "PATH")]
+    pub inject_file: Option<PathBuf>,
+
     #[command(subcommand)]
     pub command: Option<Commands>,
 }
@@ -44,8 +50,4 @@ pub enum ConfigCommand {
         key: String,
         value: String,
     },
-}
-
-pub fn has_cli_args() -> bool {
-    std::env::args_os().nth(1).is_some()
 }

@@ -17,11 +17,6 @@ async fn main() {
 }
 
 async fn run() -> Result<()> {
-    if !crate::core::cli::has_cli_args() {
-        gui::run_gui();
-        return Ok(());
-    }
-
     let cli = Cli::parse();
     dispatch(cli).await
 }
@@ -61,7 +56,7 @@ async fn dispatch(cli: Cli) -> Result<()> {
                 }
             }
         }
-        None => gui::run_gui(),
+        None => gui::run_gui(cli.inject_file),
     }
 
     Ok(())
