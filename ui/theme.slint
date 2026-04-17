@@ -1,4 +1,7 @@
 export global AppTheme {
+    /// Monospace stack for terminal + pickers. Cascadia ships with Windows Terminal / VS; falls back via Slint/OS if missing.
+    in property <string> terminal_font_family: "Cascadia Code";
+
     in property <color> bg: #0a0a0f;
     in property <color> panel: #14141c;
     in property <color> panel_alt: #1b1b24;

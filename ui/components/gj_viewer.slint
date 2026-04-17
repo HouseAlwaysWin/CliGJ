@@ -47,6 +47,7 @@ export component GjViewer inherits Rectangle {
         read-only: true;
         wrap: no-wrap;
         font-size: 13px;
+        font-family: AppTheme.terminal_font_family;
     }
 
     // VT colors resolved in Rust (wezterm-term + ColorPalette).
@@ -79,7 +80,7 @@ export component GjViewer inherits Rectangle {
                         text: span.text;
                         color: span.fg;
                         font-size: 13px;
-                        font-family: "Consolas";
+                        font-family: AppTheme.terminal_font_family;
                         vertical-alignment: center;
                         horizontal-alignment: left;
                     }
