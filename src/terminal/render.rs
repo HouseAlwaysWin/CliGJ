@@ -11,7 +11,7 @@ pub struct ColoredSpan {
     pub bg: [u8; 3],
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct ColoredLine {
     /// Physically empty row (no glyphs). Keep out of layout so a cursor on the next row doesn't sit "one line down".
     pub blank: bool,

@@ -51,9 +51,12 @@ pub struct ConptySpawn {
 
 pub struct TerminalRender {
     pub text: String,
-    /// Per-screen-line spans with ANSI-resolved colors (fg + bg).
+    /// ONLY lines that changed (matches changed_indices length).
     pub lines: Vec<ColoredLine>,
+    pub full_len: usize,
     pub filled: bool,
+    /// Indices of lines that changed since last render (for downstream diff).
+    pub changed_indices: Vec<usize>,
 }
 
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
@@ -207,28 +210,47 @@ fn terminal_render_from_collapsed_cached(
     palette: &ColorPalette,
     cache: &mut Vec<(u64, ColoredLine)>,
 ) -> TerminalRender {
-    let mut lines = Vec::with_capacity(collapsed.len());
-    for (i, line) in collapsed.iter().enumerate() {
-        let fp = line_fingerprint_raw(line);
-        if i < cache.len() && cache[i].0 == fp {
-            // 行內容未變化 → 直接 clone 快取
-            lines.push(cache[i].1.clone());
-        } else {
-            // 行內容有變化 → 重新建立 spans
-            lines.push(line_to_colored_spans(line, palette));
+    let mut changed_indices = Vec::new();
+    let new_len = collapsed.len();
+    let old_len = cache.len();
+
+    // 1. 處理共同範圍內有變化的行
+    let common = old_len.min(new_len);
+    for i in 0..common {
+        let fp = line_fingerprint_raw(collapsed[i]);
+        if cache[i].0 != fp {
+            let built = line_to_colored_spans(collapsed[i], palette);
+            cache[i] = (fp, built);
+            changed_indices.push(i);
         }
     }
-    // 更新快取
-    cache.clear();
-    cache.reserve(lines.len());
-    for (i, line) in collapsed.iter().enumerate() {
-        let fp = line_fingerprint_raw(line);
-        cache.push((fp, lines[i].clone()));
+
+    // 2. 處理長度變化
+    if new_len > old_len {
+        for (i, line) in collapsed.iter().enumerate().skip(old_len) {
+            let fp = line_fingerprint_raw(line);
+            let built = line_to_colored_spans(line, palette);
+            cache.push((fp, built));
+            changed_indices.push(i);
+        }
+    } else if new_len < old_len {
+        cache.truncate(new_len);
+        // 縮短時，UI 執行緒需要知道長度變了，但這裡我們透過 full_len 傳達。
+        // changed_indices 僅用於標記內容有變的「現存」行。
     }
+
+    // 3. 僅收集有變動的行進行傳輸（clone）
+    let changed_lines: Vec<ColoredLine> = changed_indices
+        .iter()
+        .map(|&i| cache[i].1.clone())
+        .collect();
+
     TerminalRender {
         text: String::new(),
-        lines,
+        lines: changed_lines,
+        full_len: new_len,
         filled: total_scrollback_rows > term_screen_rows,
+        changed_indices,
     }
 }
 

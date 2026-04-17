@@ -129,8 +129,10 @@ impl TabState {
                             tab_id,
                             text: render.text,
                             lines: render.lines,
+                            full_len: render.full_len,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
+                            changed_indices: render.changed_indices,
                         });
                     });
                     me.conpty = Some(spawn.session);
@@ -180,6 +182,9 @@ pub struct TerminalChunk {
     pub(crate) tab_id: u64,
     pub(crate) text: String,
     pub(crate) lines: Vec<ColoredLine>,
+    pub(crate) full_len: usize,
     pub(crate) replace: bool,
     pub(crate) set_auto_scroll: Option<bool>,
+    /// Which line indices changed (from reader thread diff); empty = treat all as changed.
+    pub(crate) changed_indices: Vec<usize>,
 }

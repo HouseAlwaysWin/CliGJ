@@ -1,9 +1,7 @@
 //! Slint timers/dispatchers: terminal stream, composer sync, startup injection.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet, VecDeque};
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
+use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -25,6 +23,9 @@ struct PendingTabUpdate {
     set_auto_scroll: Option<bool>,
     replace_text: Option<String>,
     replace_lines: Option<Vec<ColoredLine>>,
+    full_len: Option<usize>,
+    /// Changed line indices from reader thread; empty = unknown, diff all.
+    changed_indices: Vec<usize>,
     append_text: String,
 }
 
@@ -35,9 +36,29 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     }
 
     if chunk.replace {
-        let lines = chunk.lines;
-        let keep_text = lines.is_empty();
-        entry.replace_lines = Some(lines);
+        let mut lines = chunk.lines;
+        let indices = chunk.changed_indices;
+        
+        if let Some(existing_lines) = entry.replace_lines.as_mut() {
+            // 合併邏輯：將新變動的行插入到現有的待處理清單中
+            let existing_indices = &mut entry.changed_indices;
+            for (i, &new_idx) in indices.iter().enumerate() {
+                if let Some(pos) = existing_indices.iter().position(|&x| x == new_idx) {
+                    // 已存在該索引的變動，更新它
+                    existing_lines[pos] = std::mem::take(&mut lines[i]);
+                } else {
+                    // 新的變動索引
+                    existing_indices.push(new_idx);
+                    existing_lines.push(std::mem::take(&mut lines[i]));
+                }
+            }
+        } else {
+            entry.replace_lines = Some(lines);
+            entry.changed_indices = indices;
+        }
+        
+        entry.full_len = Some(chunk.full_len);
+        let keep_text = entry.replace_lines.as_ref().is_some_and(|l| l.is_empty()) && entry.changed_indices.is_empty();
         entry.replace_text = if keep_text { Some(chunk.text) } else { None };
         entry.append_text.clear();
         return;
@@ -48,19 +69,6 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     } else {
         entry.append_text.push_str(&chunk.text);
     }
-}
-
-/// ColoredLine fingerprint (same as ui_sync::line_fingerprint but usable here).
-fn colored_line_fingerprint(line: &ColoredLine) -> u64 {
-    let mut h = DefaultHasher::new();
-    line.blank.hash(&mut h);
-    line.spans.len().hash(&mut h);
-    for span in &line.spans {
-        span.text.hash(&mut h);
-        span.fg.hash(&mut h);
-        span.bg.hash(&mut h);
-    }
-    h.finish()
 }
 
 fn apply_pending_updates(
@@ -84,50 +92,55 @@ fn apply_pending_updates(
         }
 
         let mut replaced_with_vt_lines = false;
-        if let Some(new_lines) = update.replace_lines {
-            replaced_with_vt_lines = !new_lines.is_empty();
+        if let Some(mut new_lines) = update.replace_lines {
+            let full_len = update.full_len.unwrap_or(0);
+            replaced_with_vt_lines = full_len > 0;
             if replaced_with_vt_lines {
-                // Per-line diff: 只替換有變化的行，避免全量重建
                 let old_len = tab.terminal_lines.len();
-                let new_len = new_lines.len();
-                let mut dirty_indices: HashSet<usize> = HashSet::new();
 
-                // 比對共同範圍內的行
-                let common = old_len.min(new_len);
-                for i in 0..common {
-                    let old_fp = colored_line_fingerprint(&tab.terminal_lines[i]);
-                    let new_fp = colored_line_fingerprint(&new_lines[i]);
-                    if old_fp != new_fp {
-                        tab.terminal_lines[i] = new_lines[i].clone();
-                        // 清除舊的 model cache，讓 sync_terminal_model_cache_range 重建
-                        tab.terminal_model_rows.remove(&i);
-                        tab.terminal_model_hashes.remove(&i);
-                        dirty_indices.insert(i);
+                // 處理長度變化
+                if full_len > old_len {
+                    // 擴展
+                    tab.terminal_lines.resize(full_len, ColoredLine::default());
+                    for i in old_len..full_len {
+                        tab.terminal_model_dirty.insert(i);
+                    }
+                } else if full_len < old_len {
+                    // 縮減
+                    tab.terminal_lines.truncate(full_len);
+                    tab.terminal_model_rows.retain(|&k, _| k < full_len);
+                    tab.terminal_model_hashes.retain(|&k, _| k < full_len);
+                    tab.terminal_model_dirty.retain(|&k| k < full_len);
+                }
+
+                // 用 changed_indices 直接 swap 有變化的行
+                let indices = &update.changed_indices;
+                if indices.is_empty() && full_len == old_len && !new_lines.is_empty() {
+                    // 回退機制：如果沒有 indices 但有 lines，且長度未變，視為全量更新（舊邏輯相容性）
+                    for i in 0..full_len {
+                        if i < new_lines.len() {
+                            std::mem::swap(&mut tab.terminal_lines[i], &mut new_lines[i]);
+                            tab.terminal_model_rows.remove(&i);
+                            tab.terminal_model_hashes.remove(&i);
+                            tab.terminal_model_dirty.insert(i);
+                        }
+                    }
+                } else {
+                    // Delta 更新
+                    for (delta_idx, &real_idx) in indices.iter().enumerate() {
+                        if real_idx < full_len && delta_idx < new_lines.len() {
+                            std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[delta_idx]);
+                            tab.terminal_model_rows.remove(&real_idx);
+                            tab.terminal_model_hashes.remove(&real_idx);
+                            tab.terminal_model_dirty.insert(real_idx);
+                        }
                     }
                 }
 
-                if new_len > old_len {
-                    // 新增的行
-                    for i in old_len..new_len {
-                        tab.terminal_lines.push(new_lines[i].clone());
-                        dirty_indices.insert(i);
-                    }
-                } else if new_len < old_len {
-                    // 移除多餘的行
-                    tab.terminal_lines.truncate(new_len);
-                    tab.terminal_model_rows.retain(|&k, _| k < new_len);
-                    tab.terminal_model_hashes.retain(|&k, _| k < new_len);
-                    // 縮短時標記所有行 dirty（因為 model 索引可能變了）
-                    for i in 0..new_len {
-                        dirty_indices.insert(i);
-                    }
-                }
-
-                tab.terminal_model_dirty.extend(&dirty_indices);
                 tab.terminal_text.clear();
-            } else {
-                // 空 lines → fallback text 模式
-                tab.terminal_lines = new_lines;
+            } else if update.full_len.is_some() {
+                // full_len 為 0 且 replace 模式
+                tab.terminal_lines.clear();
                 tab.terminal_model_rows.clear();
                 tab.terminal_model_hashes.clear();
                 tab.terminal_model_dirty.clear();

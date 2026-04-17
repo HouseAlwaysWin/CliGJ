@@ -101,8 +101,10 @@ impl GuiState {
                             tab_id,
                             text: render.text,
                             lines: render.lines,
+                            full_len: render.full_len,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
+                            changed_indices: render.changed_indices,
                         });
                     });
                     self.tabs[self.current].conpty = Some(spawn.session);

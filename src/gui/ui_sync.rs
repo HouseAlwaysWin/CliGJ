@@ -112,23 +112,35 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
         changed = !tab.terminal_model_rows.is_empty() || !tab.terminal_model_hashes.is_empty();
         tab.terminal_model_rows.clear();
         tab.terminal_model_hashes.clear();
+        tab.terminal_model_dirty.clear();
         return changed;
     }
     let first = first.min(n - 1);
     let last = last.min(n - 1);
-    if first > last {
-        return changed;
-    }
+    
     for idx in first..=last {
+        // 如果該行已知為 dirty，或快取中不存在，則必須重建
+        let needs_rebuild = tab.terminal_model_dirty.contains(&idx) 
+            || !tab.terminal_model_hashes.contains_key(&idx);
+            
+        if !needs_rebuild {
+            continue;
+        }
+
         let line = &tab.terminal_lines[idx];
         let fp = line_fingerprint(line);
+        
+        // 再次確認指紋，避免不必要的 UI 更新（例如 dirty 標記了但內容其實回滾到跟快取一致）
         let unchanged = tab
             .terminal_model_hashes
             .get(&idx)
             .is_some_and(|cached| *cached == fp);
+            
         if unchanged {
+            tab.terminal_model_dirty.remove(&idx);
             continue;
         }
+        
         let built = build_term_line(line);
         tab.terminal_model_rows.insert(idx, built);
         tab.terminal_model_hashes.insert(idx, fp);
@@ -187,42 +199,52 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
     let model = &tab.terminal_slint_model;
     let window_len = last - first + 1;
 
-    if window_changed || model.row_count() != window_len {
-        // 視窗範圍改變 → 重建 model 內容
-        let rows: Vec<TermLine> = (first..=last)
-            .map(|idx| {
-                tab.terminal_model_rows
-                    .get(&idx)
-                    .cloned()
-                    .unwrap_or_else(empty_term_line)
-            })
-            .collect();
-
+    // 視窗範圍或總長度改變，或者是髒行需要更新
+    if window_changed || total_changed || content_changed || model.row_count() != window_len {
         if model.row_count() == window_len {
-            // 同樣長度，直接 set_row_data
-            for (model_idx, row) in rows.into_iter().enumerate() {
-                model.set_row_data(model_idx, row);
-            }
-        } else {
-            // 長度不同，重建 model
-            while model.row_count() > 0 {
-                model.remove(0);
-            }
-            for row in rows {
-                model.push(row);
-            }
-        }
-        ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
-        tab.terminal_model_dirty.clear();
-    } else if content_changed {
-        // 視窗未變，只更新 dirty 行
-        for &line_idx in &tab.terminal_model_dirty {
-            if line_idx >= first && line_idx <= last {
-                let model_idx = line_idx - first;
-                if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
-                    model.set_row_data(model_idx, row.clone());
+            // 長度一致，逐行檢查並更新（比對索引避免全量 set_row_data）
+            for model_idx in 0..window_len {
+                let line_idx = first + model_idx;
+                let needs_update = window_changed || tab.terminal_model_dirty.contains(&line_idx);
+                
+                if needs_update {
+                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
+                        model.set_row_data(model_idx, row.clone());
+                    }
                 }
             }
+        } else {
+            // 長度不一致，執行最小化增減
+            let current_count = model.row_count();
+            if window_len > current_count {
+                // 需要增加行
+                for model_idx in 0..current_count {
+                    let line_idx = first + model_idx;
+                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
+                        model.set_row_data(model_idx, row.clone());
+                    }
+                }
+                for model_idx in current_count..window_len {
+                    let line_idx = first + model_idx;
+                    let row = tab.terminal_model_rows.get(&line_idx).cloned().unwrap_or_else(empty_term_line);
+                    model.push(row);
+                }
+            } else {
+                // 需要減少行
+                for model_idx in 0..window_len {
+                    let line_idx = first + model_idx;
+                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
+                        model.set_row_data(model_idx, row.clone());
+                    }
+                }
+                for _ in window_len..current_count {
+                    model.remove(window_len);
+                }
+            }
+        }
+        
+        if window_changed || total_changed || model.row_count() != window_len {
+            ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
         }
         tab.terminal_model_dirty.clear();
     }
