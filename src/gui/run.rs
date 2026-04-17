@@ -177,6 +177,14 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             return false;
         };
         let key_str = key.as_str();
+        if raw_tty && contains_cjk_char(key_str) {
+            let mut s = state_for_prompt_keys.borrow_mut();
+            if let Err(e) = s.toggle_raw_input_current(&ui) {
+                eprintln!("CliGJ: raw input auto-toggle (CJK): {e}");
+            }
+            // Let TextEdit handle this key so IME/CJK text lands in the UI composer.
+            return false;
+        }
         if ui.get_ws_at_picker_open() && !raw_tty {
             match key_str {
                 "UpArrow" => {
@@ -293,6 +301,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 return;
             };
             let mut s = state_for_at_sync.borrow_mut();
+            auto_disable_raw_on_cjk_prompt(&ui, &mut s);
             sync_composer_line_to_conpty(&ui, &mut *s);
             sync_at_file_picker(&ui, &mut *s);
         },
@@ -402,4 +411,35 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
 fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
     text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
+}
+
+fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    if !s.tabs[s.current].raw_input_mode {
+        return;
+    }
+    let prompt = ui.get_ws_prompt().to_string();
+    if !contains_cjk_char(&prompt) {
+        return;
+    }
+    if let Err(e) = s.toggle_raw_input_current(ui) {
+        eprintln!("CliGJ: raw input auto-toggle (prompt CJK): {e}");
+    }
+}
+
+fn contains_cjk_char(text: &str) -> bool {
+    text.chars().any(|ch| {
+        matches!(
+            ch as u32,
+            0x3400..=0x4DBF // CJK Unified Ideographs Extension A
+                | 0x4E00..=0x9FFF // CJK Unified Ideographs
+                | 0xF900..=0xFAFF // CJK Compatibility Ideographs
+                | 0x20000..=0x2CEAF // CJK Unified Ideographs Extension B-E
+                | 0x2EBF0..=0x2EE5F // CJK Unified Ideographs Extension I
+                | 0x3000..=0x303F // CJK Symbols and Punctuation
+                | 0xFF00..=0xFFEF // Halfwidth and Fullwidth Forms
+        )
+    })
 }
