@@ -22,7 +22,7 @@ pub(crate) fn spawn_terminal_stream_timer(
 ) -> Timer {
     let app_weak = app.as_weak();
     let timer = Timer::default();
-    timer.start(slint::TimerMode::Repeated, Duration::from_millis(16), move || {
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(24), move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
@@ -36,39 +36,37 @@ pub(crate) fn spawn_terminal_stream_timer(
                 break;
             };
             processed += 1;
-            for tab in s.tabs.iter_mut() {
-                if tab.id != chunk.tab_id {
-                    continue;
-                }
-                if let Some(v) = chunk.set_auto_scroll {
-                    tab.auto_scroll = v;
-                }
-                if chunk.replace {
-                    tab.terminal_text = chunk.text.clone();
-                    tab.terminal_lines = chunk.lines.clone();
-                } else {
-                    tab.append_terminal(&chunk.text);
-                }
-                if current_id == Some(chunk.tab_id) {
-                    current_changed = true;
-                    if tab.auto_scroll {
-                        s.pending_scroll = true;
-                    }
-                }
-                break;
+            let Some(tab_idx) = s.tabs.iter().position(|t| t.id == chunk.tab_id) else {
+                continue;
+            };
+            let tab = &mut s.tabs[tab_idx];
+            if let Some(v) = chunk.set_auto_scroll {
+                tab.auto_scroll = v;
+            }
+            if chunk.replace {
+                tab.terminal_text = chunk.text;
+                tab.terminal_lines = chunk.lines;
+            } else {
+                tab.append_terminal(&chunk.text);
+            }
+            if current_id == Some(tab.id) {
+                current_changed = true;
             }
         }
 
         if current_changed {
             let current = s.current;
-            let text = s.tabs[current].terminal_text.clone();
             let auto_scroll = s.tabs[current].auto_scroll;
-            ui.set_ws_terminal_text(SharedString::from(text.as_str()));
             let tab = &mut s.tabs[current];
-            if !auto_scroll {
+            if tab.terminal_lines.is_empty() {
+                ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
+            }
+            if auto_scroll {
+                ui.invoke_ws_scroll_terminal_to_bottom();
+            } else {
                 ui.invoke_ws_scroll_terminal_to_top();
             }
-            push_terminal_view_to_ui(&ui, tab, true);
+            push_terminal_view_to_ui(&ui, tab);
         } else if s.current < s.tabs.len() {
             let st = ui.get_ws_terminal_scroll_top_px();
             let vh = ui.get_ws_terminal_viewport_height_px();
@@ -77,7 +75,7 @@ pub(crate) fn spawn_terminal_stream_timer(
             if (st - tab.last_pushed_scroll_top).abs() > 0.5
                 || (vh - tab.last_pushed_viewport_height).abs() > 0.5
             {
-                push_terminal_view_to_ui(&ui, tab, false);
+                push_terminal_view_to_ui(&ui, tab);
             }
         }
 
@@ -86,7 +84,7 @@ pub(crate) fn spawn_terminal_stream_timer(
             if s.current < s.tabs.len() {
                 let cur = s.current;
                 let tab = &mut s.tabs[cur];
-                push_terminal_view_to_ui(&ui, tab, false);
+                push_terminal_view_to_ui(&ui, tab);
             }
             s.pending_scroll = false;
         }

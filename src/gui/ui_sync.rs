@@ -94,28 +94,44 @@ fn build_term_line(line: &ColoredLine) -> TermLine {
     }
 }
 
-/// Incremental cache: only rebuild rows whose VT content changed since last sync.
-pub(crate) fn sync_terminal_model_cache(tab: &mut TabState) {
+fn empty_term_line() -> TermLine {
+    TermLine {
+        blank: true,
+        char_count: 0,
+        spans: ModelRc::new(VecModel::from(Vec::<TermSpan>::new())),
+    }
+}
+
+/// Incremental cache: only rebuild rows inside [first, last] whose VT content changed.
+pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, last: usize) {
     let n = tab.terminal_lines.len();
+    if n == 0 || first > last {
+        tab.terminal_model_rows.clear();
+        tab.terminal_model_hashes.clear();
+        return;
+    }
     if tab.terminal_model_rows.len() > n {
         tab.terminal_model_rows.truncate(n);
         tab.terminal_model_hashes.truncate(n);
+    } else if tab.terminal_model_rows.len() < n {
+        tab.terminal_model_rows.resize_with(n, empty_term_line);
+        tab.terminal_model_hashes.resize(n, u64::MAX);
     }
-    for (idx, line) in tab.terminal_lines.iter().enumerate() {
+    let first = first.min(n - 1);
+    let last = last.min(n - 1);
+    if first > last {
+        return;
+    }
+    for idx in first..=last {
+        let line = &tab.terminal_lines[idx];
         let fp = line_fingerprint(line);
-        let unchanged =
-            idx < tab.terminal_model_hashes.len() && tab.terminal_model_hashes[idx] == fp;
+        let unchanged = tab.terminal_model_hashes[idx] == fp;
         if unchanged {
             continue;
         }
         let built = build_term_line(line);
-        if idx < tab.terminal_model_rows.len() {
-            tab.terminal_model_rows[idx] = built;
-            tab.terminal_model_hashes[idx] = fp;
-        } else {
-            tab.terminal_model_rows.push(built);
-            tab.terminal_model_hashes.push(fp);
-        }
+        tab.terminal_model_rows[idx] = built;
+        tab.terminal_model_hashes[idx] = fp;
     }
 }
 
@@ -134,11 +150,7 @@ pub(crate) fn terminal_model_window(tab: &TabState, first: usize, last: usize) -
 }
 
 /// Push only the visible (+ overscan) slice into Slint; set global offset and total line count.
-pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState, force_sync: bool) {
-    if force_sync || tab.terminal_model_rows.len() != tab.terminal_lines.len() {
-        sync_terminal_model_cache(tab);
-    }
-
+pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
     let scroll_top = ui.get_ws_terminal_scroll_top_px();
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     tab.terminal_scroll_top_px = scroll_top;
@@ -162,6 +174,7 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState, force
     let last_visible = (last_visible_bottom / TERMINAL_ROW_HEIGHT_PX).ceil() as isize;
     let last = (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, n as isize - 1) as usize;
     let first = first.min(last);
+    sync_terminal_model_cache_range(tab, first, last);
 
     ui.set_ws_terminal_line_offset(first as i32);
     ui.set_ws_terminal_total_lines(n as i32);
@@ -183,7 +196,9 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.selected_context = ui.get_ws_selected_context();
     tab.prompt = ui.get_ws_prompt();
     tab.cmd_type = ui.get_ws_cmd_type().to_string();
-    tab.terminal_text = ui.get_ws_terminal_text().to_string();
+    if tab.terminal_lines.is_empty() {
+        tab.terminal_text = ui.get_ws_terminal_text().to_string();
+    }
     tab.auto_scroll = ui.get_ws_auto_scroll();
     tab.terminal_select_mode = ui.get_ws_terminal_select_mode();
     tab.raw_input_mode = ui.get_ws_raw_input();
@@ -193,7 +208,11 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_file_path(SharedString::from(tab.file_path.as_str()));
     ui.set_ws_has_image(tab.has_image);
     ui.set_ws_preview_image(tab.preview_image.clone());
-    ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
+    if tab.terminal_lines.is_empty() {
+        ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
+    } else {
+        ui.set_ws_terminal_text(SharedString::new());
+    }
     ui.set_ws_auto_scroll(tab.auto_scroll);
     ui.set_ws_terminal_select_mode(tab.terminal_select_mode);
 
@@ -209,11 +228,10 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
 
-    sync_terminal_model_cache(tab);
     let n = tab.terminal_lines.len();
     ui.set_ws_terminal_total_lines(n as i32);
     if !tab.auto_scroll {
         ui.invoke_ws_scroll_terminal_to_top();
     }
-    push_terminal_view_to_ui(ui, tab, false);
+    push_terminal_view_to_ui(ui, tab);
 }
