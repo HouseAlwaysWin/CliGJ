@@ -48,6 +48,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         workspace_file_cache: Vec::new(),
         workspace_file_cache_root: None,
         at_picker_query_snapshot: String::new(),
+        at_picker_open_snapshot: false,
+        timer_prompt_snapshot: None,
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
@@ -139,6 +141,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             return;
         };
         let mut s = state_for_tab.borrow_mut();
+        s.timer_prompt_snapshot = None;
         if let Err(e) = s.switch_tab(new_index as usize, &ui) {
             eprintln!("CliGJ: tab switch: {e}");
         }
@@ -407,15 +410,37 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let timer_at = Timer::default();
     timer_at.start(
         slint::TimerMode::Repeated,
-        Duration::from_millis(120),
+        Duration::from_millis(40),
         move || {
             let Some(ui) = app_weak_atsync.upgrade() else {
                 return;
             };
             let mut s = state_for_at_sync.borrow_mut();
+            if s.current >= s.tabs.len() {
+                return;
+            }
+            // Raw TTY: skip prompt snapshot + composer/@ sync (they no-op anyway) to avoid
+            // cloning the prompt string on every timer tick while typing.
+            if ui.get_ws_raw_input() {
+                auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+                return;
+            }
+            let prompt_now = ui.get_ws_prompt().to_string();
+            let raw = ui.get_ws_raw_input();
+            let key = (s.current, prompt_now, raw);
+            if s.timer_prompt_snapshot.as_ref() == Some(&key) {
+                return;
+            }
             auto_disable_raw_on_cjk_prompt(&ui, &mut s);
             sync_composer_line_to_conpty(&ui, &mut *s);
             sync_at_file_picker(&ui, &mut *s);
+            if s.current < s.tabs.len() {
+                s.timer_prompt_snapshot = Some((
+                    s.current,
+                    ui.get_ws_prompt().to_string(),
+                    ui.get_ws_raw_input(),
+                ));
+            }
         },
     );
 

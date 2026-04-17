@@ -130,6 +130,9 @@ pub struct GuiState {
     pub(crate) workspace_file_cache: Vec<String>,
     pub(crate) workspace_file_cache_root: Option<PathBuf>,
     pub(crate) at_picker_query_snapshot: String,
+    pub(crate) at_picker_open_snapshot: bool,
+    /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
+    pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
 }
 
 #[derive(Debug)]

@@ -144,11 +144,6 @@ export component GjPromptDropZone inherits Rectangle {
                         : "Plan, Build, / — 輸入 @ 搜尋並插入工作區檔案（關鍵字篩選）— File 按鈕可注入檔";
                     font-size: 13px;
                     wrap: word-wrap;
-                    key-pressed(event) => {
-                        root.prompt-key-route(root.raw-input-enabled, pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
-                            ? accept
-                            : reject
-                    }
                 }
 
                 HorizontalLayout {

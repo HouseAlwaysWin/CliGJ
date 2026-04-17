@@ -81,11 +81,24 @@ export component AppWindow inherits Window {
         + (event.modifiers.meta ? 8 : 0)
     }
 
+    /// Keys that must reach Rust (`route_prompt_key`) — not plain TextEdit insertion.
+    /// Note: Enter is `"Return"` here (see `LogicalKey.tty_text`), not `"\n"`.
+    function composer_needs_rust_key(t: string) -> bool {
+        t == "Return" || t == "Tab" || t == "UpArrow" || t == "DownArrow"
+    }
+
     // Global key capture: more reliable than TextEdit key handlers on Windows.
     root_keys := FocusScope {
         focus-on-click: true;
         focus-on-tab-navigation: true;
         capture-key-pressed(event) => {
+            let t = LogicalKey.tty_text(event);
+            let m = ws_pty_mod(event);
+            // Fast path: normal typing stays in TextEdit, avoid Rust callback on every keystroke.
+            if (!root.ws-raw-input && !root.ws-at-picker-open && m == 0
+                    && t != "" && t != "\n" && !composer_needs_rust_key(t)) {
+                return reject;
+            }
             root.prompt-key-route(root.ws-raw-input, ws_pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
                 ? accept
                 : reject

@@ -2,7 +2,6 @@
 
 use super::slint_ui::AppWindow;
 use super::state::GuiState;
-use super::ui_sync::tab_update_from_ui;
 
 pub(crate) fn diff_composer_to_conpty(prev: &str, cur: &str) -> Vec<u8> {
     if prev == cur {
@@ -42,11 +41,10 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
             s.tabs[s.current].raw_input_mode = true;
             return;
         }
-        tab_update_from_ui(&mut s.tabs[s.current], ui);
         let tab = &mut s.tabs[s.current];
-        if tab.raw_input_mode {
-            return;
-        }
+        tab.raw_input_mode = false;
+        // Only mirror prompt — avoid `tab_update_from_ui` here (it reads preview_image etc. every tick).
+        tab.prompt = ui.get_ws_prompt();
         let Some(session) = tab.conpty.as_mut() else {
             return;
         };

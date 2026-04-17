@@ -13,12 +13,14 @@ use super::ui_sync::tab_update_from_ui;
 pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
     if ui.get_ws_raw_input() {
         ui.set_ws_at_picker_open(false);
+        s.at_picker_open_snapshot = false;
         return;
     }
     let prompt = ui.get_ws_prompt().to_string();
     if !prompt.contains('@') {
         ui.set_ws_at_picker_open(false);
         s.at_picker_query_snapshot.clear();
+        s.at_picker_open_snapshot = false;
         return;
     }
     let query = prompt
@@ -28,13 +30,18 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         .to_string();
     let tab = &s.tabs[s.current];
     let root = workspace_root_for_tab(tab);
-    if s.workspace_file_cache_root.as_ref() != Some(&root) {
+    let root_changed = s.workspace_file_cache_root.as_ref() != Some(&root);
+    if root_changed {
         s.workspace_file_cache = workspace_files::scan_workspace_files(&root);
         s.workspace_file_cache_root = Some(root.clone());
     }
-    if s.at_picker_query_snapshot != query {
+    let query_changed = s.at_picker_query_snapshot != query;
+    if query_changed {
         s.at_picker_query_snapshot = query.clone();
         ui.set_ws_at_selected(0);
+    }
+    if !root_changed && !query_changed && s.at_picker_open_snapshot && ui.get_ws_at_picker_open() {
+        return;
     }
     let choices = workspace_files::filter_paths(
         &s.workspace_file_cache,
@@ -64,6 +71,7 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         total_in_tree
     );
     ui.set_ws_workspace_root_label(SharedString::from(label.as_str()));
+    s.at_picker_open_snapshot = true;
 }
 
 pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize) {

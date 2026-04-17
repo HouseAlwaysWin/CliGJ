@@ -11,6 +11,19 @@ pub(crate) fn rgb_color(rgb: [u8; 3]) -> Color {
     Color::from_rgb_u8(rgb[0], rgb[1], rgb[2])
 }
 
+/// `AppTheme.bg` in `theme.slint` (#0a0a0f). Map ANSI default bg to this so short lines do not
+/// show as darker strips than the padded terminal area.
+fn term_bg_for_ui(bg: [u8; 3]) -> Color {
+    const APP_BG: [u8; 3] = [10, 10, 15];
+    const TERM_DEFAULTS: &[[u8; 3]] = &[[0, 0, 0], [18, 18, 18]];
+    let rgb = if TERM_DEFAULTS.contains(&bg) {
+        APP_BG
+    } else {
+        bg
+    };
+    rgb_color(rgb)
+}
+
 #[allow(dead_code)]
 pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
     let rows: Vec<TermLine> = lines
@@ -22,7 +35,7 @@ pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine>
                 .map(|s| TermSpan {
                     text: SharedString::from(s.text.as_str()),
                     fg: rgb_color(s.fg),
-                    bg: rgb_color(s.bg),
+                    bg: term_bg_for_ui(s.bg),
                 })
                 .collect();
             let char_count: i32 = line

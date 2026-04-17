@@ -9,8 +9,8 @@ export component GjViewer inherits Rectangle {
     in property <bool> selection-mode: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
-    /// Monospace cell width (must match terminal font metrics approximately).
-    private property <length> char-width: 8px;
+    /// Monospace cell width (approx. 13px Cascadia Code; tune if selection drifts).
+    private property <length> char-width: 7.8px;
     private property <length> stripe-width: 3px;
     callback selection-committed(int, int, int, int);
     private property <length> terminal-left-inset: 8px;
@@ -197,7 +197,8 @@ export component GjViewer inherits Rectangle {
                     horizontal-stretch: 1;
                     height: root.row-height;
                     clip: true;
-                    background: #00000000;
+                    // Full row fill so text spans do not leave grey strips beside short lines.
+                    background: AppTheme.bg;
 
                     property <int> hl0: root.line_h0(idx, line.char-count);
                     property <int> hl1: root.line_h1(idx, line.char-count);
@@ -229,7 +230,8 @@ export component GjViewer inherits Rectangle {
                         y: 0px;
                         width: (hl1 - hl0 + 1) * root.char-width;
                         height: root.row-height;
-                        background: #3a6ea580;
+                        // Semi-transparent fill over text (restores readable selection vs outline-only).
+                        background: #55a8e8a0;
                     }
                 }
             }
@@ -256,7 +258,8 @@ export component GjViewer inherits Rectangle {
             }
         }
         scroll-event(event) => {
-            let next = sv.viewport-y - event.delta-y - event.delta-x;
+            // Natural wheel: up -> move toward top (viewport-y increases toward 0).
+            let next = sv.viewport-y + event.delta-y;
             let max-y = min(0px, sv.height - sv.viewport-height);
             sv.viewport-y = max(max-y, min(0px, next));
             return accept;
