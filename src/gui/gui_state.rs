@@ -67,7 +67,7 @@ impl GuiState {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
-        load_tab_to_ui(ui, &self.tabs[new_index]);
+        load_tab_to_ui(ui, &mut self.tabs[new_index]);
         Ok(())
     }
 
@@ -85,7 +85,7 @@ impl GuiState {
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
         sync_tab_count(ui, self.tabs.len());
-        load_tab_to_ui(ui, &self.tabs[new_index]);
+        load_tab_to_ui(ui, &mut self.tabs[new_index]);
         Ok(())
     }
 
@@ -125,7 +125,7 @@ impl GuiState {
         }
 
         ui.set_ws_cmd_type(SharedString::from(new_cmd_type));
-        load_tab_to_ui(ui, &self.tabs[self.current]);
+        load_tab_to_ui(ui, &mut self.tabs[self.current]);
         Ok(())
     }
 
@@ -304,7 +304,7 @@ impl GuiState {
         self.current = new_current;
         ui.set_current_tab(new_current as i32);
         sync_tab_count(ui, self.tabs.len());
-        load_tab_to_ui(ui, &self.tabs[new_current]);
+        load_tab_to_ui(ui, &mut self.tabs[new_current]);
         Ok(())
     }
 
@@ -334,7 +334,7 @@ impl GuiState {
 
         ui.set_current_tab(self.current as i32);
         sync_tab_count(ui, self.tabs.len());
-        load_tab_to_ui(ui, &self.tabs[self.current]);
+        load_tab_to_ui(ui, &mut self.tabs[self.current]);
         Ok(())
     }
 }

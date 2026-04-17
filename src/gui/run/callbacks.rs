@@ -263,7 +263,7 @@ fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         }
         s.tabs[current].prompt_picked_files_abs.remove(idx);
-        load_tab_to_ui(&ui, &s.tabs[current]);
+        load_tab_to_ui(&ui, &mut s.tabs[current]);
     });
 
     let st_clear = Rc::clone(&state);
@@ -278,7 +278,7 @@ fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         let current = s.current;
         s.tabs[current].prompt_picked_files_abs.clear();
-        load_tab_to_ui(&ui, &s.tabs[current]);
+        load_tab_to_ui(&ui, &mut s.tabs[current]);
     });
 }
 

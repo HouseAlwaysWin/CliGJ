@@ -22,6 +22,8 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
     in-out property <[TermLine]> ws-terminal-lines: [];
+    in-out property <int> ws-terminal-line-offset: 0;
+    in-out property <int> ws-terminal-total-lines: 0;
     in-out property <bool> ws-auto-scroll: false;
     in-out property <bool> ws-terminal-select-mode: false;
     in-out property <bool> ws-rename-open: false;
@@ -149,6 +151,8 @@ export component AppWindow inherits Window {
                         code-lines <=> root.ws-code-lines;
                         terminal-text <=> root.ws-terminal-text;
                         terminal-lines <=> root.ws-terminal-lines;
+                        terminal-line-offset <=> root.ws-terminal-line-offset;
+                        terminal-total-lines <=> root.ws-terminal-total-lines;
                         auto-scroll <=> root.ws-auto-scroll;
                         terminal-select-mode <=> root.ws-terminal-select-mode;
                         selected-line <=> root.ws-selected-line;
@@ -291,4 +295,7 @@ export component AppWindow inherits Window {
             }
         }
     }
+
+    out property <float> ws-terminal-scroll-top-px: workspace.terminal-scroll-top-px;
+    out property <float> ws-terminal-viewport-height-px: workspace.terminal-viewport-height-px;
 }

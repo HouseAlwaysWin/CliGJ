@@ -50,7 +50,10 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
-    load_tab_to_ui(&app, &state.borrow().tabs[0]);
+    {
+        let mut s = state.borrow_mut();
+        load_tab_to_ui(&app, &mut s.tabs[0]);
+    }
 
     #[cfg(target_os = "windows")]
     register_windows_file_drop(&app, Rc::clone(&state));

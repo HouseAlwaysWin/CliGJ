@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use slint::{SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
+use super::slint_ui::TermLine;
 
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
@@ -52,6 +53,17 @@ pub struct TabState {
     pub(crate) prompt_picked_files_abs: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
+    /// Cached converted Slint rows + fingerprints to avoid rebuilding unchanged lines.
+    pub(crate) terminal_model_rows: Vec<TermLine>,
+    pub(crate) terminal_model_hashes: Vec<u64>,
+    /// Last scroll position used for terminal windowing (px, content top).
+    pub(crate) terminal_scroll_top_px: f32,
+    /// Viewport height in px (for row windowing).
+    pub(crate) terminal_view_height_px: f32,
+    /// Last scroll top pushed to Slint (for detecting user scroll without terminal output).
+    pub(crate) last_pushed_scroll_top: f32,
+    /// Last viewport height used when pushing the terminal window.
+    pub(crate) last_pushed_viewport_height: f32,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
 
@@ -80,6 +92,12 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
+            terminal_model_rows: Vec::new(),
+            terminal_model_hashes: Vec::new(),
+            terminal_scroll_top_px: 0.0,
+            terminal_view_height_px: 600.0,
+            last_pushed_scroll_top: -1.0,
+            last_pushed_viewport_height: -1.0,
             composer_pty_mirror: String::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
@@ -117,6 +135,8 @@ impl TabState {
             self.terminal_text.drain(..cut);
         }
         self.terminal_lines.clear();
+        self.terminal_model_rows.clear();
+        self.terminal_model_hashes.clear();
     }
 }
 

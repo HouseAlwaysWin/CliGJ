@@ -5,6 +5,10 @@ import { TermLine } from "../term_types.slint";
 export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
+    /// Global index of `terminal-lines[0]` in the full document.
+    in property <int> terminal-line-offset: 0;
+    /// Full document line count (for scroll extent and selection clamping).
+    in property <int> terminal-total-lines: 0;
     in property <bool> auto-scroll: false;
     in property <bool> selection-mode: false;
     in-out property <int> selected-line;
@@ -29,69 +33,78 @@ export component GjViewer inherits Rectangle {
     private property <int> n_er: root.sel_forward ? root.drag-end-row : root.drag-start-row;
     private property <int> n_ec: root.sel_forward ? root.drag-end-col : root.drag-start-col;
 
+    /// For Rust: scroll offset in px (content top), matches `TERMINAL_ROW_HEIGHT` windowing math.
+    out property <float> terminal-scroll-top-px: max(0.0, (0.0px - sv.viewport-y) / 1px);
+    out property <float> terminal-viewport-height-px: sv.height / 1px;
+
     border-width: 0px;
     background: AppTheme.bg;
 
     function clamp-row(raw: int) -> int {
-        if (root.terminal-lines.length <= 0) {
+        if (root.terminal-total-lines <= 0) {
             0
         } else {
-            min(max(raw, 0), root.terminal-lines.length - 1)
+            min(max(raw, 0), root.terminal-total-lines - 1)
         }
     }
 
+    /// Global document row from mouse Y.
     function row-from-y(mouse-y: length) -> int {
         clamp-row((mouse-y - sv.viewport-y) / root.row-height)
     }
 
-    function col-from-x(mouse-x: length, row: int) -> int {
-        let len = root.terminal-lines[row].char-count;
+    function col-from-x(mx: length, global-row: int) -> int {
+        let local = global-row - root.terminal-line-offset;
+        if (local < 0 || local >= root.terminal-lines.length) {
+            return 0;
+        }
+        let len = root.terminal-lines[local].char-count;
         if (len <= 0) {
             return 0;
         }
         let lim = len - 1;
-        let c = (mouse-x - root.stripe-width) / root.char-width;
+        let c = (mx - root.stripe-width) / root.char-width;
         min(max(c, 0), lim)
     }
 
-    function line_h0(idx: int, line-len: int) -> int {
+    function line_h0(global-idx: int, line-len: int) -> int {
         if (line-len <= 0) {
             return 0;
         }
-        if (idx < root.n_sr || idx > root.n_er) {
+        if (global-idx < root.n_sr || global-idx > root.n_er) {
             return 0;
         }
         let lim = line-len - 1;
-        if (idx == root.n_sr && idx == root.n_er) {
+        if (global-idx == root.n_sr && global-idx == root.n_er) {
             return min(max(root.n_sc, 0), lim);
         }
-        if (idx == root.n_sr) {
+        if (global-idx == root.n_sr) {
             return min(max(root.n_sc, 0), lim);
         }
         return 0;
     }
 
-    function line_h1(idx: int, line-len: int) -> int {
+    function line_h1(global-idx: int, line-len: int) -> int {
         if (line-len <= 0) {
             return 0;
         }
-        if (idx < root.n_sr || idx > root.n_er) {
+        if (global-idx < root.n_sr || global-idx > root.n_er) {
             return 0;
         }
         let lim = line-len - 1;
-        if (idx == root.n_sr && idx == root.n_er) {
+        if (global-idx == root.n_sr && global-idx == root.n_er) {
             return min(max(root.n_ec, 0), lim);
         }
-        if (idx == root.n_sr) {
+        if (global-idx == root.n_sr) {
             return lim;
         }
-        if (idx == root.n_er) {
+        if (global-idx == root.n_er) {
             return min(max(root.n_ec, 0), lim);
         }
         return lim;
     }
 
-    function line_highlight_visible(idx: int, line-len: int) -> bool {
+    function line_highlight_visible(global-idx: int, line-len: int) -> bool {
         if (!root.drag-active && !root.has-selection) {
             return false;
         }
@@ -101,14 +114,14 @@ export component GjViewer inherits Rectangle {
         if (line-len <= 0) {
             return false;
         }
-        if (idx < root.n_sr || idx > root.n_er) {
+        if (global-idx < root.n_sr || global-idx > root.n_er) {
             return false;
         }
-        return root.line_h0(idx, line-len) <= root.line_h1(idx, line-len);
+        return root.line_h0(global-idx, line-len) <= root.line_h1(global-idx, line-len);
     }
 
     function begin-selection(mx: length, my: length) {
-        if (root.terminal-lines.length <= 0) {
+        if (root.terminal-total-lines <= 0) {
             return;
         }
         let row = root.row-from-y(my);
@@ -124,7 +137,7 @@ export component GjViewer inherits Rectangle {
     }
 
     function update-selection(mx: length, my: length) {
-        if (!root.drag-active || root.terminal-lines.length <= 0) {
+        if (!root.drag-active || root.terminal-total-lines <= 0) {
             return;
         }
         let row = root.row-from-y(my);
@@ -165,14 +178,15 @@ export component GjViewer inherits Rectangle {
         width: max(0px, parent.width - root.terminal-left-inset);
         height: parent.height;
         viewport-width: parent.width;
-        viewport-height: content.preferred-height;
+        viewport-height: content.height;
 
-        content := VerticalLayout {
+        content := Rectangle {
             width: parent.width;
-            spacing: 0px;
-            alignment: start;
+            height: max(root.row-height, root.terminal-total-lines * root.row-height);
 
-            if (root.terminal-lines.length == 0) : Text {
+            if (root.terminal-total-lines == 0) : Text {
+                x: 0px;
+                y: 0px;
                 text: root.terminal-text;
                 color: AppTheme.text_muted;
                 font-size: 13px;
@@ -180,58 +194,67 @@ export component GjViewer inherits Rectangle {
                 wrap: no-wrap;
             }
 
-            for line[idx] in root.terminal-lines: HorizontalLayout {
+            for line[idx] in root.terminal-lines: Rectangle {
+                x: 0px;
+                y: (root.terminal-line-offset + idx) * root.row-height;
                 width: parent.width;
                 height: root.row-height;
-                spacing: 0px;
-                padding: 0px;
-                alignment: start;
+                background: #00000000;
 
-                Rectangle {
-                    width: root.stripe-width;
+                HorizontalLayout {
+                    width: parent.width;
                     height: root.row-height;
-                    background: #00000000;
-                }
+                    spacing: 0px;
+                    padding: 0px;
+                    alignment: start;
 
-                Rectangle {
-                    horizontal-stretch: 1;
-                    height: root.row-height;
-                    clip: true;
-                    // Full row fill so text spans do not leave grey strips beside short lines.
-                    background: AppTheme.bg;
-
-                    property <int> hl0: root.line_h0(idx, line.char-count);
-                    property <int> hl1: root.line_h1(idx, line.char-count);
-                    property <bool> hl_visible: root.line_highlight_visible(idx, line.char-count);
-
-                    HorizontalLayout {
-                        spacing: 0px;
-                        padding: 0px;
-                        alignment: start;
-
-                        for span in line.spans: Rectangle {
-                            background: span.bg;
-                            height: root.row-height;
-
-                            Text {
-                                text: span.text;
-                                color: span.fg;
-                                font-size: 13px;
-                                font-family: AppTheme.terminal_font_family;
-                                wrap: no-wrap;
-                                vertical-alignment: center;
-                                horizontal-alignment: left;
-                            }
-                        }
+                    Rectangle {
+                        width: root.stripe-width;
+                        height: root.row-height;
+                        background: #00000000;
                     }
 
-                    if (hl_visible) : Rectangle {
-                        x: hl0 * root.char-width;
-                        y: 0px;
-                        width: (hl1 - hl0 + 1) * root.char-width;
+                    Rectangle {
+                        horizontal-stretch: 1;
                         height: root.row-height;
-                        // Semi-transparent fill over text (restores readable selection vs outline-only).
-                        background: #55a8e8a0;
+                        clip: true;
+                        // Full row fill so text spans do not leave grey strips beside short lines.
+                        background: AppTheme.bg;
+
+                        property <int> gidx: root.terminal-line-offset + idx;
+                        property <int> hl0: root.line_h0(gidx, line.char-count);
+                        property <int> hl1: root.line_h1(gidx, line.char-count);
+                        property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
+
+                        HorizontalLayout {
+                            spacing: 0px;
+                            padding: 0px;
+                            alignment: start;
+
+                            for span in line.spans: Rectangle {
+                                background: span.bg;
+                                height: root.row-height;
+
+                                Text {
+                                    text: span.text;
+                                    color: span.fg;
+                                    font-size: 13px;
+                                    font-family: AppTheme.terminal_font_family;
+                                    wrap: no-wrap;
+                                    vertical-alignment: center;
+                                    horizontal-alignment: left;
+                                }
+                            }
+                        }
+
+                        if (hl_visible) : Rectangle {
+                            x: hl0 * root.char-width;
+                            y: 0px;
+                            width: (hl1 - hl0 + 1) * root.char-width;
+                            height: root.row-height;
+                            // Semi-transparent fill over text (restores readable selection vs outline-only).
+                            background: #55a8e8a0;
+                        }
                     }
                 }
             }
@@ -240,7 +263,7 @@ export component GjViewer inherits Rectangle {
 
     TouchArea {
         z: 100;
-        enabled: root.terminal-lines.length > 0;
+        enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset);

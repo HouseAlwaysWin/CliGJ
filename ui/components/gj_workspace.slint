@@ -11,6 +11,8 @@ export component GjWorkspace inherits Rectangle {
     in-out property <[string]> code-lines;
     in-out property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
+    in-out property <int> terminal-line-offset: 0;
+    in-out property <int> terminal-total-lines: 0;
     in-out property <bool> auto-scroll;
     in-out property <bool> terminal-select-mode;
     in-out property <int> selected-line;
@@ -55,6 +57,8 @@ export component GjWorkspace inherits Rectangle {
         viewer := GjViewer {
             terminal-text: root.terminal-text;
             terminal-lines <=> root.terminal-lines;
+            terminal-line-offset: root.terminal-line-offset;
+            terminal-total-lines: root.terminal-total-lines;
             auto-scroll: root.auto-scroll;
             selection-mode: root.terminal-select-mode;
             selected-line <=> root.selected-line;
@@ -113,4 +117,7 @@ export component GjWorkspace inherits Rectangle {
             }
         }
     }
+
+    out property <float> terminal-scroll-top-px: viewer.terminal-scroll-top-px;
+    out property <float> terminal-viewport-height-px: viewer.terminal-viewport-height-px;
 }

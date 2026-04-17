@@ -10,7 +10,7 @@ use slint::{ComponentHandle, SharedString, Timer};
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk};
-use crate::gui::ui_sync::colored_lines_to_model;
+use crate::gui::ui_sync::push_terminal_view_to_ui;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
@@ -60,16 +60,34 @@ pub(crate) fn spawn_terminal_stream_timer(
         }
 
         if current_changed {
-            let text = s.tabs[s.current].terminal_text.clone();
+            let current = s.current;
+            let text = s.tabs[current].terminal_text.clone();
+            let auto_scroll = s.tabs[current].auto_scroll;
             ui.set_ws_terminal_text(SharedString::from(text.as_str()));
-            ui.set_ws_terminal_lines(colored_lines_to_model(&s.tabs[s.current].terminal_lines));
-            if !s.tabs[s.current].auto_scroll {
+            let tab = &mut s.tabs[current];
+            if !auto_scroll {
                 ui.invoke_ws_scroll_terminal_to_top();
+            }
+            push_terminal_view_to_ui(&ui, tab, true);
+        } else if s.current < s.tabs.len() {
+            let st = ui.get_ws_terminal_scroll_top_px();
+            let vh = ui.get_ws_terminal_viewport_height_px();
+            let cur = s.current;
+            let tab = &mut s.tabs[cur];
+            if (st - tab.last_pushed_scroll_top).abs() > 0.5
+                || (vh - tab.last_pushed_viewport_height).abs() > 0.5
+            {
+                push_terminal_view_to_ui(&ui, tab, false);
             }
         }
 
         if s.pending_scroll {
             ui.invoke_ws_scroll_terminal_to_bottom();
+            if s.current < s.tabs.len() {
+                let cur = s.current;
+                let tab = &mut s.tabs[cur];
+                push_terminal_view_to_ui(&ui, tab, false);
+            }
             s.pending_scroll = false;
         }
     });
