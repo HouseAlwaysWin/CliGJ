@@ -29,6 +29,7 @@ export component AppWindow inherits Window {
     in-out property <int> ws-selected-line: 0;
     in-out property <string> ws-selected-context: "";
     in-out property <string> ws-prompt: "";
+    in-out property <[string]> ws-prompt-path-chips: [];
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <bool> ws-raw-input: false;
 
@@ -54,6 +55,8 @@ export component AppWindow inherits Window {
     callback rename-commit(int, string);
     callback rename-cancel;
     callback at-picker-choose(int);
+    callback prompt-chip-remove-requested(int);
+    callback prompt-chip-clear-requested;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -134,6 +137,7 @@ export component AppWindow inherits Window {
                         selected-line <=> root.ws-selected-line;
                         selected-context <=> root.ws-selected-context;
                         prompt <=> root.ws-prompt;
+                        prompt-path-chips <=> root.ws-prompt-path-chips;
                         raw-input-enabled <=> root.ws-raw-input;
                         at-picker-open <=> root.ws-at-picker-open;
                         at-choices <=> root.ws-at-choices;
@@ -159,6 +163,12 @@ export component AppWindow inherits Window {
                         }
                         at-picker-choose(index) => {
                             root.at-picker-choose(index);
+                        }
+                        prompt-chip-remove-requested(index) => {
+                            root.prompt-chip-remove-requested(index);
+                        }
+                        prompt-chip-clear-requested => {
+                            root.prompt-chip-clear-requested();
                         }
                     }
                 }

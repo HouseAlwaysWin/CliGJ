@@ -36,6 +36,7 @@ impl GuiState {
                 }
             }
             tab.prompt = SharedString::new();
+            tab.prompt_picked_files_abs.clear();
         }
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -121,7 +122,15 @@ impl GuiState {
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         let tab = &mut self.tabs[self.current];
-        let command_line = tab.prompt.to_string();
+        let mut command_line = tab.prompt.to_string();
+        for path in &tab.prompt_picked_files_abs {
+            if !path.is_empty() && !command_line.contains(path) {
+                if !command_line.trim().is_empty() {
+                    command_line.push(' ');
+                }
+                command_line.push_str(path);
+            }
+        }
         let command_line = command_line.trim().to_string();
         if command_line.is_empty() {
             return Ok(());
@@ -162,6 +171,7 @@ impl GuiState {
         }
 
         tab.prompt = SharedString::new();
+        tab.prompt_picked_files_abs.clear();
         tab.composer_pty_mirror.clear();
         load_tab_to_ui(ui, tab);
         Ok(())

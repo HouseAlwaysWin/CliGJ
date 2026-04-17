@@ -290,6 +290,43 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         commit_at_file_pick(&ui, &mut *s, index as usize);
     });
 
+    let state_for_chip_remove = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_chip_remove_requested(move |index| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if index < 0 {
+            return;
+        }
+        let mut s = state_for_chip_remove.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let idx = index as usize;
+        if idx >= s.tabs[current].prompt_picked_files_abs.len() {
+            return;
+        }
+        s.tabs[current].prompt_picked_files_abs.remove(idx);
+        load_tab_to_ui(&ui, &s.tabs[current]);
+    });
+
+    let state_for_chip_clear = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_chip_clear_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = state_for_chip_clear.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        s.tabs[current].prompt_picked_files_abs.clear();
+        load_tab_to_ui(&ui, &s.tabs[current]);
+    });
+
     let state_for_at_sync = Rc::clone(&state);
     let app_weak_atsync = app.as_weak();
     let timer_at = Timer::default();

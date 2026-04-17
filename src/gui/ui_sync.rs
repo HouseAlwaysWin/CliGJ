@@ -1,6 +1,7 @@
 use slint::{Color, ModelRc, SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
+use crate::workspace_files;
 
 use super::slint_ui::AppWindow;
 use super::state::TabState;
@@ -63,6 +64,12 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_selected_line(tab.selected_line);
     ui.set_ws_selected_context(tab.selected_context.clone());
     ui.set_ws_prompt(tab.prompt.clone());
+    let chips: Vec<SharedString> = tab
+        .prompt_picked_files_abs
+        .iter()
+        .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
+        .collect();
+    ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
 }

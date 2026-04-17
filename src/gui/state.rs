@@ -47,6 +47,8 @@ pub struct TabState {
     pub(crate) command_history: Vec<String>,
     pub(crate) history_cursor: Option<usize>,
     pub(crate) history_draft: String,
+    /// Absolute paths selected from `@` picker; shown as chips, appended on submit.
+    pub(crate) prompt_picked_files_abs: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
@@ -74,6 +76,7 @@ impl TabState {
             command_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
+            prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
             composer_pty_mirror: String::new(),
             #[cfg(target_os = "windows")]

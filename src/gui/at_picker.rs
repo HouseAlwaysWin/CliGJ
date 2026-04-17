@@ -77,8 +77,17 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
     };
     let prompt = ui.get_ws_prompt().to_string();
     let root = workspace_root_for_tab(&s.tabs[s.current]);
-    let new_p = workspace_files::apply_at_file_pick(&prompt, picked.as_str(), &root);
+    let (new_p, abs_path) = workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
     ui.set_ws_prompt(SharedString::from(new_p.as_str()));
+    if !s.tabs[s.current].prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
+        s.tabs[s.current].prompt_picked_files_abs.push(abs_path);
+    }
+    let chips: Vec<SharedString> = s.tabs[s.current]
+        .prompt_picked_files_abs
+        .iter()
+        .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
+        .collect();
+    ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
     ui.set_ws_at_picker_open(false);
     tab_update_from_ui(&mut s.tabs[s.current], ui);
     sync_composer_line_to_conpty(ui, s);

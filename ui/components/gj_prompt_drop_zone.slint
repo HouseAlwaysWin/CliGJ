@@ -5,6 +5,7 @@ import { LogicalKey } from "../key_labels.slint";
 /// Bottom prompt bar: input + function bar (Cursor/VSCode style).
 export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
+    in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
     in property <bool> has-image;
     in property <image> preview-image;
@@ -17,6 +18,8 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
+    callback prompt-chip-remove-requested(int);
+    callback prompt-chip-clear-requested;
 
     function pty_mod(event: KeyEvent) -> int {
         (event.modifiers.control ? 1 : 0)
@@ -51,6 +54,84 @@ export component GjPromptDropZone inherits Rectangle {
             VerticalLayout {
                 padding: 8px;
                 spacing: 4px;
+
+                if root.prompt-path-chips.length > 0 : Rectangle {
+                    min-height: 24px;
+                    max-height: 24px;
+                    background: #00000000;
+                    HorizontalLayout {
+                        height: 22px;
+                        spacing: 6px;
+
+                        for chip[idx] in root.prompt-path-chips: Rectangle {
+                            width: self.preferred-width;
+                            height: 22px;
+                            border-width: 1px;
+                            border-color: #ff3b6d;
+                            border-radius: 12px;
+                            background: #14161c;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 8px;
+
+                                Text {
+                                    text: "file";
+                                    color: #b5bcc8;
+                                    vertical-alignment: center;
+                                    font-size: 11px;
+                                }
+                                Text {
+                                    text: chip;
+                                    color: #f3f5f8;
+                                    vertical-alignment: center;
+                                    font-size: 12px;
+                                    font-weight: 600;
+                                }
+                                Text {
+                                    text: "x";
+                                    color: #ff8ca8;
+                                    vertical-alignment: center;
+                                    font-size: 11px;
+                                }
+                            }
+
+                            TouchArea {
+                                clicked => {
+                                    root.prompt-chip-remove-requested(idx);
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: self.preferred-width;
+                            height: 22px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 12px;
+                            background: #00000000;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 6px;
+                                Text {
+                                    text: "取消";
+                                    color: AppTheme.text_muted;
+                                    vertical-alignment: center;
+                                    font-size: 11px;
+                                }
+                            }
+
+                            TouchArea {
+                                clicked => {
+                                    root.prompt-chip-clear-requested();
+                                }
+                            }
+                        }
+                    }
+                }
 
                 TextEdit {
                     horizontal-stretch: 1;

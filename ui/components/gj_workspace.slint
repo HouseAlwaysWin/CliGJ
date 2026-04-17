@@ -15,6 +15,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     in-out property <string> prompt;
+    in-out property <[string]> prompt-path-chips;
     in-out property <bool> raw-input-enabled;
     in-out property <bool> at-picker-open;
     in-out property <[string]> at-choices;
@@ -27,6 +28,8 @@ export component GjWorkspace inherits Rectangle {
     callback raw-input-toggle-requested;
     callback inject-file-requested;
     callback at-picker-choose(int);
+    callback prompt-chip-remove-requested(int);
+    callback prompt-chip-clear-requested;
 
     background: AppTheme.bg;
 
@@ -68,6 +71,7 @@ export component GjWorkspace inherits Rectangle {
 
         GjPromptDropZone {
             prompt <=> root.prompt;
+            prompt-path-chips: root.prompt-path-chips;
             raw-input-enabled <=> root.raw-input-enabled;
             has-image: root.has-image;
             preview-image: root.preview-image;
@@ -89,6 +93,12 @@ export component GjWorkspace inherits Rectangle {
             }
             inject-file-requested => {
                 root.inject-file-requested();
+            }
+            prompt-chip-remove-requested(index) => {
+                root.prompt-chip-remove-requested(index);
+            }
+            prompt-chip-clear-requested => {
+                root.prompt-chip-clear-requested();
             }
         }
     }
