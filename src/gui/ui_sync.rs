@@ -1,8 +1,6 @@
-use slint::{Color, Model, ModelRc, SharedString, VecModel};
+use slint::{Color, ModelRc, SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
-use crate::terminal_v2::renderer::TerminalFrame;
-use crate::terminal_v2::TerminalRow;
 use crate::workspace_files;
 
 use super::slint_ui::AppWindow;
@@ -36,81 +34,6 @@ pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine>
     ModelRc::new(VecModel::from(rows))
 }
 
-fn term_line_from_v2_row(row: &TerminalRow) -> TermLine {
-    let mut spans: Vec<TermSpan> = Vec::new();
-    let mut text = String::new();
-    let mut cur_fg: Option<[u8; 3]> = None;
-    let mut cur_bg: Option<[u8; 3]> = None;
-    let mut has_visible = false;
-
-    for cell in &row.cells {
-        let fg = cell.fg;
-        let bg = cell.bg;
-        if !cell.ch.is_whitespace() {
-            has_visible = true;
-        }
-
-        if cur_fg == Some(fg) && cur_bg == Some(bg) {
-            text.push(cell.ch);
-            continue;
-        }
-
-        if let (Some(prev_fg), Some(prev_bg)) = (cur_fg, cur_bg) {
-            spans.push(TermSpan {
-                text: SharedString::from(text.as_str()),
-                fg: rgb_color(prev_fg),
-                bg: rgb_color(prev_bg),
-            });
-        }
-        text.clear();
-        text.push(cell.ch);
-        cur_fg = Some(fg);
-        cur_bg = Some(bg);
-    }
-
-    if let (Some(prev_fg), Some(prev_bg)) = (cur_fg, cur_bg) {
-        spans.push(TermSpan {
-            text: SharedString::from(text.as_str()),
-            fg: rgb_color(prev_fg),
-            bg: rgb_color(prev_bg),
-        });
-    }
-
-    TermLine {
-        blank: !has_visible,
-        spans: ModelRc::new(VecModel::from(spans)),
-    }
-}
-
-pub(crate) fn apply_terminal_v2_frame_to_model(tab: &mut TabState, frame: &TerminalFrame) {
-    let model = &tab.terminal_lines_model;
-    let target_rows = frame.rows.len();
-    let current_rows = model.row_count();
-    if current_rows < target_rows {
-        for _ in current_rows..target_rows {
-            model.push(TermLine {
-                blank: true,
-                spans: ModelRc::new(VecModel::from(Vec::<TermSpan>::new())),
-            });
-        }
-    } else if current_rows > target_rows {
-        for _ in target_rows..current_rows {
-            model.remove(model.row_count() - 1);
-        }
-    }
-
-    for &row_idx in &frame.dirty_rows {
-        if row_idx >= frame.rows.len() {
-            continue;
-        }
-        model.set_row_data(row_idx, term_line_from_v2_row(&frame.rows[row_idx]));
-    }
-}
-
-pub(crate) fn terminal_lines_model_rc(tab: &TabState) -> ModelRc<TermLine> {
-    ModelRc::from(tab.terminal_lines_model.clone())
-}
-
 pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
@@ -134,7 +57,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_has_image(tab.has_image);
     ui.set_ws_preview_image(tab.preview_image.clone());
     ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
-    ui.set_ws_terminal_lines(terminal_lines_model_rc(tab));
+    ui.set_ws_terminal_lines(colored_lines_to_model(&tab.terminal_lines));
     ui.set_ws_auto_scroll(tab.auto_scroll);
     ui.set_ws_terminal_select_mode(tab.terminal_select_mode);
     if !tab.auto_scroll {
