@@ -36,7 +36,7 @@ export component AppWindow inherits Window {
     callback submit-prompt;
     callback prompt-history-prev;
     callback prompt-history-next;
-    callback prompt-control-sequence(string);
+    callback prompt-pty-key(int, string);
     callback toggle-raw-input-requested;
     callback inject-file-requested;
     callback rename-tab-requested(int);
@@ -126,8 +126,8 @@ export component AppWindow inherits Window {
                         history-next-requested => {
                             root.prompt-history-next();
                         }
-                        control-sequence-requested(seq) => {
-                            root.prompt-control-sequence(seq);
+                        pty-key-requested(mod, key) => {
+                            root.prompt-pty-key(mod, key);
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();

@@ -7,6 +7,8 @@ use std::time::Duration;
 
 use slint::{Model, ModelRc, SharedString, Timer, VecModel};
 
+use crate::terminal::key_encoding;
+
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
 
@@ -164,13 +166,18 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         }
     });
 
-    let state_for_ctrl = Rc::clone(&state);
+    let state_for_pty = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_prompt_control_sequence(move |seq| {
-        let Some(ui) = app_weak.upgrade() else { return; };
-        let mut s = state_for_ctrl.borrow_mut();
-        if let Err(e) = s.send_control_sequence_current(&ui, seq.as_str()) {
-            eprintln!("CliGJ: control sequence: {e}");
+    app.on_prompt_pty_key(move |mod_mask, key| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(bytes) = key_encoding::encode_for_pty(mod_mask as u32, key.as_str()) else {
+            return;
+        };
+        let mut s = state_for_pty.borrow_mut();
+        if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
+            eprintln!("CliGJ: pty key: {e}");
         }
     });
 
@@ -369,6 +376,10 @@ impl GuiState {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         let tab = &mut self.tabs[self.current];
         tab.raw_input_mode = !tab.raw_input_mode;
+        // TTY mode: keys go straight to ConPTY; drop composer text so it is not confused with the shell.
+        if tab.raw_input_mode {
+            tab.prompt = SharedString::new();
+        }
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -536,25 +547,6 @@ impl GuiState {
             tab.history_draft.clear();
         }
         load_tab_to_ui(ui, tab);
-        Ok(())
-    }
-
-    fn send_control_sequence_current(&mut self, ui: &AppWindow, seq: &str) -> Result<(), &'static str> {
-        if self.current >= self.tabs.len() {
-            return Err("invalid current tab index");
-        }
-        tab_update_from_ui(&mut self.tabs[self.current], ui);
-        let tab = &mut self.tabs[self.current];
-
-        #[cfg(target_os = "windows")]
-        {
-            if let Some(session) = tab.conpty.as_mut() {
-                let _ = session.writer.write_all(seq.as_bytes());
-                let _ = session.writer.flush();
-                return Ok(());
-            }
-        }
-
         Ok(())
     }
 

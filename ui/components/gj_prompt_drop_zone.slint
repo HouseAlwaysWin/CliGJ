@@ -11,9 +11,17 @@ export component GjPromptDropZone inherits Rectangle {
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
-    callback control-sequence-requested(string);
+    /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
+    callback pty-key-requested(int, string);
     callback raw-input-toggle-requested;
     callback inject-file-requested;
+
+    function pty_mod(event: KeyEvent) -> int {
+        (event.modifiers.control ? 1 : 0)
+        + (event.modifiers.shift ? 2 : 0)
+        + (event.modifiers.alt ? 4 : 0)
+        + (event.modifiers.meta ? 8 : 0)
+    }
 
     horizontal-stretch: 1;
     min-height: 116px;
@@ -46,7 +54,9 @@ export component GjPromptDropZone inherits Rectangle {
                     horizontal-stretch: 1;
                     min-height: 68px;
                     text <=> root.prompt;
-                    placeholder-text: "Plan, Build, / for commands, @ for context";
+                    placeholder-text: root.raw-input-enabled
+                        ? "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
+                        : "Plan, Build, / for commands, @ for context — File / --inject-file for GUI inject";
                     font-size: 13px;
                     wrap: word-wrap;
                     key-pressed(event) => {
@@ -54,51 +64,18 @@ export component GjPromptDropZone inherits Rectangle {
                             root.raw-input-toggle-requested();
                             accept
                         } else if (event.modifiers.alt && event.text == Key.UpArrow) {
-                            root.control-sequence-requested("\u{001b}[A");
+                            root.pty-key-requested(pty_mod(event), "UpArrow");
                             accept
                         } else if (event.modifiers.alt && event.text == Key.DownArrow) {
-                            root.control-sequence-requested("\u{001b}[B");
+                            root.pty-key-requested(pty_mod(event), "DownArrow");
                             accept
                         } else if (event.modifiers.alt && event.text == Key.RightArrow) {
-                            root.control-sequence-requested("\u{001b}[C");
+                            root.pty-key-requested(pty_mod(event), "RightArrow");
                             accept
                         } else if (event.modifiers.alt && event.text == Key.LeftArrow) {
-                            root.control-sequence-requested("\u{001b}[D");
+                            root.pty-key-requested(pty_mod(event), "LeftArrow");
                             accept
-                        } else if (root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
-                            root.control-sequence-requested("\u{000d}");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.UpArrow) {
-                            root.control-sequence-requested("\u{001b}[A");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.DownArrow) {
-                            root.control-sequence-requested("\u{001b}[B");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.RightArrow) {
-                            root.control-sequence-requested("\u{001b}[C");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.LeftArrow) {
-                            root.control-sequence-requested("\u{001b}[D");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Home) {
-                            root.control-sequence-requested("\u{001b}[H");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.End) {
-                            root.control-sequence-requested("\u{001b}[F");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.PageUp) {
-                            root.control-sequence-requested("\u{001b}[5~");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.PageDown) {
-                            root.control-sequence-requested("\u{001b}[6~");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Delete) {
-                            root.control-sequence-requested("\u{001b}[3~");
-                            accept
-                        } else if (root.raw-input-enabled && event.text == Key.Escape) {
-                            root.control-sequence-requested("\u{001b}");
-                            accept
-                        } else if ((event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
+                        } else if (!root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}") && !event.modifiers.shift) {
                             root.submit-requested();
                             accept
                         } else if (!root.raw-input-enabled && event.text == Key.UpArrow) {
@@ -107,11 +84,50 @@ export component GjPromptDropZone inherits Rectangle {
                         } else if (!root.raw-input-enabled && event.text == Key.DownArrow) {
                             root.history-next-requested();
                             accept
+                        } else if (root.raw-input-enabled && (event.text == Key.Return || event.text == "\n" || event.text == "\u{000d}")) {
+                            root.pty-key-requested(pty_mod(event), "Return");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.UpArrow) {
+                            root.pty-key-requested(pty_mod(event), "UpArrow");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.DownArrow) {
+                            root.pty-key-requested(pty_mod(event), "DownArrow");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.RightArrow) {
+                            root.pty-key-requested(pty_mod(event), "RightArrow");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.LeftArrow) {
+                            root.pty-key-requested(pty_mod(event), "LeftArrow");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Home) {
+                            root.pty-key-requested(pty_mod(event), "Home");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.End) {
+                            root.pty-key-requested(pty_mod(event), "End");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.PageUp) {
+                            root.pty-key-requested(pty_mod(event), "PageUp");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.PageDown) {
+                            root.pty-key-requested(pty_mod(event), "PageDown");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Delete) {
+                            root.pty-key-requested(pty_mod(event), "Delete");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Escape) {
+                            root.pty-key-requested(pty_mod(event), "Escape");
+                            accept
                         } else if (event.modifiers.control && (event.text == "c" || event.text == "C")) {
-                            root.control-sequence-requested("\u{0003}");
+                            root.pty-key-requested(pty_mod(event), "c");
                             accept
                         } else if (event.text == Key.Tab) {
-                            root.control-sequence-requested("\u{0009}");
+                            root.pty-key-requested(pty_mod(event), "Tab");
+                            accept
+                        } else if (root.raw-input-enabled && event.text == Key.Backspace) {
+                            root.pty-key-requested(pty_mod(event), "Backspace");
+                            accept
+                        } else if (root.raw-input-enabled) {
+                            root.pty-key-requested(pty_mod(event), event.text);
                             accept
                         } else {
                             reject
