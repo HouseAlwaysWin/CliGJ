@@ -9,5 +9,7 @@ export struct TermSpan {
 export struct TermLine {
     // True when the PTY physical row has no visible cells (no fake row height in the viewer).
     blank: bool,
+    /// Total Unicode scalar count across spans (for monospace column hit-testing).
+    char-count: int,
     spans: [TermSpan],
 }

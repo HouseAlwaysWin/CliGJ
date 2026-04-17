@@ -4,12 +4,14 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
+use arboard::Clipboard;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel};
 #[cfg(target_os = "windows")]
 use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
 use crate::terminal::key_encoding;
 use crate::terminal::prompt_key::PromptKeyAction;
+use crate::terminal::render::ColoredLine;
 use crate::workspace_files;
 
 use super::at_picker::{commit_at_file_pick, sync_at_file_picker};
@@ -372,6 +374,34 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         load_tab_to_ui(&ui, &s.tabs[current]);
     });
 
+    let state_for_selection = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_selection_committed(move |sr, sc, er, ec| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = state_for_selection.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let selected = selected_text_from_terminal_lines(
+            &s.tabs[s.current],
+            sr,
+            sc,
+            er,
+            ec,
+        );
+        if selected.is_empty() {
+            return;
+        }
+        if let Err(e) = copy_to_clipboard(selected.as_str()) {
+            eprintln!("CliGJ: copy selection: {e}");
+        }
+        let current = s.current;
+        s.tabs[current].selected_context = SharedString::from(selected.as_str());
+        ui.set_ws_selected_context(SharedString::from(selected.as_str()));
+    });
+
     let state_for_at_sync = Rc::clone(&state);
     let app_weak_atsync = app.as_weak();
     let timer_at = Timer::default();
@@ -534,4 +564,78 @@ fn is_local_prompt_edit_key(mod_mask: u32, key: &str) -> bool {
         key,
         "Backspace" | "Delete" | "LeftArrow" | "RightArrow" | "Home" | "End"
     )
+}
+
+fn colored_line_plain_text(line: &ColoredLine) -> String {
+    line.spans.iter().fold(String::new(), |mut acc, s| {
+        acc.push_str(s.text.as_str());
+        acc
+    })
+}
+
+/// Inclusive character slice on one logical line (Unicode scalar indices, matching Slint `char-count`).
+fn slice_line_chars_inclusive(line: &ColoredLine, start: usize, end_inclusive: usize) -> String {
+    let s = colored_line_plain_text(line);
+    let chars: Vec<char> = s.chars().collect();
+    let n = chars.len();
+    if n == 0 || start > end_inclusive {
+        return String::new();
+    }
+    let start = start.min(n - 1);
+    let end_inclusive = end_inclusive.min(n - 1);
+    chars[start..=end_inclusive].iter().collect()
+}
+
+fn slice_line_from_char(line: &ColoredLine, start: usize) -> String {
+    let s = colored_line_plain_text(line);
+    let chars: Vec<char> = s.chars().collect();
+    let n = chars.len();
+    if start >= n {
+        return String::new();
+    }
+    chars[start..].iter().collect()
+}
+
+fn slice_line_to_char_inclusive(line: &ColoredLine, end_inclusive: usize) -> String {
+    slice_line_chars_inclusive(line, 0, end_inclusive)
+}
+
+fn selected_text_from_terminal_lines(tab: &TabState, sr: i32, sc: i32, er: i32, ec: i32) -> String {
+    if tab.terminal_lines.is_empty() {
+        return String::new();
+    }
+    let sr = sr.max(0) as usize;
+    let sc = sc.max(0) as usize;
+    let er = er.max(0) as usize;
+    let ec = ec.max(0) as usize;
+    let max_row = tab.terminal_lines.len() - 1;
+    let sr = sr.min(max_row);
+    let er = er.min(max_row);
+    if sr > er {
+        return String::new();
+    }
+    let mut out = String::new();
+    if sr == er {
+        let line = &tab.terminal_lines[sr];
+        return slice_line_chars_inclusive(line, sc, ec);
+    }
+    for row_idx in sr..=er {
+        if row_idx > sr {
+            out.push('\n');
+        }
+        let line = &tab.terminal_lines[row_idx];
+        if row_idx == sr {
+            out.push_str(&slice_line_from_char(line, sc));
+        } else if row_idx == er {
+            out.push_str(&slice_line_to_char_inclusive(line, ec));
+        } else {
+            out.push_str(&colored_line_plain_text(line));
+        }
+    }
+    out
+}
+
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
+    clipboard.set_text(text.to_string()).map_err(|e| e.to_string())
 }

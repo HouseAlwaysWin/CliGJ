@@ -59,6 +59,7 @@ export component AppWindow inherits Window {
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    callback terminal-selection-committed(int, int, int, int);
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -175,6 +176,9 @@ export component AppWindow inherits Window {
                         }
                         prompt-chip-clear-requested => {
                             root.prompt-chip-clear-requested();
+                        }
+                        terminal-selection-committed(sr, sc, er, ec) => {
+                            root.terminal-selection-committed(sr, sc, er, ec);
                         }
                     }
                 }

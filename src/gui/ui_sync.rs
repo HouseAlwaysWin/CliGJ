@@ -25,8 +25,14 @@ pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine>
                     bg: rgb_color(s.bg),
                 })
                 .collect();
+            let char_count: i32 = line
+                .spans
+                .iter()
+                .map(|s| s.text.chars().count() as i32)
+                .sum();
             TermLine {
                 blank: line.blank,
+                char_count,
                 spans: ModelRc::new(VecModel::from(spans)),
             }
         })
