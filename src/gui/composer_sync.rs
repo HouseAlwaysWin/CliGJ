@@ -37,6 +37,11 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
         if s.current >= s.tabs.len() {
             return;
         }
+        // Raw mode does direct key->PTY routing; skip expensive full UI->tab sync on timer tick.
+        if ui.get_ws_raw_input() {
+            s.tabs[s.current].raw_input_mode = true;
+            return;
+        }
         tab_update_from_ui(&mut s.tabs[s.current], ui);
         let tab = &mut s.tabs[s.current];
         if tab.raw_input_mode {

@@ -244,7 +244,7 @@ impl GuiState {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index".into());
         }
-        tab_update_from_ui(&mut self.tabs[self.current], ui);
+        let _ = ui;
         let tab = &mut self.tabs[self.current];
 
         #[cfg(target_os = "windows")]
