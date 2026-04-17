@@ -1,10 +1,12 @@
 use std::cell::RefCell;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
 use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, VecModel};
+#[cfg(target_os = "windows")]
+use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
 use crate::terminal::key_encoding;
 use crate::terminal::prompt_key::PromptKeyAction;
@@ -17,6 +19,15 @@ use super::state::{GuiState, TabState, TerminalChunk};
 use super::ui_sync::{colored_lines_to_model, load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
 pub fn run_gui(inject_file: Option<PathBuf>) {
+    #[cfg(target_os = "windows")]
+    {
+        if let Err(e) = slint::BackendSelector::new()
+            .backend_name("winit".into())
+            .select()
+        {
+            eprintln!("CliGJ: select winit backend failed: {e}");
+        }
+    }
     let app = AppWindow::new().expect("failed to build app window");
 
     let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
@@ -38,6 +49,27 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
     load_tab_to_ui(&app, &state.borrow().tabs[0]);
+
+    #[cfg(target_os = "windows")]
+    {
+        let state_for_drop = Rc::clone(&state);
+        let app_weak = app.as_weak();
+        app.window().on_winit_window_event(move |_window, event| {
+            match event {
+                winit::event::WindowEvent::DroppedFile(path) => {
+                    let Some(ui) = app_weak.upgrade() else {
+                        return EventResult::Propagate;
+                    };
+                    let mut s = state_for_drop.borrow_mut();
+                    if let Err(e) = inject_path_into_current(&ui, &mut s, path.as_path()) {
+                        eprintln!("CliGJ: dropped file {}: {e}", path.display());
+                    }
+                    EventResult::PreventDefault
+                }
+                _ => EventResult::Propagate,
+            }
+        });
+    }
 
     let state_for_stream = Rc::clone(&state);
     let app_weak = app.as_weak();
@@ -414,17 +446,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         let Some(path) = rfd::FileDialog::new().pick_file() else {
             return;
         };
-        let text = match std::fs::read_to_string(&path) {
-            Ok(t) => t,
-            Err(e) => {
-                eprintln!("CliGJ: inject file {}: {e}", path.display());
-                return;
-            }
-        };
-        let bytes = normalize_text_for_conpty(&text);
         let mut s = state_for_inject.borrow_mut();
-        if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
-            eprintln!("CliGJ: inject: {e}");
+        if let Err(e) = inject_path_into_current(&ui, &mut s, path.as_path()) {
+            eprintln!("CliGJ: inject file {}: {e}", path.display());
         }
     });
 
@@ -439,17 +463,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 let Some(ui) = app_weak.upgrade() else {
                     return;
                 };
-                let text = match std::fs::read_to_string(&path) {
-                    Ok(t) => t,
-                    Err(e) => {
-                        eprintln!("CliGJ: --inject-file {}: {e}", path.display());
-                        return;
-                    }
-                };
-                let bytes = normalize_text_for_conpty(&text);
                 let mut s = state_inj.borrow_mut();
-                if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
-                    eprintln!("CliGJ: inject: {e}");
+                if let Err(e) = inject_path_into_current(&ui, &mut s, path.as_path()) {
+                    eprintln!("CliGJ: --inject-file {}: {e}", path.display());
                 }
             },
         );
@@ -463,6 +479,12 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
 fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
     text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
+}
+
+fn inject_path_into_current(ui: &AppWindow, s: &mut GuiState, path: &Path) -> Result<(), String> {
+    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
+    let bytes = normalize_text_for_conpty(&text);
+    s.inject_bytes_into_current(ui, &bytes)
 }
 
 fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {
