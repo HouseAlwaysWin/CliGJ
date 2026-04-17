@@ -260,8 +260,9 @@ pub fn start_reader_thread(
 ) -> thread::JoinHandle<()> {
     thread::spawn(move || {
         let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
-        let term_rows = 40usize;
-        let term_cols = 120usize;
+        // 加大預設大小，減少換行帶來的重新排版開銷
+        let term_rows = 60usize;
+        let term_cols = 200usize;
         let term_size = TerminalSize {
             rows: term_rows,
             cols: term_cols,
@@ -275,7 +276,7 @@ pub fn start_reader_thread(
 
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
-        let mut buf = [0u8; 32768];
+        let mut buf = [0u8; 65536]; // 加大緩衝區
         loop {
             let n = match reader.read(&mut buf) {
                 Ok(0) => break,
@@ -283,6 +284,12 @@ pub fn start_reader_thread(
                 Err(_) => break,
             };
             term.advance_bytes(&buf[..n]);
+
+            // 如果還有數據待讀取，先繼續讀，減少渲染次數
+            // 這裡使用 try_clone + set_nonblocking 是 Windows 特有，
+            // 但我們可以簡單地檢查剩下的數據，或者設定一個極短的等待。
+            // 為了穩定性，我們至少處理完當前緩衝區後，
+            // 進行一次 snapshot。
 
             let screen = term.screen();
             let total = screen.scrollback_rows();

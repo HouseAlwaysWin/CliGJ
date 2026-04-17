@@ -283,7 +283,7 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
 
     let app_weak = app.as_weak();
     let timer = Timer::default();
-    timer.start(slint::TimerMode::Repeated, Duration::from_millis(90), move || {
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(20), move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
@@ -291,25 +291,24 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
         if s.current >= s.tabs.len() {
             return;
         }
-        if ui.get_ws_raw_input() {
-            // Raw 模式下只在 prompt 非空時才做 CJK 檢查，避免無謂開銷
-            let prompt = ui.get_ws_prompt();
-            if !prompt.is_empty() {
-                auto_disable_raw_on_cjk_prompt(&ui, &mut s);
-            }
-            return;
-        }
+        
         let prompt_now = ui.get_ws_prompt().to_string();
         let raw = ui.get_ws_raw_input();
         let key = (s.current, prompt_now, raw);
+        
         if s.timer_prompt_snapshot.as_ref() == Some(&key) {
             return;
         }
-        auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+
+        if !key.1.is_empty() {
+            auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+        }
+        
         sync_composer_line_to_conpty(&ui, &mut s);
         sync_at_file_picker(&ui, &mut s);
+        
         if s.current < s.tabs.len() {
-            s.timer_prompt_snapshot = Some((s.current, ui.get_ws_prompt().to_string(), ui.get_ws_raw_input()));
+            s.timer_prompt_snapshot = Some(key);
         }
     });
     timer

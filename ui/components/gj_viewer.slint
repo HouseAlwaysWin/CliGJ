@@ -202,62 +202,59 @@ export component GjViewer inherits Rectangle {
                 y: (root.terminal-line-offset + idx) * root.row-height;
                 width: parent.width;
                 height: root.row-height;
-                background: #00000000;
+                background: AppTheme.bg; // Move background to row level to avoid layout gaps
 
-                HorizontalLayout {
-                    width: parent.width;
-                    height: root.row-height;
-                    spacing: 0px;
-                    padding: 0px;
-                    alignment: start;
+                // Stripe (Absolute positioned)
+                Rectangle {
+                    x: 0px;
+                    y: 0px;
+                    width: root.stripe-width;
+                    height: parent.height;
+                    background: #00000000;
+                }
 
-                    Rectangle {
-                        width: root.stripe-width;
-                        height: root.row-height;
-                        background: #00000000;
-                    }
+                // Content (Absolute positioned)
+                Rectangle {
+                    x: root.stripe-width;
+                    y: 0px;
+                    width: parent.width - root.stripe-width;
+                    height: parent.height;
+                    clip: true;
 
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        height: root.row-height;
-                        clip: true;
-                        // Full row fill so text spans do not leave grey strips beside short lines.
-                        background: AppTheme.bg;
+                    property <int> gidx: root.terminal-line-offset + idx;
+                    property <int> hl0: root.line_h0(gidx, line.char-count);
+                    property <int> hl1: root.line_h1(gidx, line.char-count);
+                    property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
 
-                        property <int> gidx: root.terminal-line-offset + idx;
-                        property <int> hl0: root.line_h0(gidx, line.char-count);
-                        property <int> hl1: root.line_h1(gidx, line.char-count);
-                        property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
+                    // We still use HorizontalLayout for spans as they have dynamic width, 
+                    // but it's now flatter.
+                    HorizontalLayout {
+                        spacing: 0px;
+                        padding: 0px;
+                        alignment: start;
 
-                        HorizontalLayout {
-                            spacing: 0px;
-                            padding: 0px;
-                            alignment: start;
+                        for span in line.spans: Rectangle {
+                            background: span.bg;
+                            height: root.row-height;
 
-                            for span in line.spans: Rectangle {
-                                background: span.bg;
-                                height: root.row-height;
-
-                                Text {
-                                    text: span.text;
-                                    color: span.fg;
-                                    font-size: 13px;
-                                    font-family: AppTheme.terminal_font_family;
-                                    wrap: no-wrap;
-                                    vertical-alignment: center;
-                                    horizontal-alignment: left;
-                                }
+                            Text {
+                                text: span.text;
+                                color: span.fg;
+                                font-size: 13px;
+                                font-family: AppTheme.terminal_font_family;
+                                wrap: no-wrap;
+                                vertical-alignment: center;
+                                horizontal-alignment: left;
                             }
                         }
+                    }
 
-                        if (hl_visible) : Rectangle {
-                            x: hl0 * root.char-width;
-                            y: 0px;
-                            width: (hl1 - hl0 + 1) * root.char-width;
-                            height: root.row-height;
-                            // Semi-transparent fill over text (restores readable selection vs outline-only).
-                            background: #55a8e8a0;
-                        }
+                    if (hl_visible) : Rectangle {
+                        x: hl0 * root.char-width;
+                        y: 0px;
+                        width: (hl1 - hl0 + 1) * root.char-width;
+                        height: root.row-height;
+                        background: #55a8e8a0;
                     }
                 }
             }
