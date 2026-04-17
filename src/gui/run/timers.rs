@@ -1,7 +1,9 @@
 //! Slint timers/dispatchers: terminal stream, composer sync, startup injection.
 
 use std::cell::RefCell;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -48,6 +50,19 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     }
 }
 
+/// ColoredLine fingerprint (same as ui_sync::line_fingerprint but usable here).
+fn colored_line_fingerprint(line: &ColoredLine) -> u64 {
+    let mut h = DefaultHasher::new();
+    line.blank.hash(&mut h);
+    line.spans.len().hash(&mut h);
+    for span in &line.spans {
+        span.text.hash(&mut h);
+        span.fg.hash(&mut h);
+        span.bg.hash(&mut h);
+    }
+    h.finish()
+}
+
 fn apply_pending_updates(
     state: &mut GuiState,
     pending: HashMap<u64, PendingTabUpdate>,
@@ -69,18 +84,53 @@ fn apply_pending_updates(
         }
 
         let mut replaced_with_vt_lines = false;
-        if let Some(lines) = update.replace_lines {
-            replaced_with_vt_lines = !lines.is_empty();
-            tab.terminal_lines = lines;
-            let n = tab.terminal_lines.len();
-            tab.terminal_model_rows.retain(|&k, _| k < n);
-            tab.terminal_model_hashes.retain(|&k, _| k < n);
-            tab.terminal_model_dirty.clear();
+        if let Some(new_lines) = update.replace_lines {
+            replaced_with_vt_lines = !new_lines.is_empty();
             if replaced_with_vt_lines {
-                // VT mode renders from `terminal_lines`; keep fallback text empty to avoid
-                // repeatedly moving large strings on high-frequency updates.
+                // Per-line diff: 只替換有變化的行，避免全量重建
+                let old_len = tab.terminal_lines.len();
+                let new_len = new_lines.len();
+                let mut dirty_indices: HashSet<usize> = HashSet::new();
+
+                // 比對共同範圍內的行
+                let common = old_len.min(new_len);
+                for i in 0..common {
+                    let old_fp = colored_line_fingerprint(&tab.terminal_lines[i]);
+                    let new_fp = colored_line_fingerprint(&new_lines[i]);
+                    if old_fp != new_fp {
+                        tab.terminal_lines[i] = new_lines[i].clone();
+                        // 清除舊的 model cache，讓 sync_terminal_model_cache_range 重建
+                        tab.terminal_model_rows.remove(&i);
+                        tab.terminal_model_hashes.remove(&i);
+                        dirty_indices.insert(i);
+                    }
+                }
+
+                if new_len > old_len {
+                    // 新增的行
+                    for i in old_len..new_len {
+                        tab.terminal_lines.push(new_lines[i].clone());
+                        dirty_indices.insert(i);
+                    }
+                } else if new_len < old_len {
+                    // 移除多餘的行
+                    tab.terminal_lines.truncate(new_len);
+                    tab.terminal_model_rows.retain(|&k, _| k < new_len);
+                    tab.terminal_model_hashes.retain(|&k, _| k < new_len);
+                    // 縮短時標記所有行 dirty（因為 model 索引可能變了）
+                    for i in 0..new_len {
+                        dirty_indices.insert(i);
+                    }
+                }
+
+                tab.terminal_model_dirty.extend(&dirty_indices);
                 tab.terminal_text.clear();
             } else {
+                // 空 lines → fallback text 模式
+                tab.terminal_lines = new_lines;
+                tab.terminal_model_rows.clear();
+                tab.terminal_model_hashes.clear();
+                tab.terminal_model_dirty.clear();
                 tab.terminal_text = update.replace_text.unwrap_or_default();
             }
         }
@@ -229,7 +279,11 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
             return;
         }
         if ui.get_ws_raw_input() {
-            auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+            // Raw 模式下只在 prompt 非空時才做 CJK 檢查，避免無謂開銷
+            let prompt = ui.get_ws_prompt();
+            if !prompt.is_empty() {
+                auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+            }
             return;
         }
         let prompt_now = ui.get_ws_prompt().to_string();
