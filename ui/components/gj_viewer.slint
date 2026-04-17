@@ -9,6 +9,7 @@ export component GjViewer inherits Rectangle {
     in property <bool> selection-mode: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
+    private property <length> terminal-left-inset: 8px;
 
     border-width: 0px;
     background: AppTheme.bg;
@@ -49,14 +50,15 @@ export component GjViewer inherits Rectangle {
         wrap: no-wrap;
         font-size: 13px;
         font-family: AppTheme.terminal_font_family;
+        viewport-y <=> color-flick.viewport-y;
     }
 
     // VT colors resolved in Rust (wezterm-term + ColorPalette).
     color-flick := Flickable {
         visible: root.terminal-lines.length > 0 && !root.selection-mode;
-        x: 0px;
+        x: root.terminal-left-inset;
         y: 0px;
-        width: parent.width;
+        width: max(0px, parent.width - root.terminal-left-inset);
         height: parent.height;
         viewport-width: parent.width;
         viewport-height: color-stack.preferred-height;
@@ -67,8 +69,9 @@ export component GjViewer inherits Rectangle {
             alignment: start;
 
             for line in root.terminal-lines: HorizontalLayout {
-                visible: !line.blank;
-                min-height: line.blank ? 0px : 18px;
+                // Keep blank rows visible so color mode matches selection-mode line positions.
+                visible: true;
+                min-height: 18px;
                 spacing: 0px;
                 padding: 0px;
                 alignment: start;
@@ -82,6 +85,7 @@ export component GjViewer inherits Rectangle {
                         color: span.fg;
                         font-size: 13px;
                         font-family: AppTheme.terminal_font_family;
+                        wrap: no-wrap;
                         vertical-alignment: center;
                         horizontal-alignment: left;
                     }
