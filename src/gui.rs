@@ -5,14 +5,40 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use slint::{Model, ModelRc, SharedString, Timer, VecModel};
+use slint::{Color, Model, ModelRc, SharedString, Timer, VecModel};
 
 use crate::terminal::key_encoding;
+use crate::terminal::render::ColoredLine;
 
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
 
 slint::include_modules!();
+
+fn rgb_color(rgb: [u8; 3]) -> Color {
+    Color::from_rgb_u8(rgb[0], rgb[1], rgb[2])
+}
+
+fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
+    let rows: Vec<TermLine> = lines
+        .iter()
+        .map(|line| {
+            let spans: Vec<TermSpan> = line
+                .spans
+                .iter()
+                .map(|s| TermSpan {
+                    text: SharedString::from(s.text.as_str()),
+                    fg: rgb_color(s.fg),
+                    bg: rgb_color(s.bg),
+                })
+                .collect();
+            TermLine {
+                spans: ModelRc::new(VecModel::from(spans)),
+            }
+        })
+        .collect();
+    ModelRc::new(VecModel::from(rows))
+}
 
 pub fn run_gui(inject_file: Option<PathBuf>) {
     let app = AppWindow::new().expect("failed to build app window");
@@ -60,6 +86,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                         }
                         if chunk.replace {
                             tab.terminal_text = chunk.text.clone();
+                            tab.terminal_lines = chunk.lines.clone();
                         } else {
                             tab.append_terminal(&chunk.text);
                         }
@@ -74,6 +101,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 }
                 if let Some(text) = updated_current {
                     ui.set_ws_terminal_text(SharedString::from(text.as_str()));
+                    ui.set_ws_terminal_lines(colored_lines_to_model(
+                        &s.tabs[s.current].terminal_lines,
+                    ));
                     // For full-screen replace updates, keep the viewport at the top
                     // until the user starts interacting (auto_scroll becomes true).
                     if let Some(current_tab) = s.tabs.get(s.current) {
@@ -297,6 +327,8 @@ struct TabState {
     command_history: Vec<String>,
     history_cursor: Option<usize>,
     history_draft: String,
+    /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
+    terminal_lines: Vec<ColoredLine>,
 
     #[cfg(target_os = "windows")]
     conpty: Option<windows_conpty::ConptySession>,
@@ -320,6 +352,7 @@ impl TabState {
             command_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
+            terminal_lines: Vec::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
         };
@@ -333,6 +366,7 @@ impl TabState {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
                             text: render.text,
+                            lines: render.lines,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                         });
@@ -350,6 +384,8 @@ impl TabState {
         const MAX: usize = 1_000_000;
         // When auto-scroll is enabled, switch to "tail" mode to avoid viewport jumpiness.
         const TAIL_MAX: usize = 80_000;
+        // No VT span stream for injected/plain appends; use legacy text view.
+        self.terminal_lines.clear();
         self.terminal_text.push_str(chunk);
         let limit = if self.auto_scroll { TAIL_MAX } else { MAX };
         if self.terminal_text.len() > limit {
@@ -429,6 +465,7 @@ impl GuiState {
             // Restart ConPTY session for interactive shells.
             self.tabs[self.current].conpty = None;
             self.tabs[self.current].terminal_text.clear();
+            self.tabs[self.current].terminal_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
@@ -438,6 +475,7 @@ impl GuiState {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
                             text: render.text,
+                            lines: render.lines,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                         });
@@ -664,6 +702,7 @@ fn load_tab_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_has_image(tab.has_image);
     ui.set_ws_preview_image(tab.preview_image.clone());
     ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
+    ui.set_ws_terminal_lines(colored_lines_to_model(&tab.terminal_lines));
     ui.set_ws_auto_scroll(tab.auto_scroll);
     if !tab.auto_scroll {
         ui.invoke_ws_scroll_terminal_to_top();
@@ -693,6 +732,7 @@ fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
 struct TerminalChunk {
     tab_id: u64,
     text: String,
+    lines: Vec<ColoredLine>,
     replace: bool,
     set_auto_scroll: Option<bool>,
 }

@@ -2,6 +2,7 @@ import { AppTheme } from "theme.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { TextEdit } from "std-widgets.slint";
+import { TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
     title: "CliGJ - UI Foundation";
@@ -19,6 +20,7 @@ export component AppWindow inherits Window {
     in-out property <image> ws-preview-image;
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
+    in-out property <[TermLine]> ws-terminal-lines: [];
     in-out property <bool> ws-auto-scroll: false;
     in-out property <bool> ws-rename-open: false;
     in-out property <int> ws-rename-index: -1;
@@ -112,6 +114,7 @@ export component AppWindow inherits Window {
                         preview-image <=> root.ws-preview-image;
                         code-lines <=> root.ws-code-lines;
                         terminal-text <=> root.ws-terminal-text;
+                        terminal-lines <=> root.ws-terminal-lines;
                         auto-scroll <=> root.ws-auto-scroll;
                         selected-line <=> root.ws-selected-line;
                         selected-context <=> root.ws-selected-context;

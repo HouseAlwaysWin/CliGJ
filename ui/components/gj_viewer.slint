@@ -1,8 +1,10 @@
 import { TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
+import { TermLine } from "../term_types.slint";
 
 export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
+    in-out property <[TermLine]> terminal-lines;
     in property <bool> auto-scroll: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
@@ -11,21 +13,32 @@ export component GjViewer inherits Rectangle {
     background: AppTheme.bg;
 
     public function scroll_to_bottom() {
-        // Only auto-scroll when content overflows the visible area.
-        // This avoids "big blank gap" when there are only a few lines.
-        if (viewer_text.viewport-height > viewer_text.visible-height) {
-            // TextEdit's viewport-y is typically negative when scrolled.
-            viewer_text.viewport-y = min(0px, viewer_text.visible-height - viewer_text.viewport-height);
+        if (root.terminal-lines.length > 0) {
+            if (color-flick.viewport-height > color-flick.height) {
+                color-flick.viewport-y = min(0px, color-flick.height - color-flick.viewport-height);
+            } else {
+                color-flick.viewport-y = 0px;
+            }
         } else {
-            viewer_text.viewport-y = 0px;
+            if (plain-text.viewport-height > plain-text.visible-height) {
+                plain-text.viewport-y = min(0px, plain-text.visible-height - plain-text.viewport-height);
+            } else {
+                plain-text.viewport-y = 0px;
+            }
         }
     }
 
     public function scroll_to_top() {
-        viewer_text.viewport-y = 0px;
+        if (root.terminal-lines.length > 0) {
+            color-flick.viewport-y = 0px;
+        } else {
+            plain-text.viewport-y = 0px;
+        }
     }
 
-    viewer_text := TextEdit {
+    // Plain fallback (no ANSI / non-ConPTY).
+    plain-text := TextEdit {
+        visible: root.terminal-lines.length == 0;
         x: 0px;
         y: 0px;
         width: parent.width;
@@ -34,5 +47,43 @@ export component GjViewer inherits Rectangle {
         read-only: true;
         wrap: no-wrap;
         font-size: 13px;
+    }
+
+    // VT colors resolved in Rust (wezterm-term + ColorPalette).
+    color-flick := Flickable {
+        visible: root.terminal-lines.length > 0;
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        viewport-width: parent.width;
+        viewport-height: color-stack.preferred-height;
+
+        color-stack := VerticalLayout {
+            width: parent.width;
+            spacing: 0px;
+            alignment: start;
+
+            for line in root.terminal-lines: HorizontalLayout {
+                min-height: 18px;
+                spacing: 0px;
+                padding: 0px;
+                alignment: start;
+
+                for span in line.spans: Rectangle {
+                    background: span.bg;
+                    min-height: parent.min-height;
+
+                    Text {
+                        text: span.text;
+                        color: span.fg;
+                        font-size: 13px;
+                        font-family: "Consolas";
+                        vertical-alignment: center;
+                        horizontal-alignment: left;
+                    }
+                }
+            }
+        }
     }
 }

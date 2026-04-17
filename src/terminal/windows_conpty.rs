@@ -11,6 +11,8 @@ use wezterm_term::Terminal;
 use wezterm_term::TerminalSize;
 use wezterm_term::color::ColorPalette;
 
+use crate::terminal::render::{line_to_colored_spans, ColoredLine};
+
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
@@ -46,6 +48,8 @@ pub struct ConptySpawn {
 
 pub struct TerminalRender {
     pub text: String,
+    /// Per-screen-line spans with ANSI-resolved colors (fg + bg).
+    pub lines: Vec<ColoredLine>,
     pub filled: bool,
 }
 
@@ -187,6 +191,7 @@ pub fn start_reader_thread(
             dpi: 0,
         };
         let writer: Box<dyn Write + Send> = Box::new(std::io::sink());
+        let palette = config.color_palette();
         let mut term = Terminal::new(term_size, config, "CliGJ", "0", writer);
 
         let mut buf = [0u8; 8192];
@@ -210,17 +215,23 @@ pub fn start_reader_thread(
             let start = total.saturating_sub(MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let mut out = String::new();
+            let mut colored: Vec<ColoredLine> = Vec::with_capacity(lines.len());
             for (i, line) in lines.iter().enumerate() {
                 if i > 0 {
                     out.push('\n');
                 }
                 out.push_str(line.as_str().trim_end());
+                colored.push(line_to_colored_spans(line, &palette));
             }
 
             // Remove our init noise if it was echoed.
             let out = filter_init_noise(&out);
             let filled = total > term_rows;
-            on_chunk(TerminalRender { text: out, filled });
+            on_chunk(TerminalRender {
+                text: out,
+                lines: colored,
+                filled,
+            });
         }
     })
 }

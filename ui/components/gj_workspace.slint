@@ -1,4 +1,5 @@
 import { AppTheme } from "../theme.slint";
+import { TermLine } from "../term_types.slint";
 import { GjViewer } from "gj_viewer.slint";
 import { GjPromptDropZone } from "gj_prompt_drop_zone.slint";
 
@@ -8,6 +9,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <image> preview-image;
     in-out property <[string]> code-lines;
     in-out property <string> terminal-text;
+    in-out property <[TermLine]> terminal-lines;
     in-out property <bool> auto-scroll;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
@@ -36,6 +38,7 @@ export component GjWorkspace inherits Rectangle {
 
         viewer := GjViewer {
             terminal-text: root.terminal-text;
+            terminal-lines <=> root.terminal-lines;
             auto-scroll: root.auto-scroll;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;

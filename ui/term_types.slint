@@ -1,0 +1,11 @@
+// Shared types for ANSI-colored terminal emulation (wezterm-term → UI).
+
+export struct TermSpan {
+    text: string,
+    fg: color,
+    bg: color,
+}
+
+export struct TermLine {
+    spans: [TermSpan],
+}
