@@ -1,5 +1,6 @@
 use super::model::{TerminalBuffer, TerminalCell};
 use super::renderer::TerminalFrame;
+use crate::terminal::render::ColoredLine;
 
 /// Terminal v2 state holder. In phase 1 this adapts line text snapshots
 /// into a cell buffer and tracks dirty rows for future incremental rendering.
@@ -31,6 +32,50 @@ impl TerminalSession {
             }
         }
         self.buffer.mark_all_dirty();
+    }
+
+    pub fn apply_colored_lines(&mut self, lines: &[ColoredLine]) {
+        let rows = lines.len().max(1);
+        let cols = lines
+            .iter()
+            .map(|line| {
+                line.spans
+                    .iter()
+                    .map(|s| s.text.chars().count())
+                    .sum::<usize>()
+            })
+            .max()
+            .unwrap_or(1)
+            .max(1);
+
+        self.buffer.resize(rows, cols);
+
+        if lines.is_empty() {
+            self.buffer.set_row_cells(0, vec![TerminalCell::default(); cols]);
+            return;
+        }
+
+        for (row_idx, line) in lines.iter().enumerate() {
+            let mut row_cells = vec![TerminalCell::default(); cols];
+            let mut col = 0usize;
+            for span in &line.spans {
+                for ch in span.text.chars() {
+                    if col >= cols {
+                        break;
+                    }
+                    row_cells[col] = TerminalCell {
+                        ch,
+                        fg: span.fg,
+                        bg: span.bg,
+                    };
+                    col += 1;
+                }
+                if col >= cols {
+                    break;
+                }
+            }
+            self.buffer.set_row_cells(row_idx, row_cells);
+        }
     }
 
     pub fn build_frame(&mut self) -> TerminalFrame {

@@ -5,6 +5,7 @@ use std::sync::mpsc;
 use slint::{SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
+use crate::terminal_v2::TerminalSession;
 
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
@@ -52,6 +53,10 @@ pub struct TabState {
     pub(crate) prompt_picked_files_abs: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
+    /// Terminal v2 session (phase 2: connected data pipeline).
+    pub(crate) terminal_v2: TerminalSession,
+    /// Last dirty rows produced by terminal_v2 session.
+    pub(crate) terminal_v2_dirty_rows: Vec<usize>,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
 
@@ -80,6 +85,8 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
+            terminal_v2: TerminalSession::new(40, 120),
+            terminal_v2_dirty_rows: Vec::new(),
             composer_pty_mirror: String::new(),
             #[cfg(target_os = "windows")]
             conpty: None,
@@ -117,6 +124,9 @@ impl TabState {
             let cut = self.terminal_text.len() - limit;
             self.terminal_text.drain(..cut);
         }
+        let lines: Vec<String> = self.terminal_text.lines().map(ToOwned::to_owned).collect();
+        self.terminal_v2.apply_plain_lines(&lines);
+        self.terminal_v2_dirty_rows = self.terminal_v2.build_frame().dirty_rows;
     }
 }
 

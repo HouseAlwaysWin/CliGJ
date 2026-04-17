@@ -77,8 +77,26 @@ impl TerminalBuffer {
         if row >= self.rows.len() || col >= self.cols {
             return;
         }
-        self.rows[row].cells[col] = cell;
-        self.dirty_rows.insert(row);
+        if self.rows[row].cells[col] != cell {
+            self.rows[row].cells[col] = cell;
+            self.dirty_rows.insert(row);
+        }
+    }
+
+    pub fn set_row_cells(&mut self, row: usize, cells: Vec<TerminalCell>) {
+        if row >= self.rows.len() || cells.len() != self.cols {
+            return;
+        }
+        if self.rows[row].cells != cells {
+            self.rows[row].cells = cells;
+            self.dirty_rows.insert(row);
+        }
+    }
+
+    pub fn mark_row_dirty(&mut self, row: usize) {
+        if row < self.rows.len() {
+            self.dirty_rows.insert(row);
+        }
     }
 
     pub fn mark_all_dirty(&mut self) {

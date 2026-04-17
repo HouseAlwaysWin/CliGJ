@@ -95,6 +95,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                         if chunk.replace {
                             tab.terminal_text = chunk.text.clone();
                             tab.terminal_lines = chunk.lines.clone();
+                            tab.terminal_v2.apply_colored_lines(&tab.terminal_lines);
+                            tab.terminal_v2_dirty_rows = tab.terminal_v2.build_frame().dirty_rows;
                         } else {
                             tab.append_terminal(&chunk.text);
                         }
