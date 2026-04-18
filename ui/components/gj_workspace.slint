@@ -38,6 +38,7 @@ export component GjWorkspace inherits Rectangle {
     callback prompt-chip-clear-requested;
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
+    callback ai-model-selected(string);
     forward-focus: prompt-zone;
 
     background: AppTheme.bg;
@@ -128,6 +129,9 @@ export component GjWorkspace inherits Rectangle {
             }
             prompt-chip-clear-requested => {
                 root.prompt-chip-clear-requested();
+            }
+            ai-model-selected(val) => {
+                root.ai-model-selected(val);
             }
         }
     }

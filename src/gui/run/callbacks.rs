@@ -12,8 +12,9 @@ use crate::workspace_files;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::GuiState;
-use crate::gui::ui_sync::{load_tab_to_ui, nudge_terminal_cursor, push_terminal_view_to_ui, tab_update_from_ui};
+use crate::gui::state::{GuiState, TerminalChunk};
+use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
+use crate::terminal::windows_conpty;
 
 use super::helpers::{
     clear_all_prompt_images, clipboard_raster_image_file, contains_cjk_char, copy_to_clipboard,
@@ -259,19 +260,13 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                     Some(b) => b,
                     None => return false,
                 };
+                let is_nav = matches!(k.as_str(), "LeftArrow" | "RightArrow" | "Home" | "End" | "Backspace" | "Delete");
                 let inject_ok = {
                     let mut s = st_keys.borrow_mut();
                     s.inject_bytes_into_current(&ui, &bytes)
                 };
                 match &inject_ok {
                     Ok(()) => {
-                        if raw_tty && matches!(k.as_str(), "LeftArrow" | "RightArrow") {
-                            let mut s = st_keys.borrow_mut();
-                            let idx = s.current;
-                            if idx < s.tabs.len() && nudge_terminal_cursor(&mut s.tabs[idx], k.as_str()) {
-                                push_terminal_view_to_ui(&ui, &mut s.tabs[idx]);
-                            }
-                        }
                         if raw_tty && is_pty_enter_key(k.as_str()) {
                             ui.set_ws_prompt(SharedString::new());
                             let mut s = st_keys.borrow_mut();
@@ -282,6 +277,10 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         }
                     }
                     Err(e) => eprintln!("CliGJ: pty key: {e}"),
+                }
+                // 關鍵：如果是導航或刪除鍵，回傳 false 讓 Slint TextEdit 更新 GUI 游標位置
+                if is_nav {
+                    return false;
                 }
                 true
             }
@@ -299,6 +298,82 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         let mut s = st_pick.borrow_mut();
         commit_at_file_pick(&ui, &mut *s, index as usize);
+    });
+
+    let st_ai = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_ai_model_selected(move |model_name| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let launch_cmd = match model_name.as_str() {
+            "gemini cli" => "gemini\r\n",
+            "codex" => "codex\r\n",
+            "claude" => "claude\r\n",
+            "copilot" => "copilot\r\n",
+            _ => return,
+        };
+
+        let mut s = st_ai.borrow_mut();
+        let cur_idx = s.current;
+        if cur_idx >= s.tabs.len() { return; }
+        
+        let cmd_type = s.tabs[cur_idx].cmd_type.clone();
+        let tab_id = s.tabs[cur_idx].id;
+        let tx = s.tx.clone();
+
+        // 策略：重啟 PTY 以實現絕對乾淨的切換
+        #[cfg(target_os = "windows")]
+        {
+            // 1. 關閉舊 PTY 並徹底清空所有緩存
+            s.tabs[cur_idx].conpty = None; // Drop 會觸發 ConPTY 關閉
+            
+            let tab = &mut s.tabs[cur_idx];
+            tab.terminal_lines.clear();
+            tab.terminal_text.clear();
+            tab.terminal_model_dirty.clear();
+            tab.terminal_model_rows.clear();
+            tab.terminal_model_hashes.clear();
+            while tab.terminal_slint_model.row_count() > 0 {
+                tab.terminal_slint_model.remove(0);
+            }
+            tab.last_window_total = 0;
+            tab.last_window_first = 0;
+            tab.last_window_last = 0;
+            
+            ui.set_ws_terminal_line_offset(0);
+            ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_lines(slint::ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
+            ui.invoke_ws_scroll_terminal_to_top();
+
+            // 2. 開啟新 PTY
+            if let Ok(spawn) = windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
+                windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                    let _ = tx.send(TerminalChunk {
+                        tab_id,
+                        text: render.text,
+                        lines: render.lines,
+                        full_len: render.full_len,
+                        first_line_idx: render.first_line_idx,
+                        replace: true,
+                        set_auto_scroll: if render.filled { Some(true) } else { None },
+                        changed_indices: render.changed_indices,
+                        cursor_col: render.cursor_col,
+                        cursor_row: render.cursor_row,
+                    });
+                });
+                s.tabs[cur_idx].conpty = Some(spawn.session);
+            }
+        }
+
+        // 3. 延時啟動新指令
+        let app_weak_inner = ui.as_weak();
+        let st_ai_inner = Rc::clone(&st_ai);
+        slint::Timer::single_shot(std::time::Duration::from_millis(600), move || {
+            let Some(ui) = app_weak_inner.upgrade() else { return; };
+            let mut s = st_ai_inner.borrow_mut();
+            let _ = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes());
+        });
     });
 }
 

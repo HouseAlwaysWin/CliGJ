@@ -1,4 +1,4 @@
-import { TextEdit } from "std-widgets.slint";
+import { TextEdit, ComboBox } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 import { LogicalKey } from "../key_labels.slint";
 import { PromptImageChip } from "../term_types.slint";
@@ -24,6 +24,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-image-zoom-requested(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    callback ai-model-selected(string);
     forward-focus: prompt-input;
 
     function pty_mod(event: KeyEvent) -> int {
@@ -272,37 +273,14 @@ export component GjPromptDropZone inherits Rectangle {
                 HorizontalLayout {
                     spacing: 8px;
 
-                    Rectangle {
-                        min-width: 78px;
+                    ComboBox {
+                        width: 120px;
                         height: 22px;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 11px;
-                        background: #00000000;
-
-                        Text {
-                            text: "Agent";
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 11px;
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 54px;
-                        height: 22px;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 11px;
-                        background: #00000000;
-
-                        Text {
-                            text: "Auto";
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 11px;
+                        model: ["gemini cli", "codex", "claude", "copilot"];
+                        current-value: "AI Models";
+                        selected(val) => {
+                            root.ai-model-selected(val);
+                            self.current-value = "AI Models";
                         }
                     }
 

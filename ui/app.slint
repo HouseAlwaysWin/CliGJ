@@ -68,6 +68,8 @@ export component AppWindow inherits Window {
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
     callback terminal-data-ready;
+    callback prompt-image-zoom-requested(int);
+    callback ai-model-selected(string);
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -213,6 +215,9 @@ export component AppWindow inherits Window {
                         }
                         terminal-viewport-changed => {
                             root.terminal-viewport-changed();
+                        }
+                        ai-model-selected(val) => {
+                            root.ai-model-selected(val);
                         }
                     }
                 }
