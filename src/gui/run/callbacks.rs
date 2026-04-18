@@ -193,8 +193,16 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 }
                 "Return" | "\n" | "\r" => {
                     let mut s = st_keys.borrow_mut();
-                    let idx = ui.get_ws_at_selected() as usize;
-                    commit_at_file_pick(&ui, &mut *s, idx);
+                    let choices = ui.get_ws_at_choices();
+                    if ui.get_ws_at_picker_open() && choices.row_count() > 0 {
+                        let idx = ui.get_ws_at_selected() as usize;
+                        commit_at_file_pick(&ui, &mut *s, idx);
+                    } else {
+                        // 統一 Enter：不論是否 Raw，都觸發提交
+                        if let Err(e) = s.submit_current_prompt(&ui) {
+                            eprintln!("CliGJ: prompt submit: {e}");
+                        }
+                    }
                     return true;
                 }
                 "Escape" => {
@@ -247,18 +255,10 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 true
             }
             PromptKeyAction::PtyKey(k) => {
-                let mut bytes = match key_encoding::encode_for_pty(mod_mask as u32, k.as_str()) {
+                let bytes = match key_encoding::encode_for_pty(mod_mask as u32, k.as_str()) {
                     Some(b) => b,
                     None => return false,
                 };
-                // Raw mode + Windows ConPTY: many CLIs (e.g. Node readline) expect CRLF for a line submit.
-                if raw_tty
-                    && is_pty_enter_key(k.as_str())
-                    && bytes.len() == 1
-                    && bytes[0] == b'\r'
-                {
-                    bytes.push(b'\n');
-                }
                 let inject_ok = {
                     let mut s = st_keys.borrow_mut();
                     s.inject_bytes_into_current(&ui, &bytes)

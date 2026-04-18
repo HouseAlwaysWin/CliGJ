@@ -125,66 +125,71 @@ impl GuiState {
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         let tab = &mut self.tabs[self.current];
-        let mut command_line = tab.prompt.to_string();
+        
+        // 1. Prepare additional attachments (files/images) to be appended to command line
+        let mut extra_payload = String::new();
         for path in &tab.prompt_picked_files_abs {
-            if !path.is_empty() && !command_line.contains(path) {
-                if !command_line.trim().is_empty() {
-                    command_line.push(' ');
-                }
-                command_line.push_str(path);
+            if !path.is_empty() && !tab.prompt.contains(path) {
+                extra_payload.push(' ');
+                extra_payload.push_str(path);
             }
         }
         for img in &tab.prompt_picked_images {
-            if !img.abs_path.is_empty() && !command_line.contains(&img.abs_path) {
-                if !command_line.trim().is_empty() {
-                    command_line.push(' ');
-                }
-                command_line.push_str(&img.abs_path);
+            if !img.abs_path.is_empty() && !tab.prompt.contains(&img.abs_path) {
+                extra_payload.push(' ');
+                extra_payload.push_str(&img.abs_path);
             }
         }
-        let command_line = command_line.trim().to_string();
-        if command_line.is_empty() {
-            return Ok(());
-        }
 
-        {
+        let full_command = format!("{}{}", tab.prompt, extra_payload).trim().to_string();
+
+        // 2. Add to history if not empty
+        if !full_command.is_empty() {
             let history = &mut tab.command_history;
-            if history.last().map(|s| s.as_str()) != Some(command_line.as_str()) {
-                history.push(command_line.clone());
+            if history.last().map(|s| s.as_str()) != Some(full_command.as_str()) {
+                history.push(full_command.clone());
             }
-            tab.history_cursor = None;
-            tab.history_draft.clear();
         }
+        tab.history_cursor = None;
+        tab.history_draft.clear();
 
+        // 3. Send to PTY
         #[cfg(target_os = "windows")]
         {
             if let Some(session) = tab.conpty.as_mut() {
-                let mirrored_full_line = !tab.raw_input_mode
-                    && tab.prompt.contains('@')
-                    && !tab.composer_pty_mirror.is_empty()
-                    && tab.composer_pty_mirror == tab.prompt.to_string();
-                if mirrored_full_line {
-                    let _ = session.writer.write_all(b"\r\n");
-                } else {
-                    let mut to_send = command_line.clone();
-                    to_send.push_str("\r\n");
-                    let _ = session.writer.write_all(to_send.as_bytes());
-                }
+                use std::io::Write;
+                use crate::gui::composer_sync::diff_composer_to_conpty;
+
+                // Send whatever is left in the prompt (not mirrored yet) + extras
+                let cur_prompt = tab.prompt.to_string();
+                let diff = diff_composer_to_conpty(&tab.composer_pty_mirror, &cur_prompt);
+                let _ = session.writer.write_all(&diff);
+                let _ = session.writer.write_all(extra_payload.as_bytes());
+                let _ = session.writer.write_all(b"\r");
                 let _ = session.writer.flush();
+            } else if !full_command.is_empty() {
+                tab.append_terminal(&format!("{full_command}\n"));
             } else {
-                tab.append_terminal(&format!("{command_line}\n"));
+                tab.append_terminal("\n");
             }
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            tab.append_terminal(&format!("{command_line}\n"));
+            if !full_command.is_empty() {
+                tab.append_terminal(&format!("{full_command}\n"));
+            } else {
+                tab.append_terminal("\n");
+            }
         }
 
+        // 4. Reset composer state
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
         tab.prompt_picked_images.clear();
         tab.composer_pty_mirror.clear();
+        // Update snapshot to prevent timer from thinking it needs to delete the prompt we just submitted
+        self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
         load_tab_to_ui(ui, tab);
         Ok(())
     }

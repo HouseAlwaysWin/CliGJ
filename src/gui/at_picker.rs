@@ -48,6 +48,11 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         &query,
         workspace_files::CHOICES_DISPLAY,
     );
+    if choices.is_empty() {
+        ui.set_ws_at_picker_open(false);
+        s.at_picker_open_snapshot = false;
+        return;
+    }
     let model: Vec<SharedString> = choices
         .iter()
         .map(|x| SharedString::from(x.as_str()))

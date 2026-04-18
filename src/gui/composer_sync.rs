@@ -52,19 +52,6 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
         let cur = tab.prompt.to_string();
         let prev = tab.composer_pty_mirror.as_str();
 
-        if !cur.contains('@') {
-            if prev.is_empty() {
-                return;
-            }
-            let bytes = diff_composer_to_conpty(prev, "");
-            if !bytes.is_empty() {
-                let _ = session.writer.write_all(&bytes);
-                let _ = session.writer.flush();
-            }
-            tab.composer_pty_mirror.clear();
-            return;
-        }
-
         let bytes = diff_composer_to_conpty(prev, &cur);
         if bytes.is_empty() {
             return;
