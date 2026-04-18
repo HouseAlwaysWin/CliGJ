@@ -21,6 +21,10 @@ use super::helpers::{
     selected_text_from_terminal_lines,
 };
 
+fn is_pty_enter_key(k: &str) -> bool {
+    matches!(k, "Return" | "\n" | "\r")
+}
+
 pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     connect_tabs(app, Rc::clone(&state));
     connect_prompt_and_picker(app, Rc::clone(&state));
@@ -243,12 +247,34 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 true
             }
             PromptKeyAction::PtyKey(k) => {
-                let Some(bytes) = key_encoding::encode_for_pty(mod_mask as u32, k.as_str()) else {
-                    return false;
+                let mut bytes = match key_encoding::encode_for_pty(mod_mask as u32, k.as_str()) {
+                    Some(b) => b,
+                    None => return false,
                 };
-                let mut s = st_keys.borrow_mut();
-                if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
-                    eprintln!("CliGJ: pty key: {e}");
+                // Raw mode + Windows ConPTY: many CLIs (e.g. Node readline) expect CRLF for a line submit.
+                if raw_tty
+                    && is_pty_enter_key(k.as_str())
+                    && bytes.len() == 1
+                    && bytes[0] == b'\r'
+                {
+                    bytes.push(b'\n');
+                }
+                let inject_ok = {
+                    let mut s = st_keys.borrow_mut();
+                    s.inject_bytes_into_current(&ui, &bytes)
+                };
+                match &inject_ok {
+                    Ok(()) => {
+                        if raw_tty && is_pty_enter_key(k.as_str()) {
+                            ui.set_ws_prompt(SharedString::new());
+                            let mut s = st_keys.borrow_mut();
+                            let idx = s.current;
+                            if idx < s.tabs.len() {
+                                s.tabs[idx].prompt = SharedString::new();
+                            }
+                        }
+                    }
+                    Err(e) => eprintln!("CliGJ: pty key: {e}"),
                 }
                 true
             }

@@ -266,6 +266,7 @@ impl GuiState {
                     .writer
                     .write_all(data)
                     .map_err(|e| e.to_string())?;
+                session.writer.flush().map_err(|e| e.to_string())?;
                 return Ok(());
             }
         }
