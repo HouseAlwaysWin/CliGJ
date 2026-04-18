@@ -3,7 +3,7 @@ use slint::{Color, Model, ModelRc, SharedString, VecModel};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
-use crate::terminal::render::ColoredLine;
+use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
 use super::slint_ui::{AppWindow, PromptImageChip};
@@ -95,6 +95,60 @@ fn build_term_line(line: &ColoredLine) -> TermLine {
     }
 }
 
+fn overlay_cursor_line(line: &ColoredLine, cursor_col: usize) -> ColoredLine {
+    let mut out = ColoredLine {
+        blank: line.blank,
+        spans: Vec::new(),
+    };
+    let mut col = 0usize;
+    let mut painted = false;
+
+    for span in &line.spans {
+        let chars: Vec<char> = span.text.chars().collect();
+        if chars.is_empty() {
+            continue;
+        }
+        let mut plain = String::new();
+        for ch in chars {
+            if col == cursor_col {
+                if !plain.is_empty() {
+                    out.spans.push(ColoredSpan {
+                        text: std::mem::take(&mut plain),
+                        fg: span.fg,
+                        bg: span.bg,
+                    });
+                }
+                out.spans.push(ColoredSpan {
+                    text: ch.to_string(),
+                    fg: span.bg,
+                    bg: span.fg,
+                });
+                painted = true;
+            } else {
+                plain.push(ch);
+            }
+            col += 1;
+        }
+        if !plain.is_empty() {
+            out.spans.push(ColoredSpan {
+                text: plain,
+                fg: span.fg,
+                bg: span.bg,
+            });
+        }
+    }
+
+    if !painted && col == cursor_col {
+        out.blank = false;
+        out.spans.push(ColoredSpan {
+            text: " ".to_string(),
+            fg: [18u8, 18, 18],
+            bg: [240u8, 240, 240],
+        });
+    }
+    out
+}
+
 fn empty_term_line() -> TermLine {
     TermLine {
         blank: true,
@@ -127,8 +181,13 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
             continue;
         }
 
-        let line = &tab.terminal_lines[idx];
-        let fp = line_fingerprint(line);
+        let base_line = &tab.terminal_lines[idx];
+        let rendered = if tab.terminal_cursor_row == Some(idx) {
+            overlay_cursor_line(base_line, tab.terminal_cursor_col.unwrap_or(0))
+        } else {
+            base_line.clone()
+        };
+        let fp = line_fingerprint(&rendered);
         
         // 再次確認指紋，避免不必要的 UI 更新（例如 dirty 標記了但內容其實回滾到跟快取一致）
         let unchanged = tab
@@ -141,7 +200,7 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
             continue;
         }
         
-        let built = build_term_line(line);
+        let built = build_term_line(&rendered);
         tab.terminal_model_rows.insert(idx, built);
         tab.terminal_model_hashes.insert(idx, fp);
         tab.terminal_model_dirty.insert(idx);
@@ -258,6 +317,29 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
 pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
+}
+
+pub(crate) fn nudge_terminal_cursor(tab: &mut TabState, key: &str) -> bool {
+    let Some(row) = tab.terminal_cursor_row else {
+        return false;
+    };
+    let old_col = tab.terminal_cursor_col.unwrap_or(0);
+    let line_len = tab
+        .terminal_lines
+        .get(row)
+        .map(|line| line.spans.iter().map(|s| s.text.chars().count()).sum::<usize>())
+        .unwrap_or(0);
+    let new_col = match key {
+        "LeftArrow" => old_col.saturating_sub(1),
+        "RightArrow" => old_col.saturating_add(1).min(line_len),
+        _ => return false,
+    };
+    if new_col == old_col {
+        return false;
+    }
+    tab.terminal_cursor_col = Some(new_col);
+    tab.terminal_model_dirty.insert(row);
+    true
 }
 
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {

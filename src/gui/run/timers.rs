@@ -25,6 +25,8 @@ struct PendingTabUpdate {
     replace_lines: Option<Vec<ColoredLine>>,
     full_len: Option<usize>,
     first_line_idx: Option<usize>,
+    cursor_row: Option<usize>,
+    cursor_col: Option<usize>,
     /// Changed line indices from reader thread; empty = unknown, diff all.
     changed_indices: Vec<usize>,
     append_text: String,
@@ -37,6 +39,8 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     }
 
     if chunk.replace {
+        entry.cursor_row = chunk.cursor_row;
+        entry.cursor_col = chunk.cursor_col;
         let mut lines = chunk.lines;
         let indices = chunk.changed_indices;
         
@@ -92,6 +96,8 @@ fn apply_pending_updates(
             continue;
         };
         let tab = &mut state.tabs[tab_idx];
+        tab.terminal_cursor_row = update.cursor_row;
+        tab.terminal_cursor_col = update.cursor_col;
         if let Some(v) = update.set_auto_scroll {
             tab.auto_scroll = v;
         }

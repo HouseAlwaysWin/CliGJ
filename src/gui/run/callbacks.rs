@@ -13,7 +13,7 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
-use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
+use crate::gui::ui_sync::{load_tab_to_ui, nudge_terminal_cursor, push_terminal_view_to_ui, tab_update_from_ui};
 
 use super::helpers::{
     clear_all_prompt_images, clipboard_raster_image_file, contains_cjk_char, copy_to_clipboard,
@@ -265,6 +265,13 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 };
                 match &inject_ok {
                     Ok(()) => {
+                        if raw_tty && matches!(k.as_str(), "LeftArrow" | "RightArrow") {
+                            let mut s = st_keys.borrow_mut();
+                            let idx = s.current;
+                            if idx < s.tabs.len() && nudge_terminal_cursor(&mut s.tabs[idx], k.as_str()) {
+                                push_terminal_view_to_ui(&ui, &mut s.tabs[idx]);
+                            }
+                        }
                         if raw_tty && is_pty_enter_key(k.as_str()) {
                             ui.set_ws_prompt(SharedString::new());
                             let mut s = st_keys.borrow_mut();

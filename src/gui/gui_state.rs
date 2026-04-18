@@ -105,6 +105,8 @@ impl GuiState {
                             lines: render.lines,
                             full_len: render.full_len,
                             first_line_idx: render.first_line_idx,
+                            cursor_row: render.cursor_row,
+                            cursor_col: render.cursor_col,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                             changed_indices: render.changed_indices,

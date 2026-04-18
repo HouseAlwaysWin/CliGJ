@@ -82,6 +82,9 @@ pub struct TabState {
     pub(crate) last_window_total: usize,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
+    /// Last known terminal cursor position in physical row indices for UI overlay.
+    pub(crate) terminal_cursor_row: Option<usize>,
+    pub(crate) terminal_cursor_col: Option<usize>,
 
     #[cfg(target_os = "windows")]
     pub(crate) conpty: Option<windows_conpty::ConptySession>,
@@ -122,6 +125,8 @@ impl TabState {
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
             composer_pty_mirror: String::new(),
+            terminal_cursor_row: None,
+            terminal_cursor_col: None,
             #[cfg(target_os = "windows")]
             conpty: None,
         };
@@ -138,6 +143,8 @@ impl TabState {
                             lines: render.lines,
                             full_len: render.full_len,
                             first_line_idx: render.first_line_idx,
+                            cursor_row: render.cursor_row,
+                            cursor_col: render.cursor_col,
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                             changed_indices: render.changed_indices,
@@ -182,6 +189,8 @@ impl TabState {
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
+        self.terminal_cursor_row = None;
+        self.terminal_cursor_col = None;
     }
 }
 
@@ -207,6 +216,8 @@ pub struct TerminalChunk {
     pub(crate) lines: Vec<ColoredLine>,
     pub(crate) full_len: usize,
     pub(crate) first_line_idx: usize,
+    pub(crate) cursor_row: Option<usize>,
+    pub(crate) cursor_col: Option<usize>,
     pub(crate) replace: bool,
     pub(crate) set_auto_scroll: Option<bool>,
     /// Which line indices changed (from reader thread diff); empty = treat all as changed.

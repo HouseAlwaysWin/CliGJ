@@ -19,13 +19,18 @@ pub struct ColoredLine {
 }
 
 #[must_use]
-pub fn line_to_colored_spans(line: &Line, palette: &ColorPalette) -> ColoredLine {
+pub fn line_to_colored_spans(
+    line: &Line,
+    palette: &ColorPalette,
+    cursor_col: Option<usize>,
+) -> ColoredLine {
     let mut spans = Vec::new();
     let mut cur = String::new();
     let mut cur_fg = [240u8, 240, 240];
     let mut cur_bg = [18u8, 18, 18];
     let mut have = false;
     let mut line_had_reverse = false;
+    let has_cursor = cursor_col.is_some();
 
     let flush = |out: &mut Vec<ColoredSpan>, s: String, fg: [u8; 3], bg: [u8; 3]| {
         if s.is_empty() {
@@ -55,6 +60,9 @@ pub fn line_to_colored_spans(line: &Line, palette: &ColorPalette) -> ColoredLine
         if cell.attrs().reverse() {
             std::mem::swap(&mut fg, &mut bg);
         }
+        if cursor_col == Some(col) {
+            std::mem::swap(&mut fg, &mut bg);
+        }
 
         if !have {
             cur_fg = fg;
@@ -80,13 +88,23 @@ pub fn line_to_colored_spans(line: &Line, palette: &ColorPalette) -> ColoredLine
     }
 
     if spans.is_empty() {
+        if has_cursor {
+            return ColoredLine {
+                blank: false,
+                spans: vec![ColoredSpan {
+                    text: " ".to_string(),
+                    fg: [18u8, 18, 18],
+                    bg: [240u8, 240, 240],
+                }],
+            };
+        }
         return ColoredLine {
             blank: true,
             spans: Vec::new(),
         };
     }
 
-    if is_padding_only_line(&spans, line_had_reverse) {
+    if is_padding_only_line(&spans, line_had_reverse, has_cursor) {
         return ColoredLine {
             blank: true,
             spans: Vec::new(),
@@ -102,8 +120,11 @@ pub fn line_to_colored_spans(line: &Line, palette: &ColorPalette) -> ColoredLine
 /// Full-width space fill (no visible glyphs) still produces span text of spaces. That row
 /// reserves a whole UI line and pushes the real cursor (often on the next phys line) down.
 /// A real text/cursor line either has non-whitespace, reverse video, or non-uniform styling.
-fn is_padding_only_line(spans: &[ColoredSpan], line_had_reverse: bool) -> bool {
+fn is_padding_only_line(spans: &[ColoredSpan], line_had_reverse: bool, has_cursor: bool) -> bool {
     if line_had_reverse {
+        return false;
+    }
+    if has_cursor {
         return false;
     }
     if !spans

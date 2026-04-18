@@ -55,6 +55,8 @@ pub struct TerminalRender {
     pub lines: Vec<ColoredLine>,
     pub full_len: usize,
     pub first_line_idx: usize,
+    pub cursor_row: Option<usize>,
+    pub cursor_col: Option<usize>,
     pub filled: bool,
     /// Indices of lines that changed since last render (for downstream diff).
     pub changed_indices: Vec<usize>,
@@ -177,27 +179,38 @@ impl Drop for ConptySession {
 
 const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
 
-fn snapshot_content_fingerprint(total_rows: usize, lines: &[&Line]) -> u64 {
+fn snapshot_content_fingerprint(
+    total_rows: usize,
+    lines: &[&Line],
+    cursor_local_row: Option<usize>,
+    cursor_col: Option<usize>,
+) -> u64 {
     let mut h = DefaultHasher::new();
     total_rows.hash(&mut h);
     lines.len().hash(&mut h);
+    cursor_local_row.hash(&mut h);
+    cursor_col.hash(&mut h);
     for line in lines {
         line.as_str().hash(&mut h);
     }
     h.finish()
 }
 
-fn line_fingerprint_raw(line: &Line) -> u64 {
+fn line_fingerprint_raw(line: &Line, cursor_col: Option<usize>) -> u64 {
     let mut h = DefaultHasher::new();
     line.as_str().hash(&mut h);
+    cursor_col.hash(&mut h);
     h.finish()
 }
 
 fn terminal_render_from_lines_cached(
     lines: &[&Line],
+    start: usize,
     total_scrollback_rows: usize,
     term_screen_rows: usize,
     palette: &ColorPalette,
+    cursor_local_row: Option<usize>,
+    cursor_col: Option<usize>,
     cache: &mut Vec<(u64, ColoredLine)>,
 ) -> TerminalRender {
     let mut changed_indices = Vec::new();
@@ -206,9 +219,14 @@ fn terminal_render_from_lines_cached(
 
     let common = old_len.min(new_len);
     for i in 0..common {
-        let fp = line_fingerprint_raw(lines[i]);
+        let active_cursor_col = if cursor_local_row == Some(i) {
+            cursor_col
+        } else {
+            None
+        };
+        let fp = line_fingerprint_raw(lines[i], active_cursor_col);
         if cache[i].0 != fp {
-            let built = line_to_colored_spans(lines[i], palette);
+            let built = line_to_colored_spans(lines[i], palette, None);
             cache[i] = (fp, built);
             changed_indices.push(i);
         }
@@ -216,8 +234,13 @@ fn terminal_render_from_lines_cached(
 
     if new_len > old_len {
         for (i, line) in lines.iter().enumerate().skip(old_len) {
-            let fp = line_fingerprint_raw(line);
-            let built = line_to_colored_spans(line, palette);
+            let active_cursor_col = if cursor_local_row == Some(i) {
+                cursor_col
+            } else {
+                None
+            };
+            let fp = line_fingerprint_raw(line, active_cursor_col);
+            let built = line_to_colored_spans(line, palette, None);
             cache.push((fp, built));
             changed_indices.push(i);
         }
@@ -234,7 +257,9 @@ fn terminal_render_from_lines_cached(
         text: String::new(),
         lines: changed_lines,
         full_len: new_len,
-        first_line_idx: 0, 
+        first_line_idx: start,
+        cursor_row: cursor_local_row.map(|row| start + row),
+        cursor_col,
         filled: total_scrollback_rows > term_screen_rows,
         changed_indices,
     }
@@ -275,23 +300,29 @@ pub fn start_reader_thread(
             let start = total.saturating_sub(CONPTY_SNAPSHOT_MAX_LINES);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
+            let cursor = term.cursor_pos();
+            let cursor_phys_row = screen.phys_row(cursor.y);
+            let cursor_local_row =
+                cursor_phys_row.checked_sub(start).filter(|row| *row < line_refs.len());
+            let cursor_col = Some(cursor.x);
 
-            let fp = snapshot_content_fingerprint(total, &line_refs);
+            let fp = snapshot_content_fingerprint(total, &line_refs, cursor_local_row, cursor_col);
             if last_snapshot_fp == Some(fp) {
                 continue;
             }
             last_snapshot_fp = Some(fp);
 
             on_chunk({
-                let mut render = terminal_render_from_lines_cached(
+                terminal_render_from_lines_cached(
                     &line_refs,
+                    start,
                     total,
                     term_rows,
                     &palette,
+                    cursor_local_row,
+                    cursor_col,
                     &mut line_cache,
-                );
-                render.first_line_idx = start;
-                render
+                )
             });
         }
     })
