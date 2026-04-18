@@ -63,7 +63,7 @@ impl GuiState {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
 
         let n = self.titles.row_count();
-        let label = SharedString::from(format!("工作階段 {}", n + 1));
+        let label = SharedString::from(format!("Session {}", n + 1));
         self.titles.push(label);
         let id = self.next_id;
         self.next_id += 1;

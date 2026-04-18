@@ -128,7 +128,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 padding-right: 8px;
                                 spacing: 6px;
                                 Text {
-                                    text: "取消";
+                                    text: @tr("取消");
                                     color: AppTheme.text_muted;
                                     vertical-alignment: center;
                                     font-size: 11px;
@@ -243,7 +243,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 padding-right: 8px;
                                 spacing: 6px;
                                 Text {
-                                    text: "清除圖";
+                                    text: @tr("清除圖");
                                     color: AppTheme.text_muted;
                                     vertical-alignment: center;
                                     font-size: 11px;
@@ -264,8 +264,8 @@ export component GjPromptDropZone inherits Rectangle {
                     min-height: 68px;
                     text <=> root.prompt;
                     placeholder-text: root.raw-input-enabled
-                        ? "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-                        : "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片";
+                        ? @tr("TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject")
+                        : @tr("Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片");
                     font-size: 13px;
                     wrap: word-wrap;
                 }
@@ -277,10 +277,10 @@ export component GjPromptDropZone inherits Rectangle {
                         width: 120px;
                         height: 22px;
                         model: ["gemini cli", "codex", "claude", "copilot"];
-                        current-value: "AI Models";
+                        current-value: @tr("AI Models");
                         selected(val) => {
                             root.ai-model-selected(val);
-                            self.current-value = "AI Models";
+                            self.current-value = @tr("AI Models");
                         }
                     }
 
@@ -321,7 +321,7 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         Text {
-                            text: "File";
+                            text: @tr("File");
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -346,7 +346,7 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         Text {
-                            text: "Img";
+                            text: @tr("Img");
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -359,23 +359,6 @@ export component GjPromptDropZone inherits Rectangle {
                             clicked => {
                                 root.inject-image-requested();
                             }
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 34px;
-                        height: 22px;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 11px;
-                        background: #00000000;
-
-                        Text {
-                            text: "Mic";
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 11px;
                         }
                     }
 
