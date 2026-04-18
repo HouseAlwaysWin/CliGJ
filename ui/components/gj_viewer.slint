@@ -158,8 +158,8 @@ export component GjViewer inherits Rectangle {
     }
 
     public function scroll_to_bottom() {
-        if (sv.viewport-height > sv.height) {
-            sv.viewport-y = min(0px, sv.height - sv.viewport-height);
+        if (root.terminal-total-lines * root.row-height > sv.height) {
+            sv.viewport-y = sv.height - (root.terminal-total-lines * root.row-height);
         } else {
             sv.viewport-y = 0px;
         }
@@ -169,6 +169,13 @@ export component GjViewer inherits Rectangle {
     public function scroll_to_top() {
         sv.viewport-y = 0px;
         root.viewport-changed();
+    }
+
+    // 監聽總行數變化，實現精確的自動滾動
+    changed terminal-total-lines => {
+        if (root.auto-scroll) {
+            root.scroll_to_bottom();
+        }
     }
 
     sv := ScrollView {

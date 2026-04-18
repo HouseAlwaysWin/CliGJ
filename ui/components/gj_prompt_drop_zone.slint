@@ -276,7 +276,7 @@ export component GjPromptDropZone inherits Rectangle {
                     ComboBox {
                         width: 120px;
                         height: 22px;
-                        model: ["gemini cli", "codex", "claude", "copilot"];
+                        model: ["gemini", "codex", "claude", "copilot"];
                         current-value: @tr("AI Models");
                         selected(val) => {
                             root.ai-model-selected(val);

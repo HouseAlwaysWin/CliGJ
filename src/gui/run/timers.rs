@@ -105,44 +105,33 @@ fn apply_pending_updates(
         let mut replaced_with_vt_lines = false;
         if let Some(mut new_lines) = update.replace_lines {
             let chunk_first_idx = update.first_line_idx.unwrap_or(0);
-            let total_needed = chunk_first_idx + update.full_len.unwrap_or(0);
+            let full_len_in_chunk = update.full_len.unwrap_or(0);
+            let total_needed = chunk_first_idx + full_len_in_chunk;
             replaced_with_vt_lines = true;
             
-            // 重要：解決重複殘留。只要 PTY 報告的總行數 flen 小於目前的向量，就強制截斷。
-            if let Some(flen) = update.full_len {
-                if flen < tab.terminal_lines.len() {
-                    tab.terminal_lines.truncate(flen);
-                    tab.terminal_model_rows.retain(|&k, _| k < flen);
-                    tab.terminal_model_hashes.retain(|&k, _| k < flen);
-                    tab.terminal_model_dirty.retain(|&k| k < flen);
-                }
-            }
-
-            let old_len = tab.terminal_lines.len();
-            if total_needed > old_len {
+            // 確保緩存行數足夠
+            if total_needed > tab.terminal_lines.len() {
                 tab.terminal_lines.resize(total_needed, ColoredLine::default());
-                for i in old_len..total_needed {
-                    tab.terminal_model_dirty.insert(i);
-                }
             }
 
             let indices = &update.changed_indices;
             if indices.is_empty() && !new_lines.is_empty() {
-                let chunk_len = new_lines.len();
-                for i in 0..chunk_len {
+                // 全量更新此區塊
+                for i in 0..new_lines.len() {
                     let real_idx = chunk_first_idx + i;
                     if real_idx < tab.terminal_lines.len() {
-                        std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[i]);
+                        tab.terminal_lines[real_idx] = std::mem::take(&mut new_lines[i]);
                         tab.terminal_model_rows.remove(&real_idx);
                         tab.terminal_model_hashes.remove(&real_idx);
                         tab.terminal_model_dirty.insert(real_idx);
                     }
                 }
             } else {
+                // 增量更新變動行
                 for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
                     let real_idx = chunk_first_idx + snapshot_idx;
                     if real_idx < tab.terminal_lines.len() && delta_idx < new_lines.len() {
-                        std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[delta_idx]);
+                        tab.terminal_lines[real_idx] = std::mem::take(&mut new_lines[delta_idx]);
                         tab.terminal_model_rows.remove(&real_idx);
                         tab.terminal_model_hashes.remove(&real_idx);
                         tab.terminal_model_dirty.insert(real_idx);

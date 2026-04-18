@@ -205,7 +205,7 @@ fn line_fingerprint_raw(line: &Line, cursor_col: Option<usize>) -> u64 {
 
 fn terminal_render_from_lines_cached(
     lines: &[&Line],
-    start: usize,
+    start_phys_idx: usize,
     total_scrollback_rows: usize,
     term_screen_rows: usize,
     palette: &ColorPalette,
@@ -214,51 +214,39 @@ fn terminal_render_from_lines_cached(
     cache: &mut Vec<(u64, ColoredLine)>,
 ) -> TerminalRender {
     let mut changed_indices = Vec::new();
-    let new_len = lines.len();
-    let old_len = cache.len();
+    let num_lines = lines.len();
 
-    let common = old_len.min(new_len);
-    for i in 0..common {
+    // 確保 cache 長度足夠
+    if cache.len() < start_phys_idx + num_lines {
+        cache.resize(start_phys_idx + num_lines, (0, ColoredLine::default()));
+    }
+
+    for i in 0..num_lines {
+        let global_idx = start_phys_idx + i;
         let active_cursor_col = if cursor_local_row == Some(i) {
             cursor_col
         } else {
             None
         };
         let fp = line_fingerprint_raw(lines[i], active_cursor_col);
-        if cache[i].0 != fp {
+        if cache[global_idx].0 != fp {
             let built = line_to_colored_spans(lines[i], palette, None);
-            cache[i] = (fp, built);
+            cache[global_idx] = (fp, built);
             changed_indices.push(i);
         }
-    }
-
-    if new_len > old_len {
-        for (i, line) in lines.iter().enumerate().skip(old_len) {
-            let active_cursor_col = if cursor_local_row == Some(i) {
-                cursor_col
-            } else {
-                None
-            };
-            let fp = line_fingerprint_raw(line, active_cursor_col);
-            let built = line_to_colored_spans(line, palette, None);
-            cache.push((fp, built));
-            changed_indices.push(i);
-        }
-    } else if new_len < old_len {
-        cache.truncate(new_len);
     }
 
     let changed_lines: Vec<ColoredLine> = changed_indices
         .iter()
-        .map(|&i| cache[i].1.clone())
+        .map(|&i| cache[start_phys_idx + i].1.clone())
         .collect();
 
     TerminalRender {
         text: String::new(),
         lines: changed_lines,
-        full_len: new_len,
-        first_line_idx: start,
-        cursor_row: cursor_local_row.map(|row| start + row),
+        full_len: num_lines,
+        first_line_idx: start_phys_idx,
+        cursor_row: cursor_local_row.map(|row| start_phys_idx + row),
         cursor_col,
         filled: total_scrollback_rows > term_screen_rows,
         changed_indices,

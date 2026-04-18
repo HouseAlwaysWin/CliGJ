@@ -307,7 +307,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         let launch_cmd = match model_name.as_str() {
-            "gemini cli" => "gemini\r\n",
+            "gemini" => "gemini\r\n",
             "codex" => "codex\r\n",
             "claude" => "claude\r\n",
             "copilot" => "copilot\r\n",
