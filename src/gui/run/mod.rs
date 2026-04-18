@@ -74,10 +74,23 @@ fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let app_weak = app.as_weak();
     app.window().on_winit_window_event(move |_window, event| {
         match event {
+            winit::event::WindowEvent::HoveredFile(_) => {
+                if let Some(ui) = app_weak.upgrade() {
+                    ui.set_ws_file_drop_visible(true);
+                }
+                EventResult::PreventDefault
+            }
+            winit::event::WindowEvent::HoveredFileCancelled => {
+                if let Some(ui) = app_weak.upgrade() {
+                    ui.set_ws_file_drop_visible(false);
+                }
+                EventResult::PreventDefault
+            }
             winit::event::WindowEvent::DroppedFile(path) => {
                 let Some(ui) = app_weak.upgrade() else {
                     return EventResult::Propagate;
                 };
+                ui.set_ws_file_drop_visible(false);
                 let mut s = state.borrow_mut();
                 if let Err(e) = helpers::inject_path_into_current(&ui, &mut s, path.as_path()) {
                     eprintln!("CliGJ: dropped file {}: {e}", path.display());

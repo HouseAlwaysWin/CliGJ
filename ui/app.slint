@@ -41,6 +41,7 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-at-choices: [];
     in-out property <int> ws-at-selected: 0;
     in property <string> ws-workspace-root-label: "";
+    in-out property <bool> ws-file-drop-visible: false;
 
     callback tab-changed(int);
     callback tab-close-requested(int);
@@ -299,4 +300,42 @@ export component AppWindow inherits Window {
 
     out property <float> ws-terminal-scroll-top-px: workspace.terminal-scroll-top-px;
     out property <float> ws-terminal-viewport-height-px: workspace.terminal-viewport-height-px;
+
+    if root.ws-file-drop-visible : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #1a1b26c0; // 半透明背景
+        z: 500;
+
+        Rectangle {
+            width: 240px;
+            height: 120px;
+            border-width: 2px;
+            border-color: AppTheme.accent;
+            border-radius: 12px;
+            background: AppTheme.bg;
+
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                Text {
+                    // ASCII "+" — U+2295 (⊕) is often missing from bundled UI fonts and renders as tofu.
+                    text: "+";
+                    font-size: 32px;
+                    font-weight: 300;
+                    color: AppTheme.accent;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "放開以加入檔案";
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: AppTheme.text;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
 }

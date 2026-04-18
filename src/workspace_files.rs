@@ -137,6 +137,24 @@ pub fn strip_active_at_segment(prompt: &str) -> String {
     s
 }
 
+/// Windows [`std::fs::canonicalize`] returns *verbatim* paths: `\\?\C:\...` or `\\?\UNC\server\...`.
+/// Those are correct internally but look like "extra backslashes" (and `?` may render poorly in some fonts).
+/// Strip the prefix for display and for shell command lines.
+#[must_use]
+pub fn strip_windows_verbatim_prefix(path: &str) -> String {
+    const PREFIX: &str = r"\\?\";
+    if !path.starts_with(PREFIX) {
+        return path.to_string();
+    }
+    let rest = &path[PREFIX.len()..];
+    if rest.starts_with("UNC\\") {
+        // \\?\UNC\server\share -> \\server\share
+        format!(r"\\{}", &rest[4..])
+    } else {
+        rest.to_string()
+    }
+}
+
 #[must_use]
 pub fn file_name_label(path: &str) -> String {
     Path::new(path)
@@ -161,6 +179,22 @@ mod tests {
         assert_eq!(out[0], "a_shallow.rs");
         assert_eq!(out[1], "z_shallow.rs");
         assert_eq!(out[2], "src/main.rs");
+    }
+
+    #[test]
+    fn strip_verbatim_d_drive() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\D:\Projects\CliGJ\Cargo.toml"),
+            r"D:\Projects\CliGJ\Cargo.toml"
+        );
+    }
+
+    #[test]
+    fn strip_verbatim_unc() {
+        assert_eq!(
+            strip_windows_verbatim_prefix(r"\\?\UNC\server\share\file.txt"),
+            r"\\server\share\file.txt"
+        );
     }
 
     #[test]

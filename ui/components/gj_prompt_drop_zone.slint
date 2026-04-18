@@ -29,8 +29,9 @@ export component GjPromptDropZone inherits Rectangle {
     }
 
     horizontal-stretch: 1;
-    min-height: 116px;
-    max-height: 116px;
+    // Fixed 116px fits chips row + TextEdit + bar only when the chip strip is hidden; with chips, add ~28px.
+    min-height: root.prompt-path-chips.length > 0 ? 144px : 116px;
+    max-height: root.prompt-path-chips.length > 0 ? 144px : 116px;
     background: AppTheme.bg;
     border-width: 0px;
 

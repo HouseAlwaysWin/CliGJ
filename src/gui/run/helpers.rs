@@ -6,6 +6,7 @@ use arboard::Clipboard;
 
 use crate::terminal::key_encoding;
 use crate::terminal::render::ColoredLine;
+use crate::workspace_files;
 
 use super::super::slint_ui::AppWindow;
 use super::super::state::{GuiState, TabState};
@@ -19,9 +20,22 @@ pub(crate) fn inject_path_into_current(
     s: &mut GuiState,
     path: &Path,
 ) -> Result<(), String> {
-    let text = std::fs::read_to_string(path).map_err(|e| e.to_string())?;
-    let bytes = normalize_text_for_conpty(&text);
-    s.inject_bytes_into_current(ui, &bytes)
+    if s.current >= s.tabs.len() {
+        return Err("invalid tab index".into());
+    }
+    let abs_path = path.canonicalize()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| path.to_string_lossy().to_string());
+    let abs_path = workspace_files::strip_windows_verbatim_prefix(&abs_path);
+
+    let tab = &mut s.tabs[s.current];
+    if !tab.prompt_picked_files_abs.contains(&abs_path) {
+        tab.prompt_picked_files_abs.push(abs_path);
+    }
+    
+    // 同步 UI 狀態
+    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    Ok(())
 }
 
 pub(crate) fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {
