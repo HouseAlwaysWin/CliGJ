@@ -14,10 +14,6 @@ use crate::workspace_files;
 use super::super::slint_ui::AppWindow;
 use super::super::state::{GuiState, PromptImageAttach, TabState};
 
-pub(crate) fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
-    text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
-}
-
 pub(crate) fn inject_path_into_current(
     ui: &AppWindow,
     s: &mut GuiState,
