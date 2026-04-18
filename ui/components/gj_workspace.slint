@@ -32,6 +32,7 @@ export component GjWorkspace inherits Rectangle {
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
     callback prompt-images-clear-requested;
+    callback prompt-image-zoom-requested(int);
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
@@ -117,6 +118,9 @@ export component GjWorkspace inherits Rectangle {
             }
             prompt-images-clear-requested => {
                 root.prompt-images-clear-requested();
+            }
+            prompt-image-zoom-requested(idx) => {
+                root.prompt-image-zoom-requested(idx);
             }
             prompt-chip-remove-requested(index) => {
                 root.prompt-chip-remove-requested(index);

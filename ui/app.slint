@@ -18,6 +18,8 @@ export component AppWindow inherits Window {
 
     in-out property <string> ws-file-path: "";
     in-out property <[PromptImageChip]> ws-prompt-images: [];
+    /// -1 = image zoom/lightbox closed; else index into `ws-prompt-images`.
+    in-out property <int> ws-image-zoom-index: -1;
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
     in-out property <[TermLine]> ws-terminal-lines: [];
@@ -194,6 +196,9 @@ export component AppWindow inherits Window {
                         prompt-images-clear-requested => {
                             root.prompt-images-clear-requested();
                         }
+                        prompt-image-zoom-requested(idx) => {
+                            root.ws-image-zoom-index = idx;
+                        }
                         at-picker-choose(index) => {
                             root.at-picker-choose(index);
                         }
@@ -310,6 +315,54 @@ export component AppWindow inherits Window {
 
     out property <float> ws-terminal-scroll-top-px: workspace.terminal-scroll-top-px;
     out property <float> ws-terminal-viewport-height-px: workspace.terminal-viewport-height-px;
+
+    if root.ws-image-zoom-index >= 0
+            && root.ws-image-zoom-index < root.ws-prompt-images.length: Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #0a0a0fe8;
+        z: 450;
+
+        TouchArea {
+            width: 100%;
+            height: 100%;
+            clicked => {
+                root.ws-image-zoom-index = -1;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                padding: 24px;
+                spacing: 10px;
+
+                Rectangle {
+                    width: min(parent.width - 48px, 900px);
+                    height: min(parent.height - 80px, 720px);
+                    border-width: 1px;
+                    border-color: AppTheme.prompt_chrome_border;
+                    border-radius: 12px;
+                    background: #14161c;
+                    clip: true;
+
+                    Image {
+                        source: root.ws-prompt-images[root.ws-image-zoom-index].thumb;
+                        width: 100%;
+                        height: 100%;
+                        image-fit: contain;
+                    }
+                }
+
+                Text {
+                    text: "點擊任意處關閉";
+                    color: AppTheme.text_muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+            }
+        }
+    }
 
     if root.ws-file-drop-visible : Rectangle {
         x: 0px;

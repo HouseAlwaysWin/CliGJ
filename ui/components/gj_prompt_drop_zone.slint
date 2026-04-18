@@ -21,6 +21,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
     callback prompt-images-clear-requested;
+    callback prompt-image-zoom-requested(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
 
@@ -181,6 +182,14 @@ export component GjPromptDropZone inherits Rectangle {
                                                 height: 100%;
                                                 image-fit: cover;
                                             }
+
+                                            TouchArea {
+                                                width: parent.width;
+                                                height: parent.height;
+                                                clicked => {
+                                                    root.prompt-image-zoom-requested(idx);
+                                                }
+                                            }
                                         }
 
                                         Text {
@@ -192,17 +201,27 @@ export component GjPromptDropZone inherits Rectangle {
                                             overflow: elide;
                                         }
 
-                                        Text {
-                                            text: "x";
-                                            color: #ff8ca8;
-                                            vertical-alignment: center;
-                                            font-size: 11px;
-                                        }
-                                    }
+                                        Rectangle {
+                                            width: 18px;
+                                            height: parent.height;
 
-                                    TouchArea {
-                                        clicked => {
-                                            root.prompt-image-remove-requested(idx);
+                                            Text {
+                                                text: "x";
+                                                color: #ff8ca8;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: center;
+                                                font-size: 11px;
+                                                width: 100%;
+                                                height: 100%;
+                                            }
+
+                                            TouchArea {
+                                                width: parent.width;
+                                                height: parent.height;
+                                                clicked => {
+                                                    root.prompt-image-remove-requested(idx);
+                                                }
+                                            }
                                         }
                                     }
                                 }

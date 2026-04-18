@@ -275,6 +275,7 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
 }
 
 pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
+    ui.set_ws_image_zoom_index(-1);
     ui.set_ws_file_path(SharedString::from(tab.file_path.as_str()));
     let img_chips: Vec<PromptImageChip> = tab
         .prompt_picked_images
