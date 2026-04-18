@@ -319,29 +319,6 @@ pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
 
-pub(crate) fn nudge_terminal_cursor(tab: &mut TabState, key: &str) -> bool {
-    let Some(row) = tab.terminal_cursor_row else {
-        return false;
-    };
-    let old_col = tab.terminal_cursor_col.unwrap_or(0);
-    let line_len = tab
-        .terminal_lines
-        .get(row)
-        .map(|line| line.spans.iter().map(|s| s.text.chars().count()).sum::<usize>())
-        .unwrap_or(0);
-    let new_col = match key {
-        "LeftArrow" => old_col.saturating_sub(1),
-        "RightArrow" => old_col.saturating_add(1).min(line_len),
-        _ => return false,
-    };
-    if new_col == old_col {
-        return false;
-    }
-    tab.terminal_cursor_col = Some(new_col);
-    tab.terminal_model_dirty.insert(row);
-    true
-}
-
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.file_path = ui.get_ws_file_path().to_string();
     tab.selected_line = ui.get_ws_selected_line();
