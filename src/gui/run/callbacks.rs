@@ -5,7 +5,7 @@ use std::rc::Rc;
 
 use slint::{spawn_local, ComponentHandle, Model, SharedString};
 
-use crate::terminal::key_encoding;
+use crate::terminal::key_encoding::{self, MOD_CTRL};
 use crate::terminal::prompt_key::PromptKeyAction;
 use crate::workspace_files;
 
@@ -16,7 +16,8 @@ use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
 
 use super::helpers::{
-    contains_cjk_char, copy_to_clipboard, is_local_prompt_edit_key, selected_text_from_terminal_lines,
+    contains_cjk_char, copy_to_clipboard, inject_paths_into_current, is_local_prompt_edit_key,
+    selected_text_from_terminal_lines,
 };
 
 pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -125,6 +126,21 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return false;
         };
         let key_str = key.as_str();
+        // Composer: paste files copied in Explorer (CF_HDROP), same as drag-and-drop chips.
+        #[cfg(target_os = "windows")]
+        if !raw_tty
+            && !ui.get_ws_at_picker_open()
+            && (mod_mask as u32) & MOD_CTRL != 0
+            && matches!(key_str, "v" | "V")
+        {
+            if let Some(paths) = super::helpers::clipboard_file_paths_hdrop() {
+                let mut s = st_keys.borrow_mut();
+                if let Err(e) = inject_paths_into_current(&ui, &mut *s, &paths) {
+                    eprintln!("CliGJ: paste files: {e}");
+                }
+                return true;
+            }
+        }
         if raw_tty
             && is_local_prompt_edit_key(mod_mask as u32, key_str)
             && !ui.get_ws_prompt().is_empty()

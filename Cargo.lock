@@ -8,6 +8,7 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "clap",
+ "clipboard-win",
  "dirs",
  "encoding_rs",
  "rfd",

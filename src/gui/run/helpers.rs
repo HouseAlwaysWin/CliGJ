@@ -1,6 +1,6 @@
 //! Shared helpers for `run` (clipboard, terminal selection text, inject, CJK/raw heuristics).
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use arboard::Clipboard;
 
@@ -20,22 +20,47 @@ pub(crate) fn inject_path_into_current(
     s: &mut GuiState,
     path: &Path,
 ) -> Result<(), String> {
+    inject_paths_into_current(ui, s, std::slice::from_ref(&path.to_path_buf()))
+}
+
+/// Add one or more absolute paths as composer file chips (same rules as drag-and-drop).
+pub(crate) fn inject_paths_into_current(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    paths: &[PathBuf],
+) -> Result<(), String> {
     if s.current >= s.tabs.len() {
         return Err("invalid tab index".into());
     }
-    let abs_path = path.canonicalize()
-        .map(|p| p.to_string_lossy().to_string())
-        .unwrap_or_else(|_| path.to_string_lossy().to_string());
-    let abs_path = workspace_files::strip_windows_verbatim_prefix(&abs_path);
-
-    let tab = &mut s.tabs[s.current];
-    if !tab.prompt_picked_files_abs.contains(&abs_path) {
-        tab.prompt_picked_files_abs.push(abs_path);
+    if paths.is_empty() {
+        return Ok(());
     }
-    
-    // 同步 UI 狀態
+    let tab = &mut s.tabs[s.current];
+    for path in paths {
+        let abs_path = path
+            .canonicalize()
+            .map(|p| p.to_string_lossy().to_string())
+            .unwrap_or_else(|_| path.to_string_lossy().to_string());
+        let abs_path = workspace_files::strip_windows_verbatim_prefix(&abs_path);
+        if !tab.prompt_picked_files_abs.contains(&abs_path) {
+            tab.prompt_picked_files_abs.push(abs_path);
+        }
+    }
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
+}
+
+/// Windows: paths from Explorer copy (`CF_HDROP`). `None` if clipboard has no file list or read failed.
+#[cfg(target_os = "windows")]
+pub(crate) fn clipboard_file_paths_hdrop() -> Option<Vec<PathBuf>> {
+    use clipboard_win::{formats, get_clipboard};
+    let paths: Vec<PathBuf> = get_clipboard(formats::FileList).ok()?;
+    (!paths.is_empty()).then_some(paths)
+}
+
+#[cfg(not(target_os = "windows"))]
+pub(crate) fn clipboard_file_paths_hdrop() -> Option<Vec<PathBuf>> {
+    None
 }
 
 pub(crate) fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {
