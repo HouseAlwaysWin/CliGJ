@@ -99,52 +99,53 @@ fn apply_pending_updates(
         let mut replaced_with_vt_lines = false;
         if let Some(mut new_lines) = update.replace_lines {
             let chunk_first_idx = update.first_line_idx.unwrap_or(0);
-            let chunk_len = update.full_len.unwrap_or(0);
-            let total_needed = chunk_first_idx + chunk_len;
-            replaced_with_vt_lines = total_needed > 0;
+            let total_needed = chunk_first_idx + update.full_len.unwrap_or(0);
+            replaced_with_vt_lines = true;
             
-            if replaced_with_vt_lines {
-                let old_len = tab.terminal_lines.len();
-
-                if total_needed > old_len {
-                    tab.terminal_lines.resize(total_needed, ColoredLine::default());
-                    for i in old_len..total_needed {
-                        tab.terminal_model_dirty.insert(i);
-                    }
+            // 重要：解決重複殘留。只要 PTY 報告的總行數 flen 小於目前的向量，就強制截斷。
+            if let Some(flen) = update.full_len {
+                if flen < tab.terminal_lines.len() {
+                    tab.terminal_lines.truncate(flen);
+                    tab.terminal_model_rows.retain(|&k, _| k < flen);
+                    tab.terminal_model_hashes.retain(|&k, _| k < flen);
+                    tab.terminal_model_dirty.retain(|&k| k < flen);
                 }
-
-                let indices = &update.changed_indices;
-                if indices.is_empty() && chunk_len > 0 && !new_lines.is_empty() {
-                    for i in 0..chunk_len {
-                        let real_idx = chunk_first_idx + i;
-                        if real_idx < tab.terminal_lines.len() && i < new_lines.len() {
-                            std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[i]);
-                            tab.terminal_model_rows.remove(&real_idx);
-                            tab.terminal_model_hashes.remove(&real_idx);
-                            tab.terminal_model_dirty.insert(real_idx);
-                        }
-                    }
-                } else {
-                    for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
-                        let real_idx = chunk_first_idx + snapshot_idx;
-                        if real_idx < tab.terminal_lines.len() && delta_idx < new_lines.len() {
-                            std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[delta_idx]);
-                            tab.terminal_model_rows.remove(&real_idx);
-                            tab.terminal_model_hashes.remove(&real_idx);
-                            tab.terminal_model_dirty.insert(real_idx);
-                        }
-                    }
-                }
-
-                tab.truncate_terminal_lines();
-                tab.terminal_text.clear();
-            } else if update.full_len.is_some() {
-                tab.terminal_lines.clear();
-                tab.terminal_model_rows.clear();
-                tab.terminal_model_hashes.clear();
-                tab.terminal_model_dirty.clear();
-                tab.terminal_text = update.replace_text.unwrap_or_default();
             }
+
+            let old_len = tab.terminal_lines.len();
+            if total_needed > old_len {
+                tab.terminal_lines.resize(total_needed, ColoredLine::default());
+                for i in old_len..total_needed {
+                    tab.terminal_model_dirty.insert(i);
+                }
+            }
+
+            let indices = &update.changed_indices;
+            if indices.is_empty() && !new_lines.is_empty() {
+                let chunk_len = new_lines.len();
+                for i in 0..chunk_len {
+                    let real_idx = chunk_first_idx + i;
+                    if real_idx < tab.terminal_lines.len() {
+                        std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[i]);
+                        tab.terminal_model_rows.remove(&real_idx);
+                        tab.terminal_model_hashes.remove(&real_idx);
+                        tab.terminal_model_dirty.insert(real_idx);
+                    }
+                }
+            } else {
+                for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
+                    let real_idx = chunk_first_idx + snapshot_idx;
+                    if real_idx < tab.terminal_lines.len() && delta_idx < new_lines.len() {
+                        std::mem::swap(&mut tab.terminal_lines[real_idx], &mut new_lines[delta_idx]);
+                        tab.terminal_model_rows.remove(&real_idx);
+                        tab.terminal_model_hashes.remove(&real_idx);
+                        tab.terminal_model_dirty.insert(real_idx);
+                    }
+                }
+            }
+
+            tab.truncate_terminal_lines();
+            tab.terminal_text.clear();
         }
 
         if !update.append_text.is_empty() && !replaced_with_vt_lines {

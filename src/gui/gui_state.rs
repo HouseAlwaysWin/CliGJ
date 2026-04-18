@@ -124,49 +124,54 @@ impl GuiState {
             return Err("invalid current tab index");
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
-        let tab = &mut self.tabs[self.current];
         
-        // 1. Prepare additional attachments (files/images) to be appended to command line
         let mut extra_payload = String::new();
-        for path in &tab.prompt_picked_files_abs {
-            if !path.is_empty() && !tab.prompt.contains(path) {
-                extra_payload.push(' ');
-                extra_payload.push_str(path);
+        {
+            let tab = &self.tabs[self.current];
+            for path in &tab.prompt_picked_files_abs {
+                if !path.is_empty() && !tab.prompt.contains(path) {
+                    extra_payload.push(' ');
+                    extra_payload.push_str(path);
+                }
             }
-        }
-        for img in &tab.prompt_picked_images {
-            if !img.abs_path.is_empty() && !tab.prompt.contains(&img.abs_path) {
-                extra_payload.push(' ');
-                extra_payload.push_str(&img.abs_path);
+            for img in &tab.prompt_picked_images {
+                if !img.abs_path.is_empty() && !tab.prompt.contains(&img.abs_path) {
+                    extra_payload.push(' ');
+                    extra_payload.push_str(&img.abs_path);
+                }
             }
         }
 
-        let full_command = format!("{}{}", tab.prompt, extra_payload).trim().to_string();
+        let full_command = {
+            let tab = &self.tabs[self.current];
+            format!("{}{}", tab.prompt, extra_payload).trim().to_string()
+        };
 
-        // 2. Add to history if not empty
         if !full_command.is_empty() {
+            let tab = &mut self.tabs[self.current];
             let history = &mut tab.command_history;
             if history.last().map(|s| s.as_str()) != Some(full_command.as_str()) {
                 history.push(full_command.clone());
             }
         }
-        tab.history_cursor = None;
-        tab.history_draft.clear();
 
-        // 3. Send to PTY
         #[cfg(target_os = "windows")]
         {
+            use crate::gui::composer_sync::sync_composer_line_to_conpty;
+            // 提交前補齊鏡像同步
+            sync_composer_line_to_conpty(ui, self);
+            
+            let tab = &mut self.tabs[self.current];
+            tab.history_cursor = None;
+            tab.history_draft.clear();
+
             if let Some(session) = tab.conpty.as_mut() {
                 use std::io::Write;
-                use crate::gui::composer_sync::diff_composer_to_conpty;
-
-                // Send whatever is left in the prompt (not mirrored yet) + extras
-                let cur_prompt = tab.prompt.to_string();
-                let diff = diff_composer_to_conpty(&tab.composer_pty_mirror, &cur_prompt);
-                let _ = session.writer.write_all(&diff);
-                let _ = session.writer.write_all(extra_payload.as_bytes());
-                // Windows ConPTY for interactive prompts: \r\n is most reliable as a "commit"
-                let _ = session.writer.write_all(b"\r\n");
+                if !extra_payload.is_empty() {
+                    let _ = session.writer.write_all(extra_payload.as_bytes());
+                }
+                // 提交訊號：對互動式 CLI 而言，\r (CR) 比 \r\n 穩定
+                let _ = session.writer.write_all(b"\r");
                 let _ = session.writer.flush();
             } else if !full_command.is_empty() {
                 tab.append_terminal(&format!("{full_command}\n"));
@@ -177,6 +182,9 @@ impl GuiState {
 
         #[cfg(not(target_os = "windows"))]
         {
+            let tab = &mut self.tabs[self.current];
+            tab.history_cursor = None;
+            tab.history_draft.clear();
             if !full_command.is_empty() {
                 tab.append_terminal(&format!("{full_command}\n"));
             } else {
@@ -184,12 +192,12 @@ impl GuiState {
             }
         }
 
-        // 4. Reset composer state
+        let tab = &mut self.tabs[self.current];
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
         tab.prompt_picked_images.clear();
         tab.composer_pty_mirror.clear();
-        // Update snapshot to prevent timer from thinking it needs to delete the prompt we just submitted
+        // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
         self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
         load_tab_to_ui(ui, tab);
         Ok(())

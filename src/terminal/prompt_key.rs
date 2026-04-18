@@ -16,7 +16,7 @@ pub enum PromptKeyAction {
 }
 
 #[must_use]
-pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, shift: bool) -> PromptKeyAction {
+pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -> PromptKeyAction {
     let key = normalize_tty_key_token(key);
     
     // 1. 特殊功能鍵優先
