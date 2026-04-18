@@ -1,4 +1,5 @@
 use std::io::Write;
+use std::time::Duration;
 
 use slint::{Model, SharedString};
 
@@ -169,8 +170,15 @@ impl GuiState {
                 use std::io::Write;
                 if !extra_payload.is_empty() {
                     let _ = session.writer.write_all(extra_payload.as_bytes());
+                    let _ = session.writer.flush();
                 }
-                // 提交訊號：對互動式 CLI 而言，\r (CR) 比 \r\n 穩定
+                // Some interactive CLIs on Windows (including Gemini CLI) debounce
+                // rapid input to detect paste. If Enter arrives in the same burst as
+                // the mirrored prompt text, it can be treated like another pasted
+                // newline instead of a submit. Give the TUI a moment, then send CR.
+                if !full_command.is_empty() {
+                    std::thread::sleep(Duration::from_millis(40));
+                }
                 let _ = session.writer.write_all(b"\r");
                 let _ = session.writer.flush();
             } else if !full_command.is_empty() {

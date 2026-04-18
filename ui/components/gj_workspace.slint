@@ -38,6 +38,7 @@ export component GjWorkspace inherits Rectangle {
     callback prompt-chip-clear-requested;
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
+    forward-focus: prompt-zone;
 
     background: AppTheme.bg;
 
@@ -86,7 +87,7 @@ export component GjWorkspace inherits Rectangle {
             }
         }
 
-        GjPromptDropZone {
+        prompt-zone := GjPromptDropZone {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
             raw-input-enabled <=> root.raw-input-enabled;

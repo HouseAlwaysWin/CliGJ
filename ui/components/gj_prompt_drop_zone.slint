@@ -24,6 +24,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-image-zoom-requested(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    forward-focus: prompt-input;
 
     function pty_mod(event: KeyEvent) -> int {
         (event.modifiers.control ? 1 : 0)
@@ -257,7 +258,7 @@ export component GjPromptDropZone inherits Rectangle {
                     }
                 }
 
-                TextEdit {
+                prompt-input := TextEdit {
                     horizontal-stretch: 1;
                     min-height: 68px;
                     text <=> root.prompt;
