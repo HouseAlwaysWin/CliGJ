@@ -82,16 +82,20 @@ pub struct TabState {
     pub(crate) last_window_total: usize,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
-    /// Last known terminal cursor position in physical row indices for UI overlay.
+    /// Local row index into `terminal_lines` for the cell cursor (matches overlay in `ui_sync`).
     pub(crate) terminal_cursor_row: Option<usize>,
     pub(crate) terminal_cursor_col: Option<usize>,
+    /// PTY physical line index of `terminal_lines[0]`; rows below were dropped for scrollback cap.
+    pub(crate) terminal_physical_origin: usize,
 
     #[cfg(target_os = "windows")]
     pub(crate) conpty: Option<windows_conpty::ConptySession>,
+    #[cfg(target_os = "windows")]
+    pub(crate) conpty_control_tx: Option<mpsc::Sender<windows_conpty::ControlCommand>>,
 }
 
-pub(crate) const MAX_TERMINAL_LINES: usize = 2000;
-pub(crate) const TRUNCATE_THRESHOLD: usize = 2500;
+/// Hard cap on VT rows kept client-side; oldest lines are discarded first (see `enforce_scrollback_cap`).
+pub(crate) const TERMINAL_SCROLLBACK_CAP: usize = 1200;
 
 impl TabState {
     pub fn new(id: u64, tx: mpsc::Sender<TerminalChunk>) -> Self {
@@ -127,8 +131,11 @@ impl TabState {
             composer_pty_mirror: String::new(),
             terminal_cursor_row: None,
             terminal_cursor_col: None,
+            terminal_physical_origin: 0,
             #[cfg(target_os = "windows")]
             conpty: None,
+            #[cfg(target_os = "windows")]
+            conpty_control_tx: None,
         };
 
         #[cfg(target_os = "windows")]
@@ -136,7 +143,8 @@ impl TabState {
             if me.cmd_type == "Command Prompt" || me.cmd_type == "PowerShell" {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(&me.cmd_type, 120, 40) {
                     let tab_id = me.id;
-                    windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                    let (control_tx, control_rx) = mpsc::channel();
+                    windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
                             text: render.text,
@@ -148,9 +156,11 @@ impl TabState {
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                             changed_indices: render.changed_indices,
+                            reset_terminal_buffer: render.reset_terminal_buffer,
                         });
                     });
                     me.conpty = Some(spawn.session);
+                    me.conpty_control_tx = Some(control_tx);
                 }
             }
         }
@@ -158,19 +168,27 @@ impl TabState {
         me
     }
 
-    pub fn truncate_terminal_lines(&mut self) {
-        if self.terminal_lines.len() > TRUNCATE_THRESHOLD {
-            let to_remove = self.terminal_lines.len() - MAX_TERMINAL_LINES;
-            self.terminal_lines.drain(0..to_remove);
-            
-            // 由於索引位移，清空緩存
-            self.terminal_model_rows.clear();
-            self.terminal_model_hashes.clear();
-            self.terminal_model_dirty.clear();
-            self.last_window_first = usize::MAX;
-            self.last_window_last = usize::MAX;
-            self.last_window_total = usize::MAX;
+    /// Drop oldest lines when the buffer exceeds `TERMINAL_SCROLLBACK_CAP`.
+    pub fn enforce_scrollback_cap(&mut self) {
+        if self.terminal_lines.len() <= TERMINAL_SCROLLBACK_CAP {
+            return;
         }
+        let excess = self.terminal_lines.len() - TERMINAL_SCROLLBACK_CAP;
+        self.terminal_lines.drain(0..excess);
+        self.terminal_physical_origin = self.terminal_physical_origin.saturating_add(excess);
+        self.terminal_model_rows.clear();
+        self.terminal_model_hashes.clear();
+        self.terminal_model_dirty.clear();
+        self.last_window_first = usize::MAX;
+        self.last_window_last = usize::MAX;
+        self.last_window_total = usize::MAX;
+        self.terminal_cursor_row = self.terminal_cursor_row.and_then(|c| {
+            if c >= excess {
+                Some(c - excess)
+            } else {
+                None
+            }
+        });
     }
 
     pub fn append_terminal(&mut self, chunk: &str) {
@@ -191,6 +209,7 @@ impl TabState {
         self.last_window_total = usize::MAX;
         self.terminal_cursor_row = None;
         self.terminal_cursor_col = None;
+        self.terminal_physical_origin = 0;
     }
 }
 
@@ -222,4 +241,6 @@ pub struct TerminalChunk {
     pub(crate) set_auto_scroll: Option<bool>,
     /// Which line indices changed (from reader thread diff); empty = treat all as changed.
     pub(crate) changed_indices: Vec<usize>,
+    /// Drop GUI scrollback and re-apply the next snapshot (e.g. after PTY resize).
+    pub(crate) reset_terminal_buffer: bool,
 }

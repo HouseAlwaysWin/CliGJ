@@ -50,6 +50,11 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
+
+    let _terminal_stream_dispatcher =
+        timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);
+    callbacks::connect(&app, Rc::clone(&state));
+
     {
         let mut s = state.borrow_mut();
         load_tab_to_ui(&app, &mut s.tabs[0]);
@@ -57,10 +62,6 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     #[cfg(target_os = "windows")]
     register_windows_file_drop(&app, Rc::clone(&state));
-
-    let _terminal_stream_dispatcher =
-        timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);
-    callbacks::connect(&app, Rc::clone(&state));
     let _composer_at_sync_timer = timers::spawn_composer_at_sync_timer(&app, Rc::clone(&state));
 
     let _inject_startup_timer: Option<Timer> =

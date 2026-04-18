@@ -32,6 +32,7 @@ pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     connect_chips(app, Rc::clone(&state));
     connect_terminal_selection(app, Rc::clone(&state));
     connect_terminal_viewport(app, Rc::clone(&state));
+    connect_terminal_resize(app, Rc::clone(&state));
     connect_toggles(app, Rc::clone(&state));
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
@@ -348,7 +349,8 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
 
             // 2. 開啟新 PTY
             if let Ok(spawn) = windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
-                windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                let (control_tx, control_rx) = std::sync::mpsc::channel();
+                windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
                     let _ = tx.send(TerminalChunk {
                         tab_id,
                         text: render.text,
@@ -360,9 +362,11 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         changed_indices: render.changed_indices,
                         cursor_col: render.cursor_col,
                         cursor_row: render.cursor_row,
+                        reset_terminal_buffer: render.reset_terminal_buffer,
                     });
                 });
                 s.tabs[cur_idx].conpty = Some(spawn.session);
+                s.tabs[cur_idx].conpty_control_tx = Some(control_tx);
             }
         }
 
@@ -437,6 +441,41 @@ fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let current = s.current;
         s.tabs[current].selected_context = SharedString::from(selected.as_str());
         ui.set_ws_selected_context(SharedString::from(selected.as_str()));
+    });
+}
+
+fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    let st_resize = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_resize_requested(move |cols, rows| {
+        if cols <= 0 || rows <= 0 {
+            return;
+        }
+        let app_weak2 = app_weak.clone();
+        let st_resize2 = Rc::clone(&st_resize);
+        // Defer: `invoke_ws_bump_terminal_size` runs during `load_tab_to_ui` while callers
+        // may still hold `state` borrowed — same pattern as `terminal-viewport-changed`.
+        let _ = spawn_local(async move {
+            let Some(_ui) = app_weak2.upgrade() else {
+                return;
+            };
+            let mut s = st_resize2.borrow_mut();
+            let cur = s.current;
+            if cur >= s.tabs.len() {
+                return;
+            }
+            let tab = &mut s.tabs[cur];
+            #[cfg(target_os = "windows")]
+            if let Some(conpty) = &tab.conpty {
+                let _ = conpty.resize(cols as i16, rows as i16);
+                if let Some(tx) = &tab.conpty_control_tx {
+                    let _ = tx.send(windows_conpty::ControlCommand::Resize {
+                        cols: cols as u16,
+                        rows: rows as u16,
+                    });
+                }
+            }
+        });
     });
 }
 

@@ -18,7 +18,9 @@ use crate::terminal::render::{line_to_colored_spans, ColoredLine};
 
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
-use windows::Win32::System::Console::{ClosePseudoConsole, CreatePseudoConsole, COORD, HPCON};
+use windows::Win32::System::Console::{
+    ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
+};
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
@@ -39,9 +41,18 @@ pub struct ConptySession {
     pub writer: std::fs::File,
     pub _child_process: HANDLE,
     pub _child_thread: HANDLE,
-    pub _hpc: HPCON,
+    pub hpc: HPCON,
     pub _attr_list_ptr: *mut std::ffi::c_void,
     pub _attr_list_buf: Box<[u8]>,
+}
+
+impl ConptySession {
+    pub fn resize(&self, cols: i16, rows: i16) -> Result<(), String> {
+        unsafe {
+            ResizePseudoConsole(self.hpc, COORD { X: cols, Y: rows })
+                .map_err(|e| format!("ResizePseudoConsole: {e}"))
+        }
+    }
 }
 
 pub struct ConptySpawn {
@@ -60,6 +71,8 @@ pub struct TerminalRender {
     pub filled: bool,
     /// Indices of lines that changed since last render (for downstream diff).
     pub changed_indices: Vec<usize>,
+    /// Next snapshot should replace the GUI buffer entirely (PTY geometry / reflow reset).
+    pub reset_terminal_buffer: bool,
 }
 
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
@@ -140,7 +153,7 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
                 writer,
                 _child_process: pi.hProcess,
                 _child_thread: pi.hThread,
-                _hpc: hpc,
+                hpc,
                 _attr_list_ptr: attr_list,
                 _attr_list_buf: attr_list_buf,
             },
@@ -169,7 +182,7 @@ impl Drop for ConptySession {
             let _ = self.writer.flush();
             let _ = CloseHandle(self._child_thread);
             let _ = CloseHandle(self._child_process);
-            ClosePseudoConsole(self._hpc);
+            ClosePseudoConsole(self.hpc);
             if !self._attr_list_ptr.is_null() {
                 DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST(self._attr_list_ptr as *mut _));
             }
@@ -250,17 +263,58 @@ fn terminal_render_from_lines_cached(
         cursor_col,
         filled: total_scrollback_rows > term_screen_rows,
         changed_indices,
+        reset_terminal_buffer: false,
     }
+}
+
+#[derive(Debug)]
+pub enum ControlCommand {
+    Resize { cols: u16, rows: u16 },
 }
 
 pub fn start_reader_thread(
     mut reader: std::fs::File,
+    control_rx: std::sync::mpsc::Receiver<ControlCommand>,
     mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
 ) -> thread::JoinHandle<()> {
+    enum Event {
+        Bytes(Vec<u8>),
+        Control(ControlCommand),
+    }
+    let (event_tx, event_rx) = std::sync::mpsc::channel::<Event>();
+
+    // Byte reading thread
+    let event_tx_bytes = event_tx.clone();
+    thread::spawn(move || {
+        let mut buf = [0u8; 65536];
+        loop {
+            match reader.read(&mut buf) {
+                Ok(0) => break,
+                Ok(n) => {
+                    if event_tx_bytes.send(Event::Bytes(buf[..n].to_vec())).is_err() {
+                        break;
+                    }
+                }
+                Err(_) => break,
+            }
+        }
+    });
+
+    // Control command proxy thread (to unify with event_rx)
+    let event_tx_control = event_tx.clone();
+    thread::spawn(move || {
+        while let Ok(cmd) = control_rx.recv() {
+            if event_tx_control.send(Event::Control(cmd)).is_err() {
+                break;
+            }
+        }
+    });
+
     thread::spawn(move || {
         let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
-        let term_rows = 60usize;
-        let term_cols = 200usize;
+        let mut resize_reset_pending = false;
+        let mut term_rows = 40usize;
+        let mut term_cols = 120usize;
         let term_size = TerminalSize {
             rows: term_rows,
             cols: term_cols,
@@ -274,18 +328,47 @@ pub fn start_reader_thread(
 
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
-        let mut buf = [0u8; 65536];
-        loop {
-            let n = match reader.read(&mut buf) {
-                Ok(0) => break,
-                Ok(n) => n,
-                Err(_) => break,
-            };
-            term.advance_bytes(&buf[..n]);
 
+        while let Ok(event) = event_rx.recv() {
+            match event {
+                Event::Bytes(bytes) => {
+                    term.advance_bytes(&bytes);
+                }
+                Event::Control(ControlCommand::Resize { cols, rows }) => {
+                    term_cols = cols as usize;
+                    term_rows = rows as usize;
+                    term.resize(TerminalSize {
+                        rows: term_rows,
+                        cols: term_cols,
+                        pixel_width: 0,
+                        pixel_height: 0,
+                        dpi: 0,
+                    });
+                    // Reflow changes the whole screen; drop line fingerprints so we re-emit
+                    // every row. Otherwise incremental diffs leave stale UI rows ("ghost" UI).
+                    line_cache.clear();
+                    last_snapshot_fp = None;
+                    resize_reset_pending = true;
+                }
+            }
+
+            // After processing events (maybe multiple in a batch if we want to optimize), render a snapshot
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            let start = total.saturating_sub(CONPTY_SNAPSHOT_MAX_LINES);
+            // Child TUIs often redraw the full screen on SIGWINCH; those redraws stay in scrollback.
+            // Grabbing a deep window (e.g. 240 lines) pulls multiple stacked copies of banners.
+            // — On resize: only the live viewport (term_rows).
+            // — Otherwise: cap history at ~4 screens so reflow spam does not dominate the slice.
+            let snapshot_row_count = if resize_reset_pending {
+                term_rows.min(total).max(1)
+            } else {
+                let cap = term_rows
+                    .saturating_mul(4)
+                    .min(CONPTY_SNAPSHOT_MAX_LINES)
+                    .max(term_rows);
+                cap.min(total.max(1))
+            };
+            let start = total.saturating_sub(snapshot_row_count);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
             let cursor = term.cursor_pos();
@@ -296,22 +379,26 @@ pub fn start_reader_thread(
 
             let fp = snapshot_content_fingerprint(total, &line_refs, cursor_local_row, cursor_col);
             if last_snapshot_fp == Some(fp) {
+                // If nothing changed, we can skip on_chunk
+                // But wait, if we resized, we might still want to refresh UI?
+                // Actually, if we resized, the fingerprint should change because lines might have reflowed.
                 continue;
             }
             last_snapshot_fp = Some(fp);
 
-            on_chunk({
-                terminal_render_from_lines_cached(
-                    &line_refs,
-                    start,
-                    total,
-                    term_rows,
-                    &palette,
-                    cursor_local_row,
-                    cursor_col,
-                    &mut line_cache,
-                )
-            });
+            let mut render = terminal_render_from_lines_cached(
+                &line_refs,
+                start,
+                total,
+                term_rows,
+                &palette,
+                cursor_local_row,
+                cursor_col,
+                &mut line_cache,
+            );
+            render.reset_terminal_buffer = resize_reset_pending;
+            resize_reset_pending = false;
+            on_chunk(render);
         }
     })
 }

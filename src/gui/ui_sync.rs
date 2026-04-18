@@ -373,4 +373,5 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
         ui.invoke_ws_scroll_terminal_to_top();
     }
     push_terminal_view_to_ui(ui, tab);
+    ui.invoke_ws_bump_terminal_size();
 }

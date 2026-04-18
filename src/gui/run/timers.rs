@@ -30,6 +30,8 @@ struct PendingTabUpdate {
     /// Changed line indices from reader thread; empty = unknown, diff all.
     changed_indices: Vec<usize>,
     append_text: String,
+    /// Any chunk asked to flush scrollback (e.g. PTY resize).
+    reset_terminal_buffer: bool,
 }
 
 fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, PendingTabUpdate>) {
@@ -39,6 +41,9 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     }
 
     if chunk.replace {
+        if chunk.reset_terminal_buffer {
+            entry.reset_terminal_buffer = true;
+        }
         entry.cursor_row = chunk.cursor_row;
         entry.cursor_col = chunk.cursor_col;
         let mut lines = chunk.lines;
@@ -96,8 +101,6 @@ fn apply_pending_updates(
             continue;
         };
         let tab = &mut state.tabs[tab_idx];
-        tab.terminal_cursor_row = update.cursor_row;
-        tab.terminal_cursor_col = update.cursor_col;
         if let Some(v) = update.set_auto_scroll {
             tab.auto_scroll = v;
         }
@@ -106,40 +109,78 @@ fn apply_pending_updates(
         if let Some(mut new_lines) = update.replace_lines {
             let chunk_first_idx = update.first_line_idx.unwrap_or(0);
             let full_len_in_chunk = update.full_len.unwrap_or(0);
-            let total_needed = chunk_first_idx + full_len_in_chunk;
+            let phys_end = chunk_first_idx + full_len_in_chunk;
             replaced_with_vt_lines = true;
-            
-            // 確保緩存行數足夠
-            if total_needed > tab.terminal_lines.len() {
-                tab.terminal_lines.resize(total_needed, ColoredLine::default());
+
+            if update.reset_terminal_buffer {
+                tab.terminal_lines.clear();
+                tab.terminal_model_rows.clear();
+                tab.terminal_model_hashes.clear();
+                tab.terminal_model_dirty.clear();
+                tab.terminal_physical_origin = 0;
+                tab.last_window_first = usize::MAX;
+                tab.last_window_last = usize::MAX;
+                tab.last_window_total = usize::MAX;
+            }
+
+            let origin = tab.terminal_physical_origin;
+
+            // Dense buffer: index `i` is physical row `origin + i`. Resize to fit through phys_end.
+            let local_len = phys_end.saturating_sub(origin);
+            if local_len > tab.terminal_lines.len() {
+                tab.terminal_lines.resize(local_len, ColoredLine::default());
+            }
+
+            // Physical rows [0..chunk_first_idx) are outside this snapshot — clear matching locals.
+            let clear_local_end = chunk_first_idx.saturating_sub(origin);
+            for i in 0..clear_local_end.min(tab.terminal_lines.len()) {
+                tab.terminal_lines[i] = ColoredLine::default();
+                tab.terminal_model_rows.remove(&i);
+                tab.terminal_model_hashes.remove(&i);
+                tab.terminal_model_dirty.insert(i);
             }
 
             let indices = &update.changed_indices;
             if indices.is_empty() && !new_lines.is_empty() {
-                // 全量更新此區塊
                 for i in 0..new_lines.len() {
-                    let real_idx = chunk_first_idx + i;
-                    if real_idx < tab.terminal_lines.len() {
-                        tab.terminal_lines[real_idx] = std::mem::take(&mut new_lines[i]);
-                        tab.terminal_model_rows.remove(&real_idx);
-                        tab.terminal_model_hashes.remove(&real_idx);
-                        tab.terminal_model_dirty.insert(real_idx);
+                    let phys = chunk_first_idx + i;
+                    let Some(local) = phys.checked_sub(origin) else {
+                        continue;
+                    };
+                    if local < tab.terminal_lines.len() {
+                        tab.terminal_lines[local] = std::mem::take(&mut new_lines[i]);
+                        tab.terminal_model_rows.remove(&local);
+                        tab.terminal_model_hashes.remove(&local);
+                        tab.terminal_model_dirty.insert(local);
                     }
                 }
             } else {
-                // 增量更新變動行
                 for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
-                    let real_idx = chunk_first_idx + snapshot_idx;
-                    if real_idx < tab.terminal_lines.len() && delta_idx < new_lines.len() {
-                        tab.terminal_lines[real_idx] = std::mem::take(&mut new_lines[delta_idx]);
-                        tab.terminal_model_rows.remove(&real_idx);
-                        tab.terminal_model_hashes.remove(&real_idx);
-                        tab.terminal_model_dirty.insert(real_idx);
+                    let phys = chunk_first_idx + snapshot_idx;
+                    let Some(local) = phys.checked_sub(origin) else {
+                        continue;
+                    };
+                    if local < tab.terminal_lines.len() && delta_idx < new_lines.len() {
+                        tab.terminal_lines[local] = std::mem::take(&mut new_lines[delta_idx]);
+                        tab.terminal_model_rows.remove(&local);
+                        tab.terminal_model_hashes.remove(&local);
+                        tab.terminal_model_dirty.insert(local);
                     }
                 }
             }
 
-            tab.truncate_terminal_lines();
+            let tail_keep = phys_end.saturating_sub(origin);
+            if tab.terminal_lines.len() > tail_keep {
+                tab.terminal_lines.truncate(tail_keep);
+                tab.terminal_model_rows.retain(|k, _| *k < tail_keep);
+                tab.terminal_model_hashes.retain(|k, _| *k < tail_keep);
+                tab.terminal_model_dirty.retain(|k| *k < tail_keep);
+            }
+
+            tab.terminal_cursor_row = update.cursor_row.and_then(|phys| phys.checked_sub(origin));
+            tab.terminal_cursor_col = update.cursor_col;
+
+            tab.enforce_scrollback_cap();
             tab.terminal_text.clear();
         }
 

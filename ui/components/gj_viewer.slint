@@ -18,6 +18,7 @@ export component GjViewer inherits Rectangle {
     private property <length> stripe-width: 3px;
     callback selection-committed(int, int, int, int);
     callback viewport-changed;
+    callback terminal-resize-requested(int, int);
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px;
     private property <bool> drag-active: false;
@@ -40,6 +41,28 @@ export component GjViewer inherits Rectangle {
 
     border-width: 0px;
     background: AppTheme.bg;
+
+    /// Notifies the PTY of the current grid size (for reflow). Kept in one place so
+    /// window resize + explicit bump (e.g. tab switch) stay in sync.
+    function sync-terminal-grid-to-pty() {
+        let cols = floor((self.width - root.terminal-left-inset - root.stripe-width) / root.char-width);
+        let rows = floor(self.height / root.row-height);
+        if (cols > 0 && rows > 0) {
+            root.terminal-resize-requested(cols, rows);
+        }
+    }
+
+    changed width => {
+        root.sync-terminal-grid-to-pty();
+    }
+
+    changed height => {
+        root.sync-terminal-grid-to-pty();
+    }
+
+    public function bump-terminal-size() {
+        root.sync-terminal-grid-to-pty();
+    }
 
     function clamp-row(raw: int) -> int {
         if (root.terminal-total-lines <= 0) {
@@ -197,11 +220,12 @@ export component GjViewer inherits Rectangle {
             if (root.terminal-total-lines == 0) : Text {
                 x: 0px;
                 y: 0px;
+                width: parent.width;
                 text: root.terminal-text;
                 color: AppTheme.text_muted;
                 font-size: 13px;
                 font-family: AppTheme.terminal_font_family;
-                wrap: no-wrap;
+                wrap: word-wrap;
             }
 
             for line[idx] in root.terminal-lines: Rectangle {

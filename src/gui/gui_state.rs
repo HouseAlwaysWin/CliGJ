@@ -91,6 +91,7 @@ impl GuiState {
         #[cfg(target_os = "windows")]
         {
             self.tabs[self.current].conpty = None;
+            self.tabs[self.current].conpty_control_tx = None;
             self.tabs[self.current].terminal_text.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
@@ -98,7 +99,8 @@ impl GuiState {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
-                    windows_conpty::start_reader_thread(spawn.reader, move |render| {
+                    let (control_tx, control_rx) = std::sync::mpsc::channel();
+                    windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
                             text: render.text,
@@ -110,9 +112,11 @@ impl GuiState {
                             replace: true,
                             set_auto_scroll: if render.filled { Some(true) } else { None },
                             changed_indices: render.changed_indices,
+                            reset_terminal_buffer: render.reset_terminal_buffer,
                         });
                     });
                     self.tabs[self.current].conpty = Some(spawn.session);
+                    self.tabs[self.current].conpty_control_tx = Some(control_tx);
                 }
             }
         }

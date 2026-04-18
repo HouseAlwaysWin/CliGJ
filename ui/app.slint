@@ -67,6 +67,7 @@ export component AppWindow inherits Window {
     callback prompt-chip-clear-requested;
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
+    callback terminal-resize-requested(int, int);
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback ai-model-selected(string);
@@ -219,10 +220,17 @@ export component AppWindow inherits Window {
                         ai-model-selected(val) => {
                             root.ai-model-selected(val);
                         }
+                        terminal-resize-requested(cols, rows) => {
+                            root.terminal-resize-requested(cols, rows);
+                        }
                     }
                 }
             }
         }
+    }
+
+    public function ws_bump_terminal_size() {
+        workspace.bump-terminal-size();
     }
 
     if root.ws-rename-open : Rectangle {
