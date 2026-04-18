@@ -16,8 +16,9 @@ use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
 
 use super::helpers::{
-    contains_cjk_char, copy_to_clipboard, inject_paths_into_current, is_local_prompt_edit_key,
-    selected_text_from_terminal_lines,
+    clipboard_raster_image, contains_cjk_char, copy_to_clipboard, inject_image_into_current,
+    inject_paths_into_current, is_local_prompt_edit_key, is_probably_image_file,
+    load_slint_image_from_path, selected_text_from_terminal_lines,
 };
 
 pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -126,17 +127,35 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return false;
         };
         let key_str = key.as_str();
-        // Composer: paste files copied in Explorer (CF_HDROP), same as drag-and-drop chips.
-        #[cfg(target_os = "windows")]
+        // Composer: Ctrl+V — Explorer file list (Windows), single image file → preview, or raster image.
         if !raw_tty
             && !ui.get_ws_at_picker_open()
             && (mod_mask as u32) & MOD_CTRL != 0
             && matches!(key_str, "v" | "V")
         {
+            #[cfg(target_os = "windows")]
             if let Some(paths) = super::helpers::clipboard_file_paths_hdrop() {
+                if paths.len() == 1 && is_probably_image_file(&paths[0]) {
+                    if let Some(img) = load_slint_image_from_path(&paths[0]) {
+                        let mut s = st_keys.borrow_mut();
+                        if let Err(e) = inject_image_into_current(&ui, &mut *s, img) {
+                            eprintln!("CliGJ: paste image file: {e}");
+                        }
+                        return true;
+                    }
+                }
+                if !paths.is_empty() {
+                    let mut s = st_keys.borrow_mut();
+                    if let Err(e) = inject_paths_into_current(&ui, &mut *s, &paths) {
+                        eprintln!("CliGJ: paste files: {e}");
+                    }
+                    return true;
+                }
+            }
+            if let Some(img) = clipboard_raster_image() {
                 let mut s = st_keys.borrow_mut();
-                if let Err(e) = inject_paths_into_current(&ui, &mut *s, &paths) {
-                    eprintln!("CliGJ: paste files: {e}");
+                if let Err(e) = inject_image_into_current(&ui, &mut *s, img) {
+                    eprintln!("CliGJ: paste image: {e}");
                 }
                 return true;
             }
@@ -429,5 +448,42 @@ fn connect_move_inject(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if let Err(e) = super::helpers::inject_path_into_current(&ui, &mut s, path.as_path()) {
             eprintln!("CliGJ: inject file {}: {e}", path.display());
         }
+    });
+
+    let st_img = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_inject_image_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .add_filter(
+                "Images",
+                &[
+                    "png", "jpg", "jpeg", "gif", "webp", "bmp", "ico", "tif", "tiff", "svg",
+                ],
+            )
+            .pick_file()
+        else {
+            return;
+        };
+        let Some(img) = super::helpers::load_slint_image_from_path(path.as_path()) else {
+            eprintln!("CliGJ: could not load image {}", path.display());
+            return;
+        };
+        let mut s = st_img.borrow_mut();
+        if let Err(e) = super::helpers::inject_image_into_current(&ui, &mut s, img) {
+            eprintln!("CliGJ: inject image {}: {e}", path.display());
+        }
+    });
+
+    let st_img_clr = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_prompt_image_clear_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = st_img_clr.borrow_mut();
+        super::helpers::clear_composer_image(&ui, &mut *s);
     });
 }

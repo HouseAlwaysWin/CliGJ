@@ -54,6 +54,8 @@ export component AppWindow inherits Window {
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
     callback inject-file-requested;
+    callback inject-image-requested;
+    callback prompt-image-clear-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
     callback rename-commit(int, string);
@@ -183,6 +185,12 @@ export component AppWindow inherits Window {
                         }
                         inject-file-requested => {
                             root.inject-file-requested();
+                        }
+                        inject-image-requested => {
+                            root.inject-image-requested();
+                        }
+                        prompt-image-clear-requested => {
+                            root.prompt-image-clear-requested();
                         }
                         at-picker-choose(index) => {
                             root.at-picker-choose(index);

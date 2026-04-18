@@ -37,6 +37,8 @@ impl GuiState {
             }
             tab.prompt = SharedString::new();
             tab.prompt_picked_files_abs.clear();
+            tab.has_image = false;
+            tab.preview_image = slint::Image::default();
         }
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -174,6 +176,8 @@ impl GuiState {
 
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
+        tab.has_image = false;
+        tab.preview_image = slint::Image::default();
         tab.composer_pty_mirror.clear();
         load_tab_to_ui(ui, tab);
         Ok(())

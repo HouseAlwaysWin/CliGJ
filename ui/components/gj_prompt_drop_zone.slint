@@ -18,6 +18,8 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
+    callback inject-image-requested;
+    callback prompt-image-clear-requested;
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
 
@@ -29,9 +31,13 @@ export component GjPromptDropZone inherits Rectangle {
     }
 
     horizontal-stretch: 1;
-    // Fixed 116px fits chips row + TextEdit + bar only when the chip strip is hidden; with chips, add ~28px.
-    min-height: root.prompt-path-chips.length > 0 ? 144px : 116px;
-    max-height: root.prompt-path-chips.length > 0 ? 144px : 116px;
+    // Base 116px; +28px file chip strip; +60px image preview strip.
+    min-height: 116px
+        + (root.prompt-path-chips.length > 0 ? 28px : 0px)
+        + (root.has-image ? 60px : 0px);
+    max-height: 116px
+        + (root.prompt-path-chips.length > 0 ? 28px : 0px)
+        + (root.has-image ? 60px : 0px);
     background: AppTheme.bg;
     border-width: 0px;
 
@@ -134,13 +140,78 @@ export component GjPromptDropZone inherits Rectangle {
                     }
                 }
 
+                if root.has-image : Rectangle {
+                    min-height: 52px;
+                    max-height: 52px;
+                    background: #00000000;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+
+                        Rectangle {
+                            width: 52px;
+                            height: 52px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 8px;
+                            clip: true;
+
+                            Image {
+                                source: root.preview-image;
+                                width: 100%;
+                                height: 100%;
+                                image-fit: cover;
+                            }
+                        }
+
+                        Text {
+                            text: "圖片";
+                            color: AppTheme.text_muted;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                        }
+
+                        Rectangle {
+                            horizontal-stretch: 1;
+                            background: #00000000;
+                        }
+
+                        Rectangle {
+                            width: self.preferred-width;
+                            height: 22px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 12px;
+                            background: #00000000;
+
+                            HorizontalLayout {
+                                padding-left: 8px;
+                                padding-right: 8px;
+                                spacing: 6px;
+                                Text {
+                                    text: "清除";
+                                    color: AppTheme.text_muted;
+                                    vertical-alignment: center;
+                                    font-size: 11px;
+                                }
+                            }
+
+                            TouchArea {
+                                clicked => {
+                                    root.prompt-image-clear-requested();
+                                }
+                            }
+                        }
+                    }
+                }
+
                 TextEdit {
                     horizontal-stretch: 1;
                     min-height: 68px;
                     text <=> root.prompt;
                     placeholder-text: root.raw-input-enabled
                         ? "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-                        : "Plan, Build, / — 輸入 @ 搜尋並插入工作區檔案（關鍵字篩選）— File 按鈕可注入檔";
+                        : "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片";
                     font-size: 13px;
                     wrap: word-wrap;
                 }
@@ -249,6 +320,14 @@ export component GjPromptDropZone inherits Rectangle {
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             font-size: 11px;
+                        }
+
+                        TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => {
+                                root.inject-image-requested();
+                            }
                         }
                     }
 

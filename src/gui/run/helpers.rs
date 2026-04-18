@@ -2,7 +2,8 @@
 
 use std::path::{Path, PathBuf};
 
-use arboard::Clipboard;
+use arboard::{Clipboard, ImageData};
+use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 use crate::terminal::key_encoding;
 use crate::terminal::render::ColoredLine;
@@ -61,6 +62,67 @@ pub(crate) fn clipboard_file_paths_hdrop() -> Option<Vec<PathBuf>> {
 #[cfg(not(target_os = "windows"))]
 pub(crate) fn clipboard_file_paths_hdrop() -> Option<Vec<PathBuf>> {
     None
+}
+
+/// Common raster extensions we treat as "attach as image preview" (not only a file chip).
+pub(crate) fn is_probably_image_file(path: &Path) -> bool {
+    path.extension()
+        .and_then(|e| e.to_str())
+        .map(|e| {
+            matches!(
+                e.to_ascii_lowercase().as_str(),
+                "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "tif" | "tiff" | "svg"
+            )
+        })
+        .unwrap_or(false)
+}
+
+pub(crate) fn load_slint_image_from_path(path: &Path) -> Option<Image> {
+    Image::load_from_path(path).ok()
+}
+
+fn slint_image_from_arboard_rgba(img: &ImageData<'_>) -> Option<Image> {
+    let w = u32::try_from(img.width).ok()?;
+    let h = u32::try_from(img.height).ok()?;
+    let need = img.width.checked_mul(img.height)?.checked_mul(4)?;
+    if img.bytes.len() < need {
+        return None;
+    }
+    let src = &img.bytes[..need];
+    let buf = SharedPixelBuffer::<Rgba8Pixel>::clone_from_slice(src, w, h);
+    Some(Image::from_rgba8(buf))
+}
+
+/// Bitmap from OS clipboard (screenshots, copy image from browser, etc.).
+pub(crate) fn clipboard_raster_image() -> Option<Image> {
+    let mut cb = Clipboard::new().ok()?;
+    let data = cb.get_image().ok()?;
+    slint_image_from_arboard_rgba(&data)
+}
+
+pub(crate) fn inject_image_into_current(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    image: Image,
+) -> Result<(), String> {
+    if s.current >= s.tabs.len() {
+        return Err("invalid tab index".into());
+    }
+    let tab = &mut s.tabs[s.current];
+    tab.has_image = true;
+    tab.preview_image = image;
+    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    Ok(())
+}
+
+pub(crate) fn clear_composer_image(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let tab = &mut s.tabs[s.current];
+    tab.has_image = false;
+    tab.preview_image = Image::default();
+    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
 }
 
 pub(crate) fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {

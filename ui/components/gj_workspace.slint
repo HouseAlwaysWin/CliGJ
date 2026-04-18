@@ -30,6 +30,8 @@ export component GjWorkspace inherits Rectangle {
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
     callback inject-file-requested;
+    callback inject-image-requested;
+    callback prompt-image-clear-requested;
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
@@ -107,6 +109,12 @@ export component GjWorkspace inherits Rectangle {
             }
             inject-file-requested => {
                 root.inject-file-requested();
+            }
+            inject-image-requested => {
+                root.inject-image-requested();
+            }
+            prompt-image-clear-requested => {
+                root.prompt-image-clear-requested();
             }
             prompt-chip-remove-requested(index) => {
                 root.prompt-chip-remove-requested(index);
