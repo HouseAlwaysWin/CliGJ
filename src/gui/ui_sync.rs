@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use crate::terminal::render::ColoredLine;
 use crate::workspace_files;
 
-use super::slint_ui::AppWindow;
+use super::slint_ui::{AppWindow, PromptImageChip};
 use super::state::TabState;
 use super::slint_ui::{TermLine, TermSpan};
 
@@ -262,8 +262,6 @@ pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
 
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.file_path = ui.get_ws_file_path().to_string();
-    tab.has_image = ui.get_ws_has_image();
-    tab.preview_image = ui.get_ws_preview_image();
     tab.selected_line = ui.get_ws_selected_line();
     tab.selected_context = ui.get_ws_selected_context();
     tab.prompt = ui.get_ws_prompt();
@@ -278,8 +276,15 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
 
 pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_file_path(SharedString::from(tab.file_path.as_str()));
-    ui.set_ws_has_image(tab.has_image);
-    ui.set_ws_preview_image(tab.preview_image.clone());
+    let img_chips: Vec<PromptImageChip> = tab
+        .prompt_picked_images
+        .iter()
+        .map(|p| PromptImageChip {
+            label: SharedString::from(workspace_files::file_name_label(&p.abs_path).as_str()),
+            thumb: p.preview.clone(),
+        })
+        .collect();
+    ui.set_ws_prompt_images(ModelRc::new(VecModel::from(img_chips)));
     if tab.terminal_lines.is_empty() {
         ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
     } else {

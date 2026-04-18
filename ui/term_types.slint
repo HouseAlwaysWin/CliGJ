@@ -6,6 +6,12 @@ export struct TermSpan {
     bg: color,
 }
 
+/// One attached image in the composer (thumbnail + label; path is kept in Rust for submit).
+export struct PromptImageChip {
+    label: string,
+    thumb: image,
+}
+
 export struct TermLine {
     // True when the PTY physical row has no visible cells (no fake row height in the viewer).
     blank: bool,

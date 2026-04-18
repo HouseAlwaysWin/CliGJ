@@ -37,8 +37,7 @@ impl GuiState {
             }
             tab.prompt = SharedString::new();
             tab.prompt_picked_files_abs.clear();
-            tab.has_image = false;
-            tab.preview_image = slint::Image::default();
+            tab.prompt_picked_images.clear();
         }
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -135,6 +134,14 @@ impl GuiState {
                 command_line.push_str(path);
             }
         }
+        for img in &tab.prompt_picked_images {
+            if !img.abs_path.is_empty() && !command_line.contains(&img.abs_path) {
+                if !command_line.trim().is_empty() {
+                    command_line.push(' ');
+                }
+                command_line.push_str(&img.abs_path);
+            }
+        }
         let command_line = command_line.trim().to_string();
         if command_line.is_empty() {
             return Ok(());
@@ -176,8 +183,7 @@ impl GuiState {
 
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
-        tab.has_image = false;
-        tab.preview_image = slint::Image::default();
+        tab.prompt_picked_images.clear();
         tab.composer_pty_mirror.clear();
         load_tab_to_ui(ui, tab);
         Ok(())

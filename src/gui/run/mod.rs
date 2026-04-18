@@ -93,8 +93,10 @@ fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 ui.set_ws_file_drop_visible(false);
                 let mut s = state.borrow_mut();
                 if helpers::is_probably_image_file(path.as_path()) {
-                    if let Some(img) = helpers::load_slint_image_from_path(path.as_path()) {
-                        if let Err(e) = helpers::inject_image_into_current(&ui, &mut s, img) {
+                    if helpers::load_slint_image_from_path(path.as_path()).is_some() {
+                        if let Err(e) =
+                            helpers::push_prompt_image_from_path(&ui, &mut s, path.as_path())
+                        {
                             eprintln!("CliGJ: dropped image {}: {e}", path.display());
                         }
                         return EventResult::PreventDefault;

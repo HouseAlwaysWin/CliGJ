@@ -43,7 +43,7 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
         }
         let tab = &mut s.tabs[s.current];
         tab.raw_input_mode = false;
-        // Only mirror prompt — avoid `tab_update_from_ui` here (it reads preview_image etc. every tick).
+        // Only mirror prompt — avoid `tab_update_from_ui` here (it syncs full tab state every tick).
         tab.prompt = ui.get_ws_prompt();
         let Some(session) = tab.conpty.as_mut() else {
             return;

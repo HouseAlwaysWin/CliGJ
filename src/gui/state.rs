@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::collections::{HashMap, HashSet};
 
-use slint::{SharedString, VecModel};
+use slint::{Image, SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
 use super::slint_ui::TermLine;
@@ -26,6 +26,12 @@ pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     }
 }
 
+/// Composer-attached images: absolute path (sent on submit) + thumbnail for UI.
+pub(crate) struct PromptImageAttach {
+    pub abs_path: String,
+    pub preview: Image,
+}
+
 pub(crate) fn default_cmd_type() -> &'static str {
     if cfg!(target_os = "windows") {
         "Command Prompt"
@@ -37,8 +43,7 @@ pub(crate) fn default_cmd_type() -> &'static str {
 pub struct TabState {
     pub(crate) id: u64,
     pub(crate) file_path: String,
-    pub(crate) has_image: bool,
-    pub(crate) preview_image: slint::Image,
+    pub(crate) prompt_picked_images: Vec<PromptImageAttach>,
     pub(crate) selected_line: i32,
     pub(crate) selected_context: SharedString,
     pub(crate) prompt: SharedString,
@@ -91,8 +96,7 @@ impl TabState {
         let mut me = Self {
             id,
             file_path: String::new(),
-            has_image: false,
-            preview_image: slint::Image::default(),
+            prompt_picked_images: Vec::new(),
             selected_line: 0,
             selected_context: SharedString::new(),
             prompt: SharedString::new(),

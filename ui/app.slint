@@ -3,7 +3,7 @@ import { LogicalKey } from "key_labels.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { TextEdit } from "std-widgets.slint";
-import { TermLine } from "term_types.slint";
+import { PromptImageChip, TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
     title: "CliGJ - UI Foundation";
@@ -17,8 +17,7 @@ export component AppWindow inherits Window {
     in-out property <int> current-tab: 0;
 
     in-out property <string> ws-file-path: "";
-    in-out property <bool> ws-has-image: false;
-    in-out property <image> ws-preview-image;
+    in-out property <[PromptImageChip]> ws-prompt-images: [];
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
     in-out property <[TermLine]> ws-terminal-lines: [];
@@ -55,7 +54,8 @@ export component AppWindow inherits Window {
     callback toggle-raw-input-requested;
     callback inject-file-requested;
     callback inject-image-requested;
-    callback prompt-image-clear-requested;
+    callback prompt-image-remove-requested(int);
+    callback prompt-images-clear-requested;
     callback rename-tab-requested(int);
     callback move-tab-requested(int, int);
     callback rename-commit(int, string);
@@ -150,8 +150,7 @@ export component AppWindow inherits Window {
 
                     workspace := GjWorkspace {
                         file-path <=> root.ws-file-path;
-                        has-image <=> root.ws-has-image;
-                        preview-image <=> root.ws-preview-image;
+                        prompt-images <=> root.ws-prompt-images;
                         code-lines <=> root.ws-code-lines;
                         terminal-text <=> root.ws-terminal-text;
                         terminal-lines <=> root.ws-terminal-lines;
@@ -189,8 +188,11 @@ export component AppWindow inherits Window {
                         inject-image-requested => {
                             root.inject-image-requested();
                         }
-                        prompt-image-clear-requested => {
-                            root.prompt-image-clear-requested();
+                        prompt-image-remove-requested(idx) => {
+                            root.prompt-image-remove-requested(idx);
+                        }
+                        prompt-images-clear-requested => {
+                            root.prompt-images-clear-requested();
                         }
                         at-picker-choose(index) => {
                             root.at-picker-choose(index);

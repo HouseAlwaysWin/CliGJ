@@ -1,13 +1,12 @@
 import { AppTheme } from "../theme.slint";
-import { TermLine } from "../term_types.slint";
+import { PromptImageChip, TermLine } from "../term_types.slint";
 import { GjViewer } from "gj_viewer.slint";
 import { GjPromptDropZone } from "gj_prompt_drop_zone.slint";
 import { GjAtFilePicker } from "gj_at_file_picker.slint";
 
 export component GjWorkspace inherits Rectangle {
     in-out property <string> file-path;
-    in-out property <bool> has-image;
-    in-out property <image> preview-image;
+    in-out property <[PromptImageChip]> prompt-images;
     in-out property <[string]> code-lines;
     in-out property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
@@ -31,7 +30,8 @@ export component GjWorkspace inherits Rectangle {
     callback raw-input-toggle-requested;
     callback inject-file-requested;
     callback inject-image-requested;
-    callback prompt-image-clear-requested;
+    callback prompt-image-remove-requested(int);
+    callback prompt-images-clear-requested;
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
@@ -89,8 +89,7 @@ export component GjWorkspace inherits Rectangle {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
             raw-input-enabled <=> root.raw-input-enabled;
-            has-image: root.has-image;
-            preview-image: root.preview-image;
+            prompt-images: root.prompt-images;
             selected-context: root.selected-context;
             submit-requested => {
                 root.submit-requested();
@@ -113,8 +112,11 @@ export component GjWorkspace inherits Rectangle {
             inject-image-requested => {
                 root.inject-image-requested();
             }
-            prompt-image-clear-requested => {
-                root.prompt-image-clear-requested();
+            prompt-image-remove-requested(idx) => {
+                root.prompt-image-remove-requested(idx);
+            }
+            prompt-images-clear-requested => {
+                root.prompt-images-clear-requested();
             }
             prompt-chip-remove-requested(index) => {
                 root.prompt-chip-remove-requested(index);

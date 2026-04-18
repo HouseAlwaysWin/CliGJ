@@ -1,8 +1,10 @@
 //! Shared helpers for `run` (clipboard, terminal selection text, inject, CJK/raw heuristics).
 
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use arboard::{Clipboard, ImageData};
+use image::RgbaImage;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
 
 use crate::terminal::key_encoding;
@@ -10,7 +12,7 @@ use crate::terminal::render::ColoredLine;
 use crate::workspace_files;
 
 use super::super::slint_ui::AppWindow;
-use super::super::state::{GuiState, TabState};
+use super::super::state::{GuiState, PromptImageAttach, TabState};
 
 pub(crate) fn normalize_text_for_conpty(text: &str) -> Vec<u8> {
     text.replace("\r\n", "\n").replace('\n', "\r\n").into_bytes()
@@ -43,12 +45,23 @@ pub(crate) fn inject_paths_into_current(
             .map(|p| p.to_string_lossy().to_string())
             .unwrap_or_else(|_| path.to_string_lossy().to_string());
         let abs_path = workspace_files::strip_windows_verbatim_prefix(&abs_path);
+        if path_has_prompt_attachment(tab, &abs_path) {
+            continue;
+        }
         if !tab.prompt_picked_files_abs.contains(&abs_path) {
             tab.prompt_picked_files_abs.push(abs_path);
         }
     }
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
+}
+
+fn path_has_prompt_attachment(tab: &TabState, abs_path: &str) -> bool {
+    tab.prompt_picked_files_abs.iter().any(|p| p == abs_path)
+        || tab
+            .prompt_picked_images
+            .iter()
+            .any(|p| p.abs_path == abs_path)
 }
 
 /// Windows: paths from Explorer copy (`CF_HDROP`). `None` if clipboard has no file list or read failed.
@@ -93,35 +106,144 @@ fn slint_image_from_arboard_rgba(img: &ImageData<'_>) -> Option<Image> {
     Some(Image::from_rgba8(buf))
 }
 
-/// Bitmap from OS clipboard (screenshots, copy image from browser, etc.).
-pub(crate) fn clipboard_raster_image() -> Option<Image> {
-    let mut cb = Clipboard::new().ok()?;
-    let data = cb.get_image().ok()?;
-    slint_image_from_arboard_rgba(&data)
+fn temp_clipboard_png_path() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    std::env::temp_dir().join(format!("cligj_clip_{nanos}.png"))
 }
 
-pub(crate) fn inject_image_into_current(
+fn write_rgba_png(path: &Path, width: u32, height: u32, rgba: &[u8]) -> Result<(), String> {
+    let expected = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|n| n.checked_mul(4))
+        .ok_or_else(|| "bad image dimensions".to_string())?;
+    if rgba.len() < expected {
+        return Err("clipboard image buffer too small".into());
+    }
+    let img: RgbaImage = image::ImageBuffer::from_raw(width, height, rgba[..expected].to_vec())
+        .ok_or_else(|| "bad image buffer".to_string())?;
+    img.save(path).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Bitmap from OS clipboard → temp PNG path + Slint image (for submit line).
+pub(crate) fn clipboard_raster_image_file() -> Option<(PathBuf, Image)> {
+    let mut cb = Clipboard::new().ok()?;
+    let data = cb.get_image().ok()?;
+    let preview = slint_image_from_arboard_rgba(&data)?;
+    let w = u32::try_from(data.width).ok()?;
+    let h = u32::try_from(data.height).ok()?;
+    let need = data.width.checked_mul(data.height)?.checked_mul(4)?;
+    if data.bytes.len() < need {
+        return None;
+    }
+    let path = temp_clipboard_png_path();
+    write_rgba_png(&path, w, h, &data.bytes[..need]).ok()?;
+    Some((path, preview))
+}
+
+fn normalize_abs_path(path: &Path) -> String {
+    let abs_path = path
+        .canonicalize()
+        .map(|p| p.to_string_lossy().to_string())
+        .unwrap_or_else(|_| path.to_string_lossy().to_string());
+    workspace_files::strip_windows_verbatim_prefix(&abs_path)
+}
+
+/// Append one image attachment (dedupe by absolute path).
+pub(crate) fn push_prompt_image(
     ui: &AppWindow,
     s: &mut GuiState,
-    image: Image,
+    abs_path: String,
+    preview: Image,
 ) -> Result<(), String> {
     if s.current >= s.tabs.len() {
         return Err("invalid tab index".into());
     }
     let tab = &mut s.tabs[s.current];
-    tab.has_image = true;
-    tab.preview_image = image;
+    if path_has_prompt_attachment(tab, &abs_path) {
+        return Ok(());
+    }
+    tab.prompt_picked_images.push(PromptImageAttach {
+        abs_path,
+        preview,
+    });
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
 }
 
-pub(crate) fn clear_composer_image(ui: &AppWindow, s: &mut GuiState) {
+pub(crate) fn push_prompt_image_from_path(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    path: &Path,
+) -> Result<(), String> {
+    let Some(preview) = load_slint_image_from_path(path) else {
+        return Err("could not load image".into());
+    };
+    let abs_path = normalize_abs_path(path);
+    push_prompt_image(ui, s, abs_path, preview)
+}
+
+/// Paste / drop: image paths become image chips; other paths become file chips.
+pub(crate) fn inject_paths_and_images_from_paths(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    paths: &[PathBuf],
+) -> Result<(), String> {
+    if s.current >= s.tabs.len() {
+        return Err("invalid tab index".into());
+    }
+    if paths.is_empty() {
+        return Ok(());
+    }
+    let mut non_image_paths = Vec::new();
+    {
+        let tab = &mut s.tabs[s.current];
+        for path in paths {
+            if is_probably_image_file(path) {
+                if let Some(preview) = load_slint_image_from_path(path) {
+                    let abs_path = normalize_abs_path(path);
+                    if path_has_prompt_attachment(tab, &abs_path) {
+                        continue;
+                    }
+                    tab.prompt_picked_images.push(PromptImageAttach {
+                        abs_path,
+                        preview,
+                    });
+                    continue;
+                }
+            }
+            non_image_paths.push(path.clone());
+        }
+    }
+    if !non_image_paths.is_empty() {
+        inject_paths_into_current(ui, s, &non_image_paths)?;
+    } else {
+        let tab = &mut s.tabs[s.current];
+        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    }
+    Ok(())
+}
+
+pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: usize) {
     if s.current >= s.tabs.len() {
         return;
     }
     let tab = &mut s.tabs[s.current];
-    tab.has_image = false;
-    tab.preview_image = Image::default();
+    if index < tab.prompt_picked_images.len() {
+        tab.prompt_picked_images.remove(index);
+        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    }
+}
+
+pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let tab = &mut s.tabs[s.current];
+    tab.prompt_picked_images.clear();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
 }
 

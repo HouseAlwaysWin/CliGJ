@@ -11,6 +11,7 @@ dependencies = [
  "clipboard-win",
  "dirs",
  "encoding_rs",
+ "image",
  "rfd",
  "serde",
  "slint",
