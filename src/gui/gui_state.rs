@@ -165,7 +165,8 @@ impl GuiState {
                 let diff = diff_composer_to_conpty(&tab.composer_pty_mirror, &cur_prompt);
                 let _ = session.writer.write_all(&diff);
                 let _ = session.writer.write_all(extra_payload.as_bytes());
-                let _ = session.writer.write_all(b"\r");
+                // Windows ConPTY for interactive prompts: \r\n is most reliable as a "commit"
+                let _ = session.writer.write_all(b"\r\n");
                 let _ = session.writer.flush();
             } else if !full_command.is_empty() {
                 tab.append_terminal(&format!("{full_command}\n"));
