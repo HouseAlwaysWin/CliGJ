@@ -328,12 +328,6 @@ pub fn start_reader_thread(
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
         let mut pending_reset = false;
-        let mut last_alt_screen = false;
-        let mut last_transient_viewport_only = false;
-        // After a resize, many TUIs redraw in several bursts and the old frame briefly lands in
-        // scrollback. Keep snapshots constrained to the visible screen for a few renders so the UI
-        // doesn't import duplicated historical frames as if they were new content.
-        let mut post_resize_screen_only_snapshots = 0usize;
 
         while let Ok(event) = event_rx.recv() {
             match event {
@@ -359,69 +353,28 @@ pub fn start_reader_thread(
                     last_snapshot_fp = None;
                     if size_changed {
                         pending_reset = true;
-                        post_resize_screen_only_snapshots = 4;
                     }
                 }
             }
 
-            // After processing events (maybe multiple in a batch if we want to optimize), render a snapshot
+            // After processing events, render a snapshot of the recent screen/scrollback tail.
             let screen = term.screen();
-            let alt_screen_active = term.is_alt_screen_active();
-            if alt_screen_active != last_alt_screen {
-                line_cache.clear();
-                last_snapshot_fp = None;
-                pending_reset = true;
-                post_resize_screen_only_snapshots = 0;
-                last_alt_screen = alt_screen_active;
-            }
-            let transient_viewport_only = pending_reset || post_resize_screen_only_snapshots > 0;
-            if transient_viewport_only != last_transient_viewport_only {
-                line_cache.clear();
-                last_snapshot_fp = None;
-                pending_reset = true;
-                last_transient_viewport_only = transient_viewport_only;
-            }
-            let interactive_mode = alt_screen_active || transient_viewport_only;
-
             let total = screen.scrollback_rows();
-            // After resize, only capture current screen (not deep scrollback) to avoid
-            // pulling in TUI redraw duplicates (e.g. Gemini CLI re-renders its banner
-            // on SIGWINCH and the old banner ends up in scrollback).
-            let cap = if interactive_mode {
-                term_rows
-            } else {
-                term_rows
-                    .saturating_mul(4)
-                    .min(CONPTY_SNAPSHOT_MAX_LINES)
-                    .max(term_rows)
-            };
+            let cap = term_rows
+                .saturating_mul(4)
+                .min(CONPTY_SNAPSHOT_MAX_LINES)
+                .max(term_rows);
             let snapshot_row_count = cap.min(total.max(1));
-            let (start, end, total_for_render, filled, force_full_reset) = if interactive_mode {
-                let vis_rows = snapshot_row_count.min(term_rows.max(1));
-                let phys = screen.phys_range(&(0..vis_rows as i64));
-                // During alt-screen or resize reflow, treat the viewport as the whole document and
-                // replace the GUI buffer wholesale. Once the resize settles we switch back to the
-                // normal shell-like scrollback view.
-                (0usize, phys.end.saturating_sub(phys.start), vis_rows, false, true)
-            } else {
-                let start = total.saturating_sub(snapshot_row_count);
-                (start, total, total, total > term_rows, false)
-            };
-            let lines = if interactive_mode {
-                let vis_rows = snapshot_row_count.min(term_rows.max(1));
-                let phys = screen.phys_range(&(0..vis_rows as i64));
-                screen.lines_in_phys_range(phys.start..phys.end)
-            } else {
-                screen.lines_in_phys_range(start..end)
-            };
+            let start = total.saturating_sub(snapshot_row_count);
+            let end = total;
+            let total_for_render = total;
+            let filled = total > term_rows;
+            let lines = screen.lines_in_phys_range(start..end);
             let line_refs: Vec<&Line> = lines.iter().collect();
             let cursor = term.cursor_pos();
-            let cursor_local_row = if interactive_mode {
-                usize::try_from(cursor.y).ok().filter(|row| *row < line_refs.len())
-            } else {
-                let cursor_phys_row = screen.phys_row(cursor.y);
-                cursor_phys_row.checked_sub(start).filter(|row| *row < line_refs.len())
-            };
+            let cursor_phys_row = screen.phys_row(cursor.y);
+            let cursor_local_row =
+                cursor_phys_row.checked_sub(start).filter(|row| *row < line_refs.len());
             let cursor_col = Some(cursor.x);
 
             let fp = snapshot_content_fingerprint(total_for_render, &line_refs, cursor_local_row, cursor_col);
@@ -441,10 +394,8 @@ pub fn start_reader_thread(
                 &mut line_cache,
             );
             render.filled = filled;
-            render.reset_terminal_buffer = pending_reset || force_full_reset;
+            render.reset_terminal_buffer = pending_reset;
             pending_reset = false;
-            post_resize_screen_only_snapshots =
-                post_resize_screen_only_snapshots.saturating_sub(1);
             on_chunk(render);
         }
     })

@@ -25,9 +25,6 @@ thread_local! {
     /// Monotonic token for the shared workspace layout. Increment on each tab/UI reload so
     /// deferred resize/viewport callbacks from an older frame can be ignored safely.
     pub(crate) static UI_LAYOUT_EPOCH: Cell<u64> = Cell::new(1);
-    /// Monotonic token for coalescing resize storms. Every new resize request invalidates the
-    /// previous deferred send; only the last settled request should reach ConPTY.
-    pub(crate) static RESIZE_REQUEST_EPOCH: Cell<u64> = Cell::new(1);
 }
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's

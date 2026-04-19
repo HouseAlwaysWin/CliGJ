@@ -13,10 +13,7 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk};
-use crate::gui::ui_sync::{
-    load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, RESIZE_REQUEST_EPOCH,
-    UI_LAYOUT_EPOCH,
-};
+use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, UI_LAYOUT_EPOCH};
 use crate::terminal::windows_conpty;
 
 use super::helpers::{
@@ -457,25 +454,18 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         }
         let request_epoch = UI_LAYOUT_EPOCH.with(|c| c.get());
-        let resize_epoch = RESIZE_REQUEST_EPOCH.with(|c| {
-            let next = c.get().wrapping_add(1);
-            c.set(next);
-            next
-        });
         // 直接讀取 thread-local 取得最新的 target tab ID
         // （不能 clone Cell，clone 會創建獨立副本，讀不到後續 set 的值）
         let target_tab_id = crate::gui::ui_sync::RESIZE_TARGET_TAB_ID.with(|c| c.get());
         let app_weak2 = app_weak.clone();
         let st_resize2 = Rc::clone(&st_resize);
-        // Coalesce resize storms: only send the latest settled grid after a short delay.
-        slint::Timer::single_shot(std::time::Duration::from_millis(70), move || {
+        // Defer: `invoke_ws_bump_terminal_size` runs during `load_tab_to_ui` while callers
+        // may still hold `state` borrowed — same pattern as `terminal-viewport-changed`.
+        let _ = spawn_local(async move {
             let Some(_ui) = app_weak2.upgrade() else {
                 return;
             };
             if UI_LAYOUT_EPOCH.with(|c| c.get()) != request_epoch {
-                return;
-            }
-            if RESIZE_REQUEST_EPOCH.with(|c| c.get()) != resize_epoch {
                 return;
             }
             let mut s = st_resize2.borrow_mut();
