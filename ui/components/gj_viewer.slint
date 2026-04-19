@@ -21,6 +21,9 @@ export component GjViewer inherits Rectangle {
     callback terminal-resize-requested(int, int);
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px;
+    /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
+    private property <int> last-resize-cols: 0;
+    private property <int> last-resize-rows: 0;
     private property <bool> drag-active: false;
     private property <bool> has-selection: false;
     private property <int> drag-start-row: 0;
@@ -47,7 +50,11 @@ export component GjViewer inherits Rectangle {
     function sync-terminal-grid-to-pty() {
         let cols = floor((self.width - root.terminal-left-inset - root.stripe-width) / root.char-width);
         let rows = floor(self.height / root.row-height);
-        if (cols > 0 && rows > 0) {
+        if (cols > 0 && rows > 0
+            && (cols != root.last-resize-cols || rows != root.last-resize-rows))
+        {
+            root.last-resize-cols = cols;
+            root.last-resize-rows = rows;
             root.terminal-resize-requested(cols, rows);
         }
     }
@@ -194,12 +201,18 @@ export component GjViewer inherits Rectangle {
         root.viewport-changed();
     }
 
-    // 監聽總行數變化，實現精確的自動滾動
-    changed terminal-total-lines => {
-        if (root.auto-scroll) {
-            root.scroll_to_bottom();
-        }
+    /// Set content scroll offset in px (matches `terminal-scroll-top-px`). Clamps to the valid range.
+    /// Rust 呼叫此函式後一定會緊接 push_terminal_view_to_ui，不需再觸發延遲 viewport-changed。
+    public function apply_scroll_top_px(top_px: float) {
+        let ch: length = max(root.row-height, root.terminal-total-lines * root.row-height);
+        let max_scroll: float = max(0.0, (ch / 1px) - (sv.height / 1px));
+        let t: float = min(max(top_px, 0.0), max_scroll);
+        sv.viewport-y = -(t * 1px);
     }
+
+    // Auto-scroll is driven from Rust (`refresh_current_terminal`) so it stays in sync with
+    // windowing math. A Slint `changed terminal-total-lines` handler here fought that logic
+    // and caused races (blank terminal / flicker on new tabs).
 
     sv := ScrollView {
         visible: true;

@@ -48,6 +48,7 @@ pub(crate) fn inject_paths_into_current(
             tab.prompt_picked_files_abs.push(abs_path);
         }
     }
+    tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
 }
@@ -166,6 +167,7 @@ pub(crate) fn push_prompt_image(
         abs_path,
         preview,
     });
+    tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
 }
@@ -218,6 +220,7 @@ pub(crate) fn inject_paths_and_images_from_paths(
         inject_paths_into_current(ui, s, &non_image_paths)?;
     } else {
         let tab = &mut s.tabs[s.current];
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     }
     Ok(())
@@ -230,6 +233,7 @@ pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: us
     let tab = &mut s.tabs[s.current];
     if index < tab.prompt_picked_images.len() {
         tab.prompt_picked_images.remove(index);
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     }
 }
@@ -240,6 +244,7 @@ pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
     }
     let tab = &mut s.tabs[s.current];
     tab.prompt_picked_images.clear();
+    tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
 }
 

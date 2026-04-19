@@ -401,6 +401,7 @@ fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         }
         s.tabs[current].prompt_picked_files_abs.remove(idx);
+        s.tabs[current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(&ui, &mut s.tabs[current]);
     });
 
@@ -416,6 +417,7 @@ fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         let current = s.current;
         s.tabs[current].prompt_picked_files_abs.clear();
+        s.tabs[current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(&ui, &mut s.tabs[current]);
     });
 }
@@ -497,7 +499,7 @@ fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             }
             let cur = s.current;
             let tab = &mut s.tabs[cur];
-            push_terminal_view_to_ui(&ui, tab);
+            push_terminal_view_to_ui(&ui, tab, None);
         });
     });
 }

@@ -40,6 +40,7 @@ impl GuiState {
             tab.prompt_picked_files_abs.clear();
             tab.prompt_picked_images.clear();
         }
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -53,6 +54,7 @@ impl GuiState {
         }
 
         tab_update_from_ui(&mut self.tabs[self.current], ui);
+        self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
         load_tab_to_ui(ui, &mut self.tabs[new_index]);
@@ -61,6 +63,7 @@ impl GuiState {
 
     pub(crate) fn add_tab(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
+        self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
 
         let n = self.titles.row_count();
         let label = SharedString::from(format!("Session {}", n + 1));
@@ -122,6 +125,7 @@ impl GuiState {
         }
 
         ui.set_ws_cmd_type(SharedString::from(new_cmd_type));
+        self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, &mut self.tabs[self.current]);
         Ok(())
     }
@@ -213,6 +217,7 @@ impl GuiState {
         tab.composer_pty_mirror.clear();
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
         self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -240,6 +245,7 @@ impl GuiState {
                 let next = cur - 1;
                 tab.history_cursor = Some(next);
                 tab.prompt = SharedString::from(tab.command_history[next].as_str());
+                tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
                 load_tab_to_ui(ui, tab);
             }
         }
@@ -272,6 +278,7 @@ impl GuiState {
             tab.prompt = SharedString::from(tab.history_draft.as_str());
             tab.history_draft.clear();
         }
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -301,6 +308,7 @@ impl GuiState {
 
         let preview = String::from_utf8_lossy(data);
         tab.append_terminal(&format!("\n[inject]\n{preview}"));
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())
     }
@@ -314,6 +322,9 @@ impl GuiState {
         }
 
         tab_update_from_ui(&mut self.tabs[self.current], ui);
+        if self.current < self.tabs.len() {
+            self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+        }
 
         self.titles.remove(index);
         self.tabs.remove(index);
@@ -345,6 +356,7 @@ impl GuiState {
         }
 
         tab_update_from_ui(&mut self.tabs[self.current], ui);
+        self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
 
         let title = self.titles.remove(from);
         self.titles.insert(to, title);

@@ -12,11 +12,47 @@ use std::time::Duration;
 use slint::{ComponentHandle, SharedString, Timer};
 
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TerminalChunk};
-use crate::gui::ui_sync::push_terminal_view_to_ui;
+use crate::gui::state::{GuiState, TabState, TerminalChunk};
+use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
+
+/// After each ConPTY snapshot, physical rows `[0, chunk_first)` are not in the slice. The old
+/// code kept them as **blank leading rows** in `terminal_lines`, so as scrollback grew,
+/// `len()` approached the full PTY height → huge black gap above the real output and O(n) work
+/// (clear loop + Slint scroll extent). Drop that prefix and bump `terminal_physical_origin`
+/// so the dense buffer only holds the snapshot tail (same idea as `enforce_scrollback_cap`).
+fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize) {
+    if leading == 0 || tab.terminal_lines.len() < leading {
+        return;
+    }
+    tab.terminal_lines.drain(0..leading);
+    tab.terminal_physical_origin = tab.terminal_physical_origin.saturating_add(leading);
+
+    let take_rows = std::mem::take(&mut tab.terminal_model_rows);
+    tab.terminal_model_rows = take_rows
+        .into_iter()
+        // `then_some` evaluates its argument eagerly; `k - leading` must run only when `k >= leading`.
+        .filter_map(|(k, v)| (k >= leading).then(|| (k - leading, v)))
+        .collect();
+
+    let take_hashes = std::mem::take(&mut tab.terminal_model_hashes);
+    tab.terminal_model_hashes = take_hashes
+        .into_iter()
+        .filter_map(|(k, v)| (k >= leading).then(|| (k - leading, v)))
+        .collect();
+
+    let take_dirty = std::mem::take(&mut tab.terminal_model_dirty);
+    tab.terminal_model_dirty = take_dirty
+        .into_iter()
+        .filter_map(|k| (k >= leading).then(|| k - leading))
+        .collect();
+
+    tab.last_window_first = usize::MAX;
+    tab.last_window_last = usize::MAX;
+    tab.last_window_total = usize::MAX;
+}
 
 #[derive(Default)]
 struct PendingTabUpdate {
@@ -131,14 +167,8 @@ fn apply_pending_updates(
                 tab.terminal_lines.resize(local_len, ColoredLine::default());
             }
 
-            // Physical rows [0..chunk_first_idx) are outside this snapshot — clear matching locals.
-            let clear_local_end = chunk_first_idx.saturating_sub(origin);
-            for i in 0..clear_local_end.min(tab.terminal_lines.len()) {
-                tab.terminal_lines[i] = ColoredLine::default();
-                tab.terminal_model_rows.remove(&i);
-                tab.terminal_model_hashes.remove(&i);
-                tab.terminal_model_dirty.insert(i);
-            }
+            // Rows before `chunk_first_idx` are outside this snapshot; previously we filled them with
+            // blanks (see `compact_terminal_lines_after_snapshot` doc). Merge first, then drop.
 
             let indices = &update.changed_indices;
             if indices.is_empty() && !new_lines.is_empty() {
@@ -177,7 +207,12 @@ fn apply_pending_updates(
                 tab.terminal_model_dirty.retain(|k| *k < tail_keep);
             }
 
-            tab.terminal_cursor_row = update.cursor_row.and_then(|phys| phys.checked_sub(origin));
+            let leading = chunk_first_idx.saturating_sub(origin);
+            compact_terminal_lines_after_snapshot(tab, leading);
+
+            tab.terminal_cursor_row = update
+                .cursor_row
+                .and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
             tab.terminal_cursor_col = update.cursor_col;
 
             tab.enforce_scrollback_cap();
@@ -202,26 +237,60 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     }
     if current_changed {
         let current = s.current;
-        let auto_scroll = s.tabs[current].auto_scroll;
         let tab = &mut s.tabs[current];
         if tab.terminal_lines.is_empty() {
             ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
         }
-        if auto_scroll {
-            ui.invoke_ws_scroll_terminal_to_bottom();
+        let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        let exp = terminal_scroll_top_for_tab(tab, vh);
+        let n = tab.terminal_lines.len();
+
+        let resync = tab.terminal_scroll_resync_next;
+        if resync {
+            tab.terminal_scroll_resync_next = false;
         }
-        push_terminal_view_to_ui(ui, tab);
+
+        if n > 0 && tab.auto_scroll {
+            ui.set_ws_terminal_total_lines(n as i32);
+        }
+
+        let scroll_arg = if resync {
+            Some(exp)
+        } else if tab.auto_scroll && n > 0 {
+            Some(exp)
+        } else {
+            None
+        };
+        if let Some(s) = scroll_arg {
+            ui.invoke_ws_apply_terminal_scroll_top_px(s);
+            push_terminal_view_to_ui(ui, tab, Some(s));
+        } else {
+            push_terminal_view_to_ui(ui, tab, None);
+        }
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+        return;
+    }
+
+    // 即使沒新資料，分頁切換後仍需 resync scroll
+    let cur = s.current;
+    let tab = &mut s.tabs[cur];
+    if tab.terminal_scroll_resync_next {
+        tab.terminal_scroll_resync_next = false;
+        let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        let exp = terminal_scroll_top_for_tab(tab, vh);
+        ui.invoke_ws_apply_terminal_scroll_top_px(exp);
+        push_terminal_view_to_ui(ui, tab, Some(exp));
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         return;
     }
 
     let st = ui.get_ws_terminal_scroll_top_px();
     let vh = ui.get_ws_terminal_viewport_height_px();
-    let cur = s.current;
-    let tab = &mut s.tabs[cur];
     if (st - tab.last_pushed_scroll_top).abs() > 0.5
         || (vh - tab.last_pushed_viewport_height).abs() > 0.5
     {
-        push_terminal_view_to_ui(ui, tab);
+        push_terminal_view_to_ui(ui, tab, None);
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     }
 }
 
@@ -229,11 +298,16 @@ fn flush_pending_scroll(ui: &AppWindow, s: &mut GuiState) {
     if !s.pending_scroll {
         return;
     }
-    ui.invoke_ws_scroll_terminal_to_bottom();
     if s.current < s.tabs.len() {
         let cur = s.current;
         let tab = &mut s.tabs[cur];
-        push_terminal_view_to_ui(ui, tab);
+        let n = tab.terminal_lines.len() as i32;
+        ui.set_ws_terminal_total_lines(n);
+        let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        let scroll = terminal_scroll_top_for_tab(tab, vh);
+        ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
+        push_terminal_view_to_ui(ui, tab, Some(scroll));
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     }
     s.pending_scroll = false;
 }
@@ -264,11 +338,15 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
         };
         let mut s = state_ui.borrow_mut();
         let current_id = s.tabs.get(s.current).map(|t| t.id);
-        let mut pending: HashMap<u64, PendingTabUpdate> = HashMap::new();
+        // Apply each chunk in order. Batching multiple `replace` chunks into one map is unsafe:
+        // if `first_line_idx` differs (scrollback moved between PTY renders), the later chunk
+        // overwrote the earlier and most lines were dropped ("random" gaps / eaten text).
+        let mut current_changed = false;
         for chunk in drained {
+            let mut pending: HashMap<u64, PendingTabUpdate> = HashMap::new();
             fold_chunk_into_pending(chunk, &mut pending);
+            current_changed |= apply_pending_updates(&mut s, pending, current_id);
         }
-        let current_changed = apply_pending_updates(&mut s, pending, current_id);
         refresh_current_terminal(&ui, &mut s, current_changed);
         flush_pending_scroll(&ui, &mut s);
     });

@@ -312,7 +312,6 @@ pub fn start_reader_thread(
 
     thread::spawn(move || {
         let config: Arc<dyn TerminalConfiguration> = Arc::new(CliGjTermConfig);
-        let mut resize_reset_pending = false;
         let mut term_rows = 40usize;
         let mut term_cols = 120usize;
         let term_size = TerminalSize {
@@ -348,7 +347,6 @@ pub fn start_reader_thread(
                     // every row. Otherwise incremental diffs leave stale UI rows ("ghost" UI).
                     line_cache.clear();
                     last_snapshot_fp = None;
-                    resize_reset_pending = true;
                 }
             }
 
@@ -357,17 +355,15 @@ pub fn start_reader_thread(
             let total = screen.scrollback_rows();
             // Child TUIs often redraw the full screen on SIGWINCH; those redraws stay in scrollback.
             // Grabbing a deep window (e.g. 240 lines) pulls multiple stacked copies of banners.
-            // — On resize: only the live viewport (term_rows).
-            // — Otherwise: cap history at ~4 screens so reflow spam does not dominate the slice.
-            let snapshot_row_count = if resize_reset_pending {
-                term_rows.min(total).max(1)
-            } else {
-                let cap = term_rows
-                    .saturating_mul(4)
-                    .min(CONPTY_SNAPSHOT_MAX_LINES)
-                    .max(term_rows);
-                cap.min(total.max(1))
-            };
+            // Do **not** set `reset_terminal_buffer` on resize: `load_tab_to_ui` calls
+            // `bump_terminal_size` after every tab switch; clearing the GUI buffer on that resize
+            // discarded the first shell output (e.g. cmd copyright) and left a blank view until the
+            // next key event. Incremental refresh after `line_cache.clear()` is enough to avoid ghosts.
+            let cap = term_rows
+                .saturating_mul(4)
+                .min(CONPTY_SNAPSHOT_MAX_LINES)
+                .max(term_rows);
+            let snapshot_row_count = cap.min(total.max(1));
             let start = total.saturating_sub(snapshot_row_count);
             let lines = screen.lines_in_phys_range(start..total);
             let line_refs: Vec<&Line> = lines.iter().collect();
@@ -396,8 +392,7 @@ pub fn start_reader_thread(
                 cursor_col,
                 &mut line_cache,
             );
-            render.reset_terminal_buffer = resize_reset_pending;
-            resize_reset_pending = false;
+            render.reset_terminal_buffer = false;
             on_chunk(render);
         }
     })

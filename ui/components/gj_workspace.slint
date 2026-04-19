@@ -57,6 +57,10 @@ export component GjWorkspace inherits Rectangle {
         viewer.bump-terminal-size();
     }
 
+    public function apply-terminal-scroll-top-px(px: float) {
+        viewer.apply_scroll_top_px(px);
+    }
+
     public function scroll_at_picker_into_view() {
         at-picker.ensure_selection_visible();
     }

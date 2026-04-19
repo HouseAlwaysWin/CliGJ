@@ -1,5 +1,5 @@
 use std::rc::Rc;
-use slint::{Color, Model, ModelRc, SharedString, VecModel};
+use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 
@@ -14,6 +14,33 @@ use super::slint_ui::{TermLine, TermSpan};
 pub(crate) const TERMINAL_ROW_HEIGHT_PX: f32 = 18.0;
 /// Extra rows above/below the visible band (matches prior Slint overscan intent).
 pub(crate) const TERMINAL_ROW_OVERSCAN: usize = 8;
+
+/// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
+/// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
+pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {
+    let n = tab.terminal_lines.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let vh = viewport_height_px.max(1.0);
+    let content_h = n as f32 * TERMINAL_ROW_HEIGHT_PX;
+    if tab.auto_scroll {
+        (content_h - vh).max(0.0)
+    } else {
+        0.0
+    }
+}
+
+/// Clamp [`TabState::terminal_saved_scroll_top_px`] to valid range for the current line count.
+pub(crate) fn clamp_saved_scroll_top(tab: &TabState, viewport_height_px: f32) -> f32 {
+    let n = tab.terminal_lines.len();
+    if n == 0 {
+        return 0.0;
+    }
+    let vh = viewport_height_px.max(1.0);
+    let max_s = (n as f32 * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
+    tab.terminal_saved_scroll_top_px.clamp(0.0, max_s)
+}
 
 pub(crate) fn rgb_color(rgb: [u8; 3]) -> Color {
     Color::from_rgb_u8(rgb[0], rgb[1], rgb[2])
@@ -210,8 +237,16 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
 }
 
 /// Push only the visible (+ overscan) slice into Slint; set global offset and total line count.
-pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
-    let scroll_top = ui.get_ws_terminal_scroll_top_px();
+///
+/// `scroll_top_override`: when `Some`, use this instead of [`AppWindow::get_ws_terminal_scroll_top_px`]
+/// for windowing. Use when switching tabs: the ScrollView may still report the **previous** tab's
+/// scroll offset until the next frame, so the visible row range would be wrong (blank terminal).
+pub(crate) fn push_terminal_view_to_ui(
+    ui: &AppWindow,
+    tab: &mut TabState,
+    scroll_top_override: Option<f32>,
+) {
+    let scroll_top = scroll_top_override.unwrap_or_else(|| ui.get_ws_terminal_scroll_top_px());
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     tab.terminal_scroll_top_px = scroll_top;
     tab.terminal_view_height_px = vh;
@@ -233,6 +268,7 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
         tab.last_window_total = 0;
         tab.last_pushed_scroll_top = scroll_top;
         tab.last_pushed_viewport_height = vh;
+        ui.window().request_redraw();
         return;
     }
 
@@ -267,9 +303,9 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
                 let needs_update = window_changed || tab.terminal_model_dirty.contains(&line_idx);
                 
                 if needs_update {
-                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
-                        model.set_row_data(model_idx, row.clone());
-                    }
+                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                        .unwrap_or_else(empty_term_line);
+                    model.set_row_data(model_idx, row);
                 }
             }
         } else {
@@ -279,9 +315,9 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
                 // 需要增加行
                 for model_idx in 0..current_count {
                     let line_idx = first + model_idx;
-                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
-                        model.set_row_data(model_idx, row.clone());
-                    }
+                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                        .unwrap_or_else(empty_term_line);
+                    model.set_row_data(model_idx, row);
                 }
                 for model_idx in current_count..window_len {
                     let line_idx = first + model_idx;
@@ -292,9 +328,9 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
                 // 需要減少行
                 for model_idx in 0..window_len {
                     let line_idx = first + model_idx;
-                    if let Some(row) = tab.terminal_model_rows.get(&line_idx) {
-                        model.set_row_data(model_idx, row.clone());
-                    }
+                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                        .unwrap_or_else(empty_term_line);
+                    model.set_row_data(model_idx, row);
                 }
                 for _ in window_len..current_count {
                     model.remove(window_len);
@@ -313,6 +349,8 @@ pub(crate) fn push_terminal_view_to_ui(ui: &AppWindow, tab: &mut TabState) {
     tab.last_window_total = n;
     tab.last_pushed_scroll_top = scroll_top;
     tab.last_pushed_viewport_height = vh;
+
+    ui.window().request_redraw();
 }
 
 pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
@@ -367,11 +405,25 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
     let n = tab.terminal_lines.len();
     ui.set_ws_terminal_total_lines(n as i32);
+    // 清空舊 model 資料，強制 push_terminal_view_to_ui 完整重建
+    {
+        let model = &tab.terminal_slint_model;
+        while model.row_count() > 0 {
+            model.remove(0);
+        }
+    }
+    tab.last_window_first = usize::MAX;
+    tab.last_window_last = usize::MAX;
+    tab.last_window_total = usize::MAX;
     // 綁定持久 model
     ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
-    if !tab.auto_scroll {
-        ui.invoke_ws_scroll_terminal_to_top();
-    }
-    push_terminal_view_to_ui(ui, tab);
+
+    // One shared Slint ScrollView for all tabs: resize PTY first, then apply this tab's saved scroll
+    // in px (see `terminal_saved_scroll_top_px` + `gui_state` before tab switch).
     ui.invoke_ws_bump_terminal_size();
+    let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+    let scroll = clamp_saved_scroll_top(tab, vh);
+    ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
+    push_terminal_view_to_ui(ui, tab, Some(scroll));
+    tab.terminal_scroll_resync_next = true;
 }

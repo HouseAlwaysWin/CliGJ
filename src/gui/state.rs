@@ -87,6 +87,12 @@ pub struct TabState {
     pub(crate) terminal_cursor_col: Option<usize>,
     /// PTY physical line index of `terminal_lines[0]`; rows below were dropped for scrollback cap.
     pub(crate) terminal_physical_origin: usize,
+    /// After `load_tab_to_ui`, the next PTY-driven push should sync scroll with computed px (Slint may
+    /// still hold the previous tab's viewport until the first terminal frame).
+    pub(crate) terminal_scroll_resync_next: bool,
+    /// Scroll offset (px, content top) when this tab was last shown; restored on tab switch. All tabs
+    /// share one Slint `ScrollView`, so we must persist this per tab.
+    pub(crate) terminal_saved_scroll_top_px: f32,
 
     #[cfg(target_os = "windows")]
     pub(crate) conpty: Option<windows_conpty::ConptySession>,
@@ -132,6 +138,8 @@ impl TabState {
             terminal_cursor_row: None,
             terminal_cursor_col: None,
             terminal_physical_origin: 0,
+            terminal_scroll_resync_next: false,
+            terminal_saved_scroll_top_px: 0.0,
             #[cfg(target_os = "windows")]
             conpty: None,
             #[cfg(target_os = "windows")]
