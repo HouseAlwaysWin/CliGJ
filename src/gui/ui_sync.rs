@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::rc::Rc;
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::collections::hash_map::DefaultHasher;
@@ -14,6 +15,14 @@ use super::slint_ui::{TermLine, TermSpan};
 pub(crate) const TERMINAL_ROW_HEIGHT_PX: f32 = 18.0;
 /// Extra rows above/below the visible band (matches prior Slint overscan intent).
 pub(crate) const TERMINAL_ROW_OVERSCAN: usize = 8;
+
+// 追蹤 `bump_terminal_size` 觸發時應該 resize 的 tab ID。
+// `load_tab_to_ui` 在呼叫 `bump_terminal_size` 前設定此值；
+// deferred resize handler 讀取此值來找到正確的 tab，
+// 避免快速切換分頁時 resize 送到錯誤的 PTY。
+thread_local! {
+    pub(crate) static RESIZE_TARGET_TAB_ID: Cell<u64> = Cell::new(0);
+}
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
 /// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
@@ -420,6 +429,9 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
     // One shared Slint ScrollView for all tabs: resize PTY first, then apply this tab's saved scroll
     // in px (see `terminal_saved_scroll_top_px` + `gui_state` before tab switch).
+    // 設定 resize target tab ID，確保 deferred resize handler
+    // 能找到正確的 tab（而非依賴 s.current）。
+    RESIZE_TARGET_TAB_ID.with(|c| c.set(tab.id));
     ui.invoke_ws_bump_terminal_size();
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     let scroll = clamp_saved_scroll_top(tab, vh);

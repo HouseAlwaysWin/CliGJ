@@ -453,6 +453,9 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if cols <= 0 || rows <= 0 {
             return;
         }
+        // 直接讀取 thread-local 取得最新的 target tab ID
+        // （不能 clone Cell，clone 會創建獨立副本，讀不到後續 set 的值）
+        let target_tab_id = crate::gui::ui_sync::RESIZE_TARGET_TAB_ID.with(|c| c.get());
         let app_weak2 = app_weak.clone();
         let st_resize2 = Rc::clone(&st_resize);
         // Defer: `invoke_ws_bump_terminal_size` runs during `load_tab_to_ui` while callers
@@ -462,23 +465,20 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 return;
             };
             let mut s = st_resize2.borrow_mut();
-            let cur = s.current;
-            if cur >= s.tabs.len() {
+            // 透過 tab ID 找到正確的 tab，不依賴 s.current
+            let Some(tab) = s.tabs.iter_mut().find(|t| t.id == target_tab_id) else {
                 return;
-            }
-            let tab = &mut s.tabs[cur];
+            };
             #[cfg(target_os = "windows")]
             if let Some(conpty) = &tab.conpty {
-                // 先通知 reader thread 的 wezterm-term resize，確保後續 ConPTY
-                // 輸出的 bytes 會用新尺寸處理，避免舊尺寸 reflow 造成 scrollback
-                // 出現重複內容（如 banner 重複）。
+                // 先通知 reader thread 的 wezterm-term resize
                 if let Some(tx) = &tab.conpty_control_tx {
                     let _ = tx.send(windows_conpty::ControlCommand::Resize {
                         cols: cols as u16,
                         rows: rows as u16,
                     });
                 }
-                // 再通知 Win32 ConPTY，觸發子程序 re-render
+                // 再通知 Win32 ConPTY
                 let _ = conpty.resize(cols as i16, rows as i16);
             }
         });

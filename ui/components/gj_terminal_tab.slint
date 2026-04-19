@@ -55,6 +55,10 @@ export component GjTerminalTab inherits Rectangle {
             }
 
             TouchArea {
+                // 追蹤按下位置和拖曳狀態，避免微小位移觸發分頁重排
+                property <length> press-x: 0px;
+                property <bool> is-dragging: false;
+
                 clicked => {
                     root.pressed();
                 }
@@ -63,13 +67,25 @@ export component GjTerminalTab inherits Rectangle {
                 }
                 pointer-event(e) => {
                     if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                        root.drag-started(root.x + self.mouse-x);
+                        self.press-x = self.mouse-x;
+                        self.is-dragging = false;
                     } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left) {
-                        root.drag-ended();
+                        if (self.is-dragging) {
+                            root.drag-ended();
+                        }
+                        self.is-dragging = false;
                     }
                 }
                 moved => {
-                    root.drag-moved(root.x + self.mouse-x);
+                    // 只有移動超過 5px 才啟動拖曳，防止點擊時微小位移觸發重排
+                    if (!self.is-dragging) {
+                        if (abs(self.mouse-x - self.press-x) > 5px) {
+                            self.is-dragging = true;
+                            root.drag-started(root.x + self.mouse-x);
+                        }
+                    } else {
+                        root.drag-moved(root.x + self.mouse-x);
+                    }
                 }
                 scroll-event(event) => {
                     root.scroll-requested(event.delta-x, event.delta-y);
