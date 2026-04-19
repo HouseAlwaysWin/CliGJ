@@ -10,7 +10,10 @@ export component AppWindow inherits Window {
     preferred-width: 800px;
     preferred-height: 600px;
     min-width: 520px;
-    min-height: 420px;
+    // Keep enough terminal rows for interactive TUIs like Gemini CLI. At smaller heights the
+    // application itself switches layout/reflows aggressively, which cannot be made stable purely
+    // from our side after a PTY resize.
+    min-height: 600px;
     background: AppTheme.bg;
     forward-focus: root_keys;
 
