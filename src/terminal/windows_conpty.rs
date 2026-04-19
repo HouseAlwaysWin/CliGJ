@@ -327,6 +327,7 @@ pub fn start_reader_thread(
 
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
+        let mut pending_reset = false;
 
         while let Ok(event) = event_rx.recv() {
             match event {
@@ -334,8 +335,11 @@ pub fn start_reader_thread(
                     term.advance_bytes(&bytes);
                 }
                 Event::Control(ControlCommand::Resize { cols, rows }) => {
-                    term_cols = cols as usize;
-                    term_rows = rows as usize;
+                    let new_cols = cols as usize;
+                    let new_rows = rows as usize;
+                    let size_changed = term_cols != new_cols || term_rows != new_rows;
+                    term_cols = new_cols;
+                    term_rows = new_rows;
                     term.resize(TerminalSize {
                         rows: term_rows,
                         cols: term_cols,
@@ -347,22 +351,26 @@ pub fn start_reader_thread(
                     // every row. Otherwise incremental diffs leave stale UI rows ("ghost" UI).
                     line_cache.clear();
                     last_snapshot_fp = None;
+                    if size_changed {
+                        pending_reset = true;
+                    }
                 }
             }
 
             // After processing events (maybe multiple in a batch if we want to optimize), render a snapshot
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            // Child TUIs often redraw the full screen on SIGWINCH; those redraws stay in scrollback.
-            // Grabbing a deep window (e.g. 240 lines) pulls multiple stacked copies of banners.
-            // Do **not** set `reset_terminal_buffer` on resize: `load_tab_to_ui` calls
-            // `bump_terminal_size` after every tab switch; clearing the GUI buffer on that resize
-            // discarded the first shell output (e.g. cmd copyright) and left a blank view until the
-            // next key event. Incremental refresh after `line_cache.clear()` is enough to avoid ghosts.
-            let cap = term_rows
-                .saturating_mul(4)
-                .min(CONPTY_SNAPSHOT_MAX_LINES)
-                .max(term_rows);
+            // After resize, only capture current screen (not deep scrollback) to avoid
+            // pulling in TUI redraw duplicates (e.g. Gemini CLI re-renders its banner
+            // on SIGWINCH and the old banner ends up in scrollback).
+            let cap = if pending_reset {
+                term_rows
+            } else {
+                term_rows
+                    .saturating_mul(4)
+                    .min(CONPTY_SNAPSHOT_MAX_LINES)
+                    .max(term_rows)
+            };
             let snapshot_row_count = cap.min(total.max(1));
             let start = total.saturating_sub(snapshot_row_count);
             let lines = screen.lines_in_phys_range(start..total);
@@ -375,9 +383,6 @@ pub fn start_reader_thread(
 
             let fp = snapshot_content_fingerprint(total, &line_refs, cursor_local_row, cursor_col);
             if last_snapshot_fp == Some(fp) {
-                // If nothing changed, we can skip on_chunk
-                // But wait, if we resized, we might still want to refresh UI?
-                // Actually, if we resized, the fingerprint should change because lines might have reflowed.
                 continue;
             }
             last_snapshot_fp = Some(fp);
@@ -392,7 +397,8 @@ pub fn start_reader_thread(
                 cursor_col,
                 &mut line_cache,
             );
-            render.reset_terminal_buffer = false;
+            render.reset_terminal_buffer = pending_reset;
+            pending_reset = false;
             on_chunk(render);
         }
     })

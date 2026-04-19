@@ -215,6 +215,17 @@ fn apply_pending_updates(
                 .and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
             tab.terminal_cursor_col = update.cursor_col;
 
+            // 裁掉游標以下的尾端空白行（PTY screen 的空白填充），
+            // 避免 terminal_total_lines 過大導致新分頁出現不必要的滾輪。
+            let cursor_local_end = tab.terminal_cursor_row.map(|r| r + 1).unwrap_or(0);
+            while tab.terminal_lines.len() > cursor_local_end {
+                if tab.terminal_lines.last().map_or(false, |l| l.blank) {
+                    tab.terminal_lines.pop();
+                } else {
+                    break;
+                }
+            }
+
             tab.enforce_scrollback_cap();
             tab.terminal_text.clear();
         }

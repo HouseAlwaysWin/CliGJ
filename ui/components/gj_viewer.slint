@@ -67,8 +67,16 @@ export component GjViewer inherits Rectangle {
         root.sync-terminal-grid-to-pty();
     }
 
+    /// 分頁載入時呼叫：強制送出 resize，忽略去抖。
+    /// 新分頁的 PTY 可能還在 120×40，必須確保 resize 到實際 viewer 尺寸。
     public function bump-terminal-size() {
-        root.sync-terminal-grid-to-pty();
+        let cols = floor((self.width - root.terminal-left-inset - root.stripe-width) / root.char-width);
+        let rows = floor(self.height / root.row-height);
+        if (cols > 0 && rows > 0) {
+            root.last-resize-cols = cols;
+            root.last-resize-rows = rows;
+            root.terminal-resize-requested(cols, rows);
+        }
     }
 
     function clamp-row(raw: int) -> int {

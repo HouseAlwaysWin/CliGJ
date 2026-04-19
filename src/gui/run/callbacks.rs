@@ -469,13 +469,17 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let tab = &mut s.tabs[cur];
             #[cfg(target_os = "windows")]
             if let Some(conpty) = &tab.conpty {
-                let _ = conpty.resize(cols as i16, rows as i16);
+                // 先通知 reader thread 的 wezterm-term resize，確保後續 ConPTY
+                // 輸出的 bytes 會用新尺寸處理，避免舊尺寸 reflow 造成 scrollback
+                // 出現重複內容（如 banner 重複）。
                 if let Some(tx) = &tab.conpty_control_tx {
                     let _ = tx.send(windows_conpty::ControlCommand::Resize {
                         cols: cols as u16,
                         rows: rows as u16,
                     });
                 }
+                // 再通知 Win32 ConPTY，觸發子程序 re-render
+                let _ = conpty.resize(cols as i16, rows as i16);
             }
         });
     });
