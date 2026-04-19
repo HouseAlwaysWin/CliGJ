@@ -22,6 +22,12 @@ pub(crate) const TERMINAL_ROW_OVERSCAN: usize = 8;
 // 避免快速切換分頁時 resize 送到錯誤的 PTY。
 thread_local! {
     pub(crate) static RESIZE_TARGET_TAB_ID: Cell<u64> = Cell::new(0);
+    /// Monotonic token for the shared workspace layout. Increment on each tab/UI reload so
+    /// deferred resize/viewport callbacks from an older frame can be ignored safely.
+    pub(crate) static UI_LAYOUT_EPOCH: Cell<u64> = Cell::new(1);
+    /// Monotonic token for coalescing resize storms. Every new resize request invalidates the
+    /// previous deferred send; only the last settled request should reach ConPTY.
+    pub(crate) static RESIZE_REQUEST_EPOCH: Cell<u64> = Cell::new(1);
 }
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
@@ -381,6 +387,7 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
 }
 
 pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
+    UI_LAYOUT_EPOCH.with(|c| c.set(c.get().wrapping_add(1)));
     ui.set_ws_image_zoom_index(-1);
     ui.set_ws_file_path(SharedString::from(tab.file_path.as_str()));
     let img_chips: Vec<PromptImageChip> = tab

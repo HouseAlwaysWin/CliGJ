@@ -328,6 +328,10 @@ pub fn start_reader_thread(
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
         let mut pending_reset = false;
+        // After a resize, many TUIs redraw in several bursts and the old frame briefly lands in
+        // scrollback. Keep snapshots constrained to the visible screen for a few renders so the UI
+        // doesn't import duplicated historical frames as if they were new content.
+        let mut post_resize_screen_only_snapshots = 0usize;
 
         while let Ok(event) = event_rx.recv() {
             match event {
@@ -353,6 +357,7 @@ pub fn start_reader_thread(
                     last_snapshot_fp = None;
                     if size_changed {
                         pending_reset = true;
+                        post_resize_screen_only_snapshots = 4;
                     }
                 }
             }
@@ -363,7 +368,7 @@ pub fn start_reader_thread(
             // After resize, only capture current screen (not deep scrollback) to avoid
             // pulling in TUI redraw duplicates (e.g. Gemini CLI re-renders its banner
             // on SIGWINCH and the old banner ends up in scrollback).
-            let cap = if pending_reset {
+            let cap = if pending_reset || post_resize_screen_only_snapshots > 0 {
                 term_rows
             } else {
                 term_rows
@@ -399,6 +404,8 @@ pub fn start_reader_thread(
             );
             render.reset_terminal_buffer = pending_reset;
             pending_reset = false;
+            post_resize_screen_only_snapshots =
+                post_resize_screen_only_snapshots.saturating_sub(1);
             on_chunk(render);
         }
     })

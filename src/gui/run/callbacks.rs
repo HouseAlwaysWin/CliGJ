@@ -13,7 +13,10 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk};
-use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui};
+use crate::gui::ui_sync::{
+    load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, RESIZE_REQUEST_EPOCH,
+    UI_LAYOUT_EPOCH,
+};
 use crate::terminal::windows_conpty;
 
 use super::helpers::{
@@ -453,22 +456,38 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if cols <= 0 || rows <= 0 {
             return;
         }
+        let request_epoch = UI_LAYOUT_EPOCH.with(|c| c.get());
+        let resize_epoch = RESIZE_REQUEST_EPOCH.with(|c| {
+            let next = c.get().wrapping_add(1);
+            c.set(next);
+            next
+        });
         // 直接讀取 thread-local 取得最新的 target tab ID
         // （不能 clone Cell，clone 會創建獨立副本，讀不到後續 set 的值）
         let target_tab_id = crate::gui::ui_sync::RESIZE_TARGET_TAB_ID.with(|c| c.get());
         let app_weak2 = app_weak.clone();
         let st_resize2 = Rc::clone(&st_resize);
-        // Defer: `invoke_ws_bump_terminal_size` runs during `load_tab_to_ui` while callers
-        // may still hold `state` borrowed — same pattern as `terminal-viewport-changed`.
-        let _ = spawn_local(async move {
+        // Coalesce resize storms: only send the latest settled grid after a short delay.
+        slint::Timer::single_shot(std::time::Duration::from_millis(70), move || {
             let Some(_ui) = app_weak2.upgrade() else {
                 return;
             };
+            if UI_LAYOUT_EPOCH.with(|c| c.get()) != request_epoch {
+                return;
+            }
+            if RESIZE_REQUEST_EPOCH.with(|c| c.get()) != resize_epoch {
+                return;
+            }
             let mut s = st_resize2.borrow_mut();
             // 透過 tab ID 找到正確的 tab，不依賴 s.current
             let Some(tab) = s.tabs.iter_mut().find(|t| t.id == target_tab_id) else {
                 return;
             };
+            if tab.last_pty_cols == cols as u16 && tab.last_pty_rows == rows as u16 {
+                return;
+            }
+            tab.last_pty_cols = cols as u16;
+            tab.last_pty_rows = rows as u16;
             #[cfg(target_os = "windows")]
             if let Some(conpty) = &tab.conpty {
                 // 先通知 reader thread 的 wezterm-term resize
@@ -489,6 +508,7 @@ fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_vp = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_terminal_viewport_changed(move || {
+        let request_epoch = UI_LAYOUT_EPOCH.with(|c| c.get());
         let app_weak2 = app_weak.clone();
         let st_vp2 = Rc::clone(&st_vp);
         // Defer to after this Slint callback returns: avoids `RefCell` reborrow when
@@ -497,6 +517,9 @@ fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let Some(ui) = app_weak2.upgrade() else {
                 return;
             };
+            if UI_LAYOUT_EPOCH.with(|c| c.get()) != request_epoch {
+                return;
+            }
             let mut s = st_vp2.borrow_mut();
             if s.current >= s.tabs.len() {
                 return;
