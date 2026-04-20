@@ -164,6 +164,43 @@ pub fn file_name_label(path: &str) -> String {
         .to_string()
 }
 
+#[must_use]
+pub fn file_attachment_token(index_1_based: usize) -> String {
+    format!("[[file{index_1_based}]]")
+}
+
+#[must_use]
+pub fn image_attachment_token(index_1_based: usize) -> String {
+    format!("[[img{index_1_based}]]")
+}
+
+#[must_use]
+pub fn append_attachment_token(prompt: &str, token: &str) -> String {
+    let p = prompt.trim_end();
+    if p.is_empty() {
+        return token.to_string();
+    }
+    if p.ends_with(' ') || p.ends_with('\n') || p.ends_with('\t') {
+        format!("{p}{token}")
+    } else {
+        format!("{p} {token}")
+    }
+}
+
+#[must_use]
+pub fn expand_attachment_tokens(prompt: &str, file_paths: &[String], image_paths: &[String]) -> String {
+    let mut out = prompt.to_string();
+    for (i, p) in file_paths.iter().enumerate() {
+        let token = file_attachment_token(i + 1);
+        out = out.replace(token.as_str(), p.as_str());
+    }
+    for (i, p) in image_paths.iter().enumerate() {
+        let token = image_attachment_token(i + 1);
+        out = out.replace(token.as_str(), p.as_str());
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -203,5 +240,14 @@ mod tests {
         let (visible, abs) = apply_at_file_pick_hidden("open @car", "Cargo.toml", root);
         assert_eq!(visible, "open ");
         assert!(abs.ends_with("Cargo.toml"));
+    }
+
+    #[test]
+    fn token_expand_replaces_file_and_image_tokens() {
+        let prompt = "ask [[file1]] with [[img1]]";
+        let files = vec!["D:/a.txt".to_string()];
+        let images = vec!["D:/p.png".to_string()];
+        let out = expand_attachment_tokens(prompt, &files, &images);
+        assert_eq!(out, "ask D:/a.txt with D:/p.png");
     }
 }

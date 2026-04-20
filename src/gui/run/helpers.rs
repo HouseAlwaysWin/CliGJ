@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use arboard::{Clipboard, ImageData};
 use image::RgbaImage;
-use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 use unicode_width::UnicodeWidthChar;
 
 use crate::terminal::key_encoding;
@@ -47,6 +47,9 @@ pub(crate) fn inject_paths_into_current(
         }
         if !tab.prompt_picked_files_abs.contains(&abs_path) {
             tab.prompt_picked_files_abs.push(abs_path);
+            let token = workspace_files::file_attachment_token(tab.prompt_picked_files_abs.len());
+            let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+            tab.prompt = SharedString::from(next.as_str());
         }
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
@@ -168,6 +171,9 @@ pub(crate) fn push_prompt_image(
         abs_path,
         preview,
     });
+    let token = workspace_files::image_attachment_token(tab.prompt_picked_images.len());
+    let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+    tab.prompt = SharedString::from(next.as_str());
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     Ok(())
@@ -211,6 +217,10 @@ pub(crate) fn inject_paths_and_images_from_paths(
                         abs_path,
                         preview,
                     });
+                    let token = workspace_files::image_attachment_token(tab.prompt_picked_images.len());
+                    let next =
+                        workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+                    tab.prompt = SharedString::from(next.as_str());
                     continue;
                 }
             }

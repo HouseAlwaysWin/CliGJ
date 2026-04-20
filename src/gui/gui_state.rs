@@ -297,27 +297,39 @@ impl GuiState {
             return Err("invalid current tab index");
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
-        
+
         let mut extra_payload = String::new();
-        {
+        let expanded_prompt = {
             let tab = &self.tabs[self.current];
+            let image_paths: Vec<String> = tab
+                .prompt_picked_images
+                .iter()
+                .map(|x| x.abs_path.clone())
+                .collect();
+            let expanded = crate::workspace_files::expand_attachment_tokens(
+                tab.prompt.as_str(),
+                &tab.prompt_picked_files_abs,
+                &image_paths,
+            );
             for path in &tab.prompt_picked_files_abs {
-                if !path.is_empty() && !tab.prompt.contains(path) {
+                if !path.is_empty() && !expanded.contains(path) {
                     extra_payload.push(' ');
                     extra_payload.push_str(path);
                 }
             }
-            for img in &tab.prompt_picked_images {
-                if !img.abs_path.is_empty() && !tab.prompt.contains(&img.abs_path) {
+            for p in image_paths {
+                if !p.is_empty() && !expanded.contains(&p) {
                     extra_payload.push(' ');
-                    extra_payload.push_str(&img.abs_path);
+                    extra_payload.push_str(&p);
                 }
             }
-        }
+            expanded
+        };
 
         let full_command = {
-            let tab = &self.tabs[self.current];
-            format!("{}{}", tab.prompt, extra_payload).trim().to_string()
+            format!("{}{}", expanded_prompt, extra_payload)
+                .trim()
+                .to_string()
         };
         let is_interactive_ai_launch = matches!(
             full_command.split_whitespace().next(),
@@ -350,6 +362,14 @@ impl GuiState {
 
             if let Some(session) = tab.conpty.as_mut() {
                 use std::io::Write;
+                if expanded_prompt != tab.prompt.as_str() {
+                    let bytes = diff_composer_to_conpty(tab.prompt.as_str(), expanded_prompt.as_str());
+                    if !bytes.is_empty() {
+                        let _ = session.writer.write_all(&bytes);
+                        let _ = session.writer.flush();
+                        tab.composer_pty_mirror = expanded_prompt.clone();
+                    }
+                }
                 if !extra_payload.is_empty() {
                     let _ = session.writer.write_all(extra_payload.as_bytes());
                     let _ = session.writer.flush();
