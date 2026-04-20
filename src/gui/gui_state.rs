@@ -184,6 +184,7 @@ impl GuiState {
             tab.prompt = SharedString::new();
             tab.prompt_picked_files_abs.clear();
             tab.prompt_picked_images.clear();
+            tab.prompt_picked_selections.clear();
         }
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
@@ -310,6 +311,7 @@ impl GuiState {
                 tab.prompt.as_str(),
                 &tab.prompt_picked_files_abs,
                 &image_paths,
+                &tab.prompt_picked_selections,
             );
             for path in &tab.prompt_picked_files_abs {
                 if !path.is_empty() && !expanded.contains(path) {
@@ -406,6 +408,7 @@ impl GuiState {
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
         tab.prompt_picked_images.clear();
+            tab.prompt_picked_selections.clear();
         tab.composer_pty_mirror.clear();
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
         self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));

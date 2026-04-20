@@ -16,7 +16,9 @@
     "onCommand:cligj.ping",
     "onCommand:cligj.openTab",
     "onCommand:cligj.sendPrompt",
-    "onCommand:cligj.fillPrompt"
+    "onCommand:cligj.fillPrompt",
+    "onCommand:cligj.sendSelectionPrompt",
+    "onCommand:cligj.fillSelectionPrompt"
   ],
   "contributes": {
     "commands": [
@@ -35,8 +37,30 @@
       {
         "command": "cligj.fillPrompt",
         "title": "CliGJ: Fill Prompt (Editable)"
+      },
+      {
+        "command": "cligj.sendSelectionPrompt",
+        "title": "CliGJ: Send Selection with Line Numbers (Direct Submit)"
+      },
+      {
+        "command": "cligj.fillSelectionPrompt",
+        "title": "CliGJ: Fill Selection with Line Numbers (Editable)"
       }
-    ]
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "cligj.sendSelectionPrompt",
+          "group": "navigation@100",
+          "when": "editorHasSelection"
+        },
+        {
+          "command": "cligj.fillSelectionPrompt",
+          "group": "navigation@101",
+          "when": "editorHasSelection"
+        }
+      ]
+    }
   },
   "scripts": {
     "compile": "tsc -p .",

@@ -175,6 +175,11 @@ pub fn image_attachment_token(index_1_based: usize) -> String {
 }
 
 #[must_use]
+pub fn selection_attachment_token(index_1_based: usize) -> String {
+    format!("[[sel{index_1_based}]]")
+}
+
+#[must_use]
 pub fn append_attachment_token(prompt: &str, token: &str) -> String {
     let p = prompt.trim_end();
     if p.is_empty() {
@@ -188,7 +193,12 @@ pub fn append_attachment_token(prompt: &str, token: &str) -> String {
 }
 
 #[must_use]
-pub fn expand_attachment_tokens(prompt: &str, file_paths: &[String], image_paths: &[String]) -> String {
+pub fn expand_attachment_tokens(
+    prompt: &str,
+    file_paths: &[String],
+    image_paths: &[String],
+    selection_payloads: &[String],
+) -> String {
     let mut out = prompt.to_string();
     for (i, p) in file_paths.iter().enumerate() {
         let token = file_attachment_token(i + 1);
@@ -196,6 +206,10 @@ pub fn expand_attachment_tokens(prompt: &str, file_paths: &[String], image_paths
     }
     for (i, p) in image_paths.iter().enumerate() {
         let token = image_attachment_token(i + 1);
+        out = out.replace(token.as_str(), p.as_str());
+    }
+    for (i, p) in selection_payloads.iter().enumerate() {
+        let token = selection_attachment_token(i + 1);
         out = out.replace(token.as_str(), p.as_str());
     }
     out
@@ -244,10 +258,11 @@ mod tests {
 
     #[test]
     fn token_expand_replaces_file_and_image_tokens() {
-        let prompt = "ask [[file1]] with [[img1]]";
+        let prompt = "ask [[file1]] with [[img1]] and [[sel1]]";
         let files = vec!["D:/a.txt".to_string()];
         let images = vec!["D:/p.png".to_string()];
-        let out = expand_attachment_tokens(prompt, &files, &images);
-        assert_eq!(out, "ask D:/a.txt with D:/p.png");
+        let selections = vec!["code payload".to_string()];
+        let out = expand_attachment_tokens(prompt, &files, &images, &selections);
+        assert_eq!(out, "ask D:/a.txt with D:/p.png and code payload");
     }
 }

@@ -25,6 +25,10 @@ Minimal VS Code extension scaffold for CliGJ IPC integration.
 - `CliGJ: Open Tab`
 - `CliGJ: Send Prompt (Direct Submit)`
 - `CliGJ: Fill Prompt (Editable)`
+- `CliGJ: Send Selection with Line Numbers (Direct Submit)`
+- `CliGJ: Fill Selection with Line Numbers (Editable)`
+
+When text is selected in an editor, right-click to access both selection commands directly from the context menu.
 
 ## Troubleshooting
 

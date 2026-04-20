@@ -66,6 +66,8 @@ pub struct TabState {
     pub(crate) history_draft: String,
     /// Absolute paths selected from `@` picker; shown as chips, appended on submit.
     pub(crate) prompt_picked_files_abs: Vec<String>,
+    /// Hidden payload blocks from IPC tokens like `[[sel1]]`, expanded on submit.
+    pub(crate) prompt_picked_selections: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
     /// Archived prior screens for Interactive AI tabs.
@@ -144,6 +146,7 @@ impl TabState {
             history_cursor: None,
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
+            prompt_picked_selections: Vec::new(),
             terminal_lines: Vec::new(),
             interactive_history_lines: Vec::new(),
             interactive_frame_lines: Vec::new(),

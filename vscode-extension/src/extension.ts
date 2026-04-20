@@ -3,6 +3,7 @@ import * as vscode from "vscode";
 
 const PIPE_PATH = "\\\\.\\pipe\\cligj-ipc-v1";
 const REQUEST_TIMEOUT_MS = 2000;
+const MAX_SELECTION_PAYLOAD_CHARS = 12000;
 
 type IpcResponse = {
   type: "response";
@@ -10,6 +11,11 @@ type IpcResponse = {
   ok: boolean;
   result?: unknown;
   error?: string;
+};
+
+type SelectionPromptData = {
+  prompt: string;
+  selectionPayloads: string[];
 };
 
 function sendRequest(method: string, params: Record<string, unknown> = {}): Promise<IpcResponse> {
@@ -55,6 +61,108 @@ function sendRequest(method: string, params: Record<string, unknown> = {}): Prom
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const output = vscode.window.createOutputChannel("CliGJ Bridge");
+  context.subscriptions.push(output);
+
+  const sendPromptPayload = async (
+    prompt: string,
+    submit: boolean,
+    selectionPayloads: string[] = []
+  ): Promise<void> => {
+    output.appendLine(
+      `[sendPrompt] submit=${submit} chars=${prompt.length} selectionPayloads=${selectionPayloads.length}`
+    );
+    try {
+      let resp = await sendRequest("sendPrompt", { prompt, submit, selectionPayloads });
+      if (!resp.ok && (resp.error ?? "").includes("no active tab")) {
+        output.appendLine("[sendPrompt] no active tab, trying openTab then retry");
+        await sendRequest("openTab", { focus: true });
+        resp = await sendRequest("sendPrompt", { prompt, submit, selectionPayloads });
+      }
+      if (resp.ok) {
+        output.appendLine("[sendPrompt] success");
+        void vscode.window.showInformationMessage(
+          submit ? "Prompt sent to CliGJ" : "Prompt filled to CliGJ input box"
+        );
+      } else {
+        output.appendLine(`[sendPrompt] failed: ${resp.error ?? "unknown error"}`);
+        void vscode.window.showErrorMessage(`sendPrompt failed: ${resp.error ?? "unknown error"}`);
+      }
+    } catch (err) {
+      output.appendLine(`[sendPrompt] error: ${String(err)}`);
+      void vscode.window.showErrorMessage(`sendPrompt error: ${String(err)}`);
+    }
+  };
+
+  const getSelectionForAi = (editor: vscode.TextEditor): SelectionPromptData | undefined => {
+    const nonEmptySelections = editor.selections.filter((selection) => !selection.isEmpty);
+    if (nonEmptySelections.length === 0) {
+      return undefined;
+    }
+
+    const document = editor.document;
+    const language = document.languageId || "text";
+    const workspaceFolder = vscode.workspace.getWorkspaceFolder(document.uri);
+    const filePath = workspaceFolder
+      ? vscode.workspace.asRelativePath(document.uri, false)
+      : document.uri.fsPath;
+
+    const selectionPayloads: string[] = [];
+    const promptLines: string[] = [`File: ${filePath}`];
+    nonEmptySelections.forEach((selection, index) => {
+      const startLine = selection.start.line;
+      const endLine =
+        selection.end.character === 0 && selection.end.line > selection.start.line
+          ? selection.end.line - 1
+          : selection.end.line;
+      const selectedText = document.getText(selection).trimEnd();
+      const safeText = selectedText.length > 0 ? selectedText : document.lineAt(startLine).text;
+      const token = `[[sel${index + 1}]]`;
+      const range = `L${startLine + 1}-L${endLine + 1}`;
+      selectionPayloads.push(
+        [
+          `[[selection ${index + 1} file="${filePath}" range="${range}"]]`,
+          `Range: ${range}`,
+          `\`\`\`${language}`,
+          safeText,
+          "```",
+          "[[/selection]]"
+        ].join("\n")
+      );
+      promptLines.push(`Selection ${index + 1} (${range}): ${token}`);
+    });
+
+    const prompt = promptLines.join("\n");
+    let totalPayloadChars = selectionPayloads.reduce((sum, block) => sum + block.length, 0);
+    if (totalPayloadChars > MAX_SELECTION_PAYLOAD_CHARS) {
+      const trimmed: string[] = [];
+      let remaining = MAX_SELECTION_PAYLOAD_CHARS;
+      for (const block of selectionPayloads) {
+        if (remaining <= 0) {
+          break;
+        }
+        if (block.length <= remaining) {
+          trimmed.push(block);
+          remaining -= block.length;
+          continue;
+        }
+        trimmed.push(`${block.slice(0, remaining)}\n\n[truncated]`);
+        remaining = 0;
+      }
+      selectionPayloads.length = 0;
+      selectionPayloads.push(...trimmed);
+      totalPayloadChars = selectionPayloads.reduce((sum, block) => sum + block.length, 0);
+      output.appendLine(
+        `[selection] payload truncated to ${totalPayloadChars} chars for better readability`
+      );
+    }
+
+    return {
+      prompt,
+      selectionPayloads
+    };
+  };
+
   const askPrompt = async (title: string): Promise<string | undefined> => {
     return vscode.window.showInputBox({
       title,
@@ -70,18 +178,7 @@ export function activate(context: vscode.ExtensionContext): void {
     if (!prompt) {
       return;
     }
-    try {
-      const resp = await sendRequest("sendPrompt", { prompt, submit });
-      if (resp.ok) {
-        void vscode.window.showInformationMessage(
-          submit ? "Prompt sent to CliGJ" : "Prompt filled to CliGJ input box"
-        );
-      } else {
-        void vscode.window.showErrorMessage(`sendPrompt failed: ${resp.error ?? "unknown error"}`);
-      }
-    } catch (err) {
-      void vscode.window.showErrorMessage(`sendPrompt error: ${String(err)}`);
-    }
+    await sendPromptPayload(prompt, submit);
   };
 
   const ping = vscode.commands.registerCommand("cligj.ping", async () => {
@@ -118,7 +215,48 @@ export function activate(context: vscode.ExtensionContext): void {
     await sendPromptWithMode(false);
   });
 
-  context.subscriptions.push(ping, openTab, sendPrompt, fillPrompt);
+  const sendSelectionPrompt = vscode.commands.registerCommand("cligj.sendSelectionPrompt", async () => {
+    output.appendLine("[command] cligj.sendSelectionPrompt");
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      void vscode.window.showErrorMessage("No active editor");
+      return;
+    }
+
+    const selectionData = getSelectionForAi(editor);
+    if (!selectionData) {
+      void vscode.window.showWarningMessage("Please select text first");
+      return;
+    }
+
+    await sendPromptPayload(selectionData.prompt, true, selectionData.selectionPayloads);
+  });
+
+  const fillSelectionPrompt = vscode.commands.registerCommand("cligj.fillSelectionPrompt", async () => {
+    output.appendLine("[command] cligj.fillSelectionPrompt");
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) {
+      void vscode.window.showErrorMessage("No active editor");
+      return;
+    }
+
+    const selectionData = getSelectionForAi(editor);
+    if (!selectionData) {
+      void vscode.window.showWarningMessage("Please select text first");
+      return;
+    }
+
+    await sendPromptPayload(selectionData.prompt, false, selectionData.selectionPayloads);
+  });
+
+  context.subscriptions.push(
+    ping,
+    openTab,
+    sendPrompt,
+    fillPrompt,
+    sendSelectionPrompt,
+    fillSelectionPrompt
+  );
 }
 
 export function deactivate(): void {}

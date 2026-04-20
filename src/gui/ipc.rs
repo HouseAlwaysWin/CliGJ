@@ -29,6 +29,7 @@ pub(crate) enum IpcGuiCommand {
         tab_id: Option<u64>,
         prompt: String,
         submit: bool,
+        selection_payloads: Vec<String>,
         response_tx: mpsc::Sender<IpcGuiResponse>,
     },
 }
@@ -501,12 +502,24 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                 .get("submit")
                 .and_then(Value::as_bool)
                 .unwrap_or(true);
+            let selection_payloads = req
+                .params
+                .get("selectionPayloads")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
             let (tx, rx) = mpsc::channel();
             let send = gui_tx.send(IpcGuiCommand::SendPrompt {
                 id: req.id.clone(),
                 tab_id,
                 prompt,
                 submit,
+                selection_payloads,
                 response_tx: tx,
             });
             if send.is_err() {

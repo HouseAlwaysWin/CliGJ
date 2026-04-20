@@ -504,6 +504,7 @@ fn handle_ipc_gui_command(
             tab_id,
             prompt,
             submit,
+            selection_payloads,
             response_tx,
         } => {
             let mut out_id = id;
@@ -532,6 +533,7 @@ fn handle_ipc_gui_command(
             ui.set_ws_prompt(SharedString::from(prompt.as_str()));
             let cur = s.current;
             s.tabs[cur].prompt = SharedString::from(prompt.as_str());
+            s.tabs[cur].prompt_picked_selections = selection_payloads;
             if submit {
                 if let Err(e) = s.submit_current_prompt(ui) {
                     let _ = response_tx.send(IpcGuiResponse {
