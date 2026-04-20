@@ -322,7 +322,7 @@ export component GjViewer inherits Rectangle {
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
+        width: max(0px, parent.width - root.terminal-left-inset);
         height: parent.height;
         scroll-event(event) => {
             if (root.terminal-wheel(event.delta-y / 1px)) {
@@ -343,7 +343,7 @@ export component GjViewer inherits Rectangle {
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
+        width: max(0px, parent.width - root.terminal-left-inset);
         height: parent.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {

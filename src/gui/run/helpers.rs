@@ -343,7 +343,9 @@ pub(crate) fn selected_text_from_terminal_lines(
     let sr = sr.max(0) as usize;
     let sc = sc.max(0) as usize;
     let er = er.max(0) as usize;
-    let ec = ec.max(0) as usize;
+    // Hit-test can land one cell before the visual tail on some DPI/font combinations.
+    // Bias end column to the right by one cell so drag-selection doesn't drop the last glyph.
+    let ec = ec.max(0) as usize + 1;
     let max_row = tab.terminal_lines.len() - 1;
     let sr = sr.min(max_row);
     let er = er.min(max_row);
