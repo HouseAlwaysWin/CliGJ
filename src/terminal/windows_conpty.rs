@@ -1,7 +1,8 @@
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::hash::{Hash, Hasher};
-use std::io::{Read, Write};
+use std::io::Read;
+use std::io::Write;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
 use std::thread;
@@ -21,6 +22,8 @@ use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Console::{
     ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
 };
+#[cfg(windows)]
+use windows_sys::Win32::System::Console::{SetConsoleCP, SetConsoleOutputCP};
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
     CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
@@ -443,17 +446,20 @@ pub fn start_reader_thread(
     })
 }
 
-fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {
-    let cmd = if shell == "PowerShell" 
+fn init_shell_utf8(_shell: &str, _writer: &mut std::fs::File) -> std::io::Result<()> {
+    #[cfg(windows)]
     {
-        "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new(); \
-        [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); \
-        chcp 65001 > $null\r\n"
-            .to_string()
-    } else {
-        "@chcp 65001".to_string()
-    };
-    writer.write_all(cmd.as_bytes())?;
-    writer.flush()?;
+        // 核心邏輯：只調用 API，這絕對不會產生任何終端輸入或輸出
+        // 也就是說，Shell 根本不知道我們改了編碼，它會保持原始的畫面
+        unsafe {
+            if SetConsoleOutputCP(65001) == 0 || SetConsoleCP(65001) == 0 {
+                return Err(std::io::Error::last_os_error());
+            }
+        }
+        
+        // 關鍵：這裡不要再調用 _writer.write_all()
+        // 只要不往 stdin 塞東西，畫面就不會被新的 Prompt 刷掉
+    }
+
     Ok(())
 }
