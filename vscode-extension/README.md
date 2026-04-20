@@ -17,9 +17,22 @@ Minimal VS Code extension scaffold for CliGJ IPC integration.
    ```
 
 3. Press `F5` in VS Code to launch an Extension Development Host.
+   - The launch config now runs `npm: compile` automatically before startup.
 
 ## Commands
 
 - `CliGJ: Ping IPC`
 - `CliGJ: Open Tab`
-- `CliGJ: Send Prompt`
+- `CliGJ: Send Prompt (Direct Submit)`
+- `CliGJ: Fill Prompt (Editable)`
+
+## Troubleshooting
+
+If you see `command 'cligj.sendPrompt' not found`, the extension usually failed to activate because the compiled entry file does not exist yet.
+
+Run these commands inside `vscode-extension`:
+
+```bash
+npm install
+npm run compile
+```

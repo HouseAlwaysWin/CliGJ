@@ -41,6 +41,8 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
+    "postinstall": "npm run compile",
+    "vscode:prepublish": "npm run compile",
     "pretest": "npm run compile"
   },
   "devDependencies": {
