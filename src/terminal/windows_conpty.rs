@@ -224,6 +224,7 @@ fn line_fingerprint_raw(line: &Line, cursor_col: Option<usize>) -> u64 {
 }
 
 fn terminal_render_from_lines_cached(
+    render_mode: ReaderRenderMode,
     lines: &[&Line],
     start_phys_idx: usize,
     total_scrollback_rows: usize,
@@ -262,7 +263,7 @@ fn terminal_render_from_lines_cached(
         .collect();
 
     TerminalRender {
-        render_mode: ReaderRenderMode::InteractiveAi,
+        render_mode,
         text: String::new(),
         lines: changed_lines,
         full_len: num_lines,
@@ -415,9 +416,10 @@ pub fn start_reader_thread(
                 .max(term_rows);
             let snapshot_row_count = match render_mode {
                 ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
-                // Interactive AI tabs should read only the current visible frame from the PTY.
-                // Scrollback is reconstructed on the GUI side from frame-to-frame overlap.
-                ReaderRenderMode::InteractiveAi => term_rows.min(total.max(1)),
+                // Interactive AI tabs still need a substantial tail of scrollback; limiting to
+                // only the currently visible frame makes the scrollbar useless because earlier
+                // prompt/command rows disappear as soon as they scroll off-screen.
+                ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
             };
             let start = total.saturating_sub(snapshot_row_count);
             let end = total;
@@ -439,6 +441,7 @@ pub fn start_reader_thread(
 
             let mut render = match render_mode {
                 ReaderRenderMode::Shell => terminal_render_from_lines_cached(
+                    ReaderRenderMode::Shell,
                     &line_refs,
                     start,
                     total_for_render,
@@ -449,7 +452,17 @@ pub fn start_reader_thread(
                     &mut line_cache,
                 ),
                 ReaderRenderMode::InteractiveAi => {
-                    terminal_render_full_frame(&line_refs, &palette, cursor_local_row, cursor_col)
+                    terminal_render_from_lines_cached(
+                        ReaderRenderMode::InteractiveAi,
+                        &line_refs,
+                        start,
+                        total_for_render,
+                        term_rows,
+                        &palette,
+                        cursor_local_row,
+                        cursor_col,
+                        &mut line_cache,
+                    )
                 }
             };
             render.filled = filled;

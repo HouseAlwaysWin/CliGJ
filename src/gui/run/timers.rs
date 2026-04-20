@@ -162,7 +162,7 @@ fn interactive_frames_text_eq(a: &[ColoredLine], b: &[ColoredLine]) -> bool {
 }
 
 fn interactive_archive_prefix_len(old_frame: &[ColoredLine], new_frame: &[ColoredLine]) -> usize {
-    if old_frame.len() < 8 || new_frame.len() < 8 {
+    if old_frame.len() < 4 || new_frame.len() < 4 {
         return 0;
     }
 
@@ -173,13 +173,13 @@ fn interactive_archive_prefix_len(old_frame: &[ColoredLine], new_frame: &[Colore
 
     let archived_len = old_frame.len() - overlap;
     let min_frame_len = old_frame.len().min(new_frame.len());
-    let near_full_roll = overlap + 4 >= min_frame_len;
-    let small_shift = archived_len <= 4;
+    let mostly_same_frame = overlap * 10 >= min_frame_len * 6;
+    let plausible_scroll = archived_len <= (old_frame.len() / 2).max(1);
 
-    // Only archive when the new frame looks like the old frame shifted upward by a small amount.
-    // This preserves scrollback for genuine terminal scrolling without turning redraws into
-    // repeated whole-screen history.
-    if near_full_roll && small_shift {
+    // Archive when most of the new frame is still the tail of the old frame, meaning the content
+    // likely scrolled upward. Allow bigger jumps than before because Gemini/Codex can repaint in
+    // chunks larger than 4 lines.
+    if mostly_same_frame && plausible_scroll {
         archived_len
     } else {
         0
@@ -210,20 +210,35 @@ fn rebuild_interactive_terminal_lines(tab: &mut TabState) {
         .extend(tab.interactive_frame_lines.iter().cloned());
 }
 
+fn mark_terminal_rows_dirty(tab: &mut TabState, rows: impl IntoIterator<Item = usize>) {
+    for idx in rows {
+        tab.terminal_model_rows.remove(&idx);
+        tab.terminal_model_hashes.remove(&idx);
+        tab.terminal_model_dirty.insert(idx);
+    }
+}
+
 fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
     if update.reset_terminal_buffer {
-        tab.terminal_lines.clear();
-        tab.interactive_history_lines.clear();
+        // PTY resize/reflow should invalidate the current frame, but it must not wipe archived
+        // interactive history or force the scroll position back to the top/bottom.
         tab.interactive_frame_lines.clear();
         tab.interactive_last_archived_signature.clear();
         tab.terminal_text.clear();
         tab.terminal_physical_origin = 0;
-        tab.terminal_saved_scroll_top_px = 0.0;
-        tab.interactive_follow_output = true;
+        tab.terminal_lines.clear();
+        tab.terminal_lines
+            .extend(tab.interactive_history_lines.iter().cloned());
+        tab.terminal_cursor_row = None;
+        tab.terminal_cursor_col = None;
         invalidate_terminal_window_cache(tab);
     }
 
     if let Some(new_lines) = update.replace_lines {
+        let reset_buffer = update.reset_terminal_buffer;
+        let old_history_len = tab.interactive_history_lines.len();
+        let old_frame_lines = tab.interactive_frame_lines.clone();
+        let old_cursor_row = tab.terminal_cursor_row;
         let archived_len =
             interactive_archive_prefix_len(&tab.interactive_frame_lines, &new_lines);
         if archived_len > 0 {
@@ -244,8 +259,31 @@ fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
             .cursor_row
             .map(|row| tab.interactive_history_lines.len() + row);
         tab.terminal_cursor_col = update.cursor_col;
-        invalidate_terminal_window_cache(tab);
-        tab.terminal_model_dirty.extend(0..tab.terminal_lines.len());
+
+        let history_shifted = reset_buffer
+            || archived_len > 0
+            || old_history_len != tab.interactive_history_lines.len()
+            || old_frame_lines.len() != tab.interactive_frame_lines.len();
+
+        if history_shifted {
+            invalidate_terminal_window_cache(tab);
+            tab.terminal_model_dirty.extend(0..tab.terminal_lines.len());
+        } else {
+            let history_len = tab.interactive_history_lines.len();
+            let mut dirty_rows = Vec::new();
+            for idx in 0..tab.interactive_frame_lines.len() {
+                if old_frame_lines.get(idx) != tab.interactive_frame_lines.get(idx) {
+                    dirty_rows.push(history_len + idx);
+                }
+            }
+            if let Some(row) = old_cursor_row {
+                dirty_rows.push(row);
+            }
+            if let Some(row) = tab.terminal_cursor_row {
+                dirty_rows.push(row);
+            }
+            mark_terminal_rows_dirty(tab, dirty_rows);
+        }
         tab.enforce_scrollback_cap();
         return;
     }
@@ -293,20 +331,18 @@ fn apply_pending_updates(
             tab.auto_scroll = v;
         }
 
-        if tab.terminal_mode == TerminalMode::InteractiveAi {
-            apply_interactive_ai_update(tab, update);
-            if current_id == Some(tab.id) {
-                current_changed = true;
-            }
-            continue;
-        }
-
         let mut replaced_with_vt_lines = false;
         if let Some(mut new_lines) = update.replace_lines {
             let chunk_first_idx = update.first_line_idx.unwrap_or(0);
             let full_len_in_chunk = update.full_len.unwrap_or(0);
             let phys_end = chunk_first_idx + full_len_in_chunk;
             replaced_with_vt_lines = true;
+
+            if tab.terminal_mode == TerminalMode::InteractiveAi {
+                tab.interactive_history_lines.clear();
+                tab.interactive_frame_lines.clear();
+                tab.interactive_last_archived_signature.clear();
+            }
 
             if update.reset_terminal_buffer {
                 tab.terminal_lines.clear();
