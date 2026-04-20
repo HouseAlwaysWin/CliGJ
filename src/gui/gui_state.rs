@@ -8,7 +8,7 @@ use crate::terminal::windows_conpty;
 
 use super::composer_sync::diff_composer_to_conpty;
 use super::slint_ui::AppWindow;
-use super::state::{GuiState, TerminalChunk};
+use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
 impl GuiState {
@@ -90,6 +90,7 @@ impl GuiState {
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.tabs[self.current].cmd_type = new_cmd_type.to_string();
+        self.tabs[self.current].terminal_mode = TerminalMode::Shell;
 
         #[cfg(target_os = "windows")]
         {

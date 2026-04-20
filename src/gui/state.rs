@@ -40,6 +40,12 @@ pub(crate) fn default_cmd_type() -> &'static str {
     }
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum TerminalMode {
+    Shell,
+    InteractiveAi,
+}
+
 pub struct TabState {
     pub(crate) id: u64,
     pub(crate) file_path: String,
@@ -48,6 +54,7 @@ pub struct TabState {
     pub(crate) selected_context: SharedString,
     pub(crate) prompt: SharedString,
     pub(crate) cmd_type: String,
+    pub(crate) terminal_mode: TerminalMode,
     pub(crate) terminal_text: String,
     pub(crate) auto_scroll: bool,
     pub(crate) terminal_select_mode: bool,
@@ -118,6 +125,7 @@ impl TabState {
             selected_context: SharedString::new(),
             prompt: SharedString::new(),
             cmd_type,
+            terminal_mode: TerminalMode::Shell,
             terminal_text: String::new(),
             auto_scroll: false,
             terminal_select_mode: false,

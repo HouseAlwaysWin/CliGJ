@@ -12,7 +12,7 @@ use crate::workspace_files;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TerminalChunk};
+use crate::gui::state::{GuiState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, UI_LAYOUT_EPOCH};
 use crate::terminal::windows_conpty;
 
@@ -318,6 +318,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let mut s = st_ai.borrow_mut();
         let cur_idx = s.current;
         if cur_idx >= s.tabs.len() { return; }
+        s.tabs[cur_idx].terminal_mode = TerminalMode::InteractiveAi;
         
         let cmd_type = s.tabs[cur_idx].cmd_type.clone();
         let tab_id = s.tabs[cur_idx].id;
