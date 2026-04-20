@@ -2,6 +2,7 @@
 
 mod at_picker;
 mod composer_sync;
+mod ipc;
 mod interactive_commands;
 mod shell_profiles;
 mod gui_state;

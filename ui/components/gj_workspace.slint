@@ -19,6 +19,9 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> prompt;
     in-out property <[string]> prompt-path-chips;
     in-out property <bool> raw-input-enabled;
+    in property <bool> ipc-running;
+    in property <int> ipc-client-count;
+    in property <string> ipc-status-text;
     in-out property <bool> at-picker-open;
     in-out property <[string]> at-choices;
     in-out property <int> at-selected;
@@ -29,6 +32,7 @@ export component GjWorkspace inherits Rectangle {
     callback history-next-requested;
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
+    callback ipc-toggle-requested;
     callback inject-file-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
@@ -113,6 +117,9 @@ export component GjWorkspace inherits Rectangle {
             prompt-path-chips: root.prompt-path-chips;
             interactive-command-choices: root.interactive-command-choices;
             raw-input-enabled <=> root.raw-input-enabled;
+            ipc-running: root.ipc-running;
+            ipc-client-count: root.ipc-client-count;
+            ipc-status-text: root.ipc-status-text;
             prompt-images: root.prompt-images;
             selected-context: root.selected-context;
             submit-requested => {
@@ -129,6 +136,9 @@ export component GjWorkspace inherits Rectangle {
             }
             raw-input-toggle-requested => {
                 root.raw-input-toggle-requested();
+            }
+            ipc-toggle-requested => {
+                root.ipc-toggle-requested();
             }
             inject-file-requested => {
                 root.inject-file-requested();

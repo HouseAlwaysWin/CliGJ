@@ -13,6 +13,7 @@ use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 use crate::core::config::AppConfig;
 
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
+use super::ipc::{IpcBridge, IpcGuiCommand};
 use super::shell_profiles::sync_shell_profile_choices_to_ui;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TabState, TerminalChunk};
@@ -37,6 +38,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
     let (tx, rx) = mpsc::channel::<TerminalChunk>();
+    let (ipc_gui_tx, ipc_gui_rx) = mpsc::channel::<IpcGuiCommand>();
+    let ipc_bridge = IpcBridge::new(ipc_gui_tx);
 
     let mut cfg = AppConfig::load_or_default().unwrap_or_default();
     let (interactive_commands, persist_interactive) =
@@ -94,10 +97,13 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     sync_shell_profile_choices_to_ui(&app, &state.borrow());
     app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
     app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
+    app.set_ws_ipc_status_text(SharedString::from("IPC OFF"));
+    app.set_ws_ipc_running(false);
+    app.set_ws_ipc_client_count(0);
 
     let _terminal_stream_dispatcher =
-        timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);
-    callbacks::connect(&app, Rc::clone(&state));
+        timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx, ipc_bridge.clone());
+    callbacks::connect(&app, Rc::clone(&state), ipc_bridge.clone());
 
     {
         let mut s = state.borrow_mut();
@@ -107,6 +113,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     #[cfg(target_os = "windows")]
     register_windows_file_drop(&app, Rc::clone(&state));
     let _composer_at_sync_timer = timers::spawn_composer_at_sync_timer(&app, Rc::clone(&state));
+    let _ipc_bridge_timer =
+        timers::spawn_ipc_bridge_timer(&app, Rc::clone(&state), ipc_bridge.clone(), ipc_gui_rx);
 
     let _inject_startup_timer: Option<Timer> =
         inject_file.map(|path| timers::spawn_inject_startup_timer(&app, Rc::clone(&state), path));

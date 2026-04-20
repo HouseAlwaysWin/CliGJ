@@ -13,6 +13,7 @@ use crate::workspace_files;
 use crate::core::config::AppConfig;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
+use crate::gui::ipc::IpcBridge;
 use crate::gui::interactive_commands::{
     self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
 };
@@ -52,21 +53,35 @@ fn set_shell_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
     ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
 
-pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
-    connect_tabs(app, Rc::clone(&state));
+fn publish_current_tab_changed(ipc: &IpcBridge, s: &GuiState) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let tab = &s.tabs[s.current];
+    let title = s
+        .titles
+        .row_data(s.current)
+        .unwrap_or_else(|| SharedString::from("Tab"))
+        .to_string();
+    ipc.publish_tab_changed(tab.id, s.current, title, tab.cmd_type.clone());
+}
+
+pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
+    connect_tabs(app, Rc::clone(&state), ipc.clone());
     connect_prompt_and_picker(app, Rc::clone(&state));
     connect_chips(app, Rc::clone(&state));
     connect_terminal_selection(app, Rc::clone(&state));
     connect_terminal_viewport(app, Rc::clone(&state));
     connect_terminal_resize(app, Rc::clone(&state));
     connect_terminal_wheel(app, Rc::clone(&state));
-    connect_toggles(app, Rc::clone(&state));
+    connect_toggles(app, Rc::clone(&state), ipc.clone());
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
 }
 
-fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
     let st_tab = Rc::clone(&state);
+    let ipc_tab = ipc.clone();
     let app_weak = app.as_weak();
     app.on_tab_changed(move |new_index| {
         let Some(ui) = app_weak.upgrade() else {
@@ -76,10 +91,13 @@ fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         s.timer_prompt_snapshot = None;
         if let Err(e) = s.switch_tab(new_index as usize, &ui) {
             eprintln!("CliGJ: tab switch: {e}");
+        } else {
+            publish_current_tab_changed(&ipc_tab, &s);
         }
     });
 
     let st_close = Rc::clone(&state);
+    let ipc_close = ipc.clone();
     let app_weak = app.as_weak();
     app.on_tab_close_requested(move |index| {
         let Some(ui) = app_weak.upgrade() else {
@@ -88,10 +106,13 @@ fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let mut s = st_close.borrow_mut();
         if let Err(e) = s.close_tab(index as usize, &ui) {
             eprintln!("CliGJ: close tab: {e}");
+        } else {
+            publish_current_tab_changed(&ipc_close, &s);
         }
     });
 
     let st_new = Rc::clone(&state);
+    let ipc_new = ipc.clone();
     let app_weak = app.as_weak();
     app.on_new_tab_requested(move || {
         let Some(ui) = app_weak.upgrade() else {
@@ -100,10 +121,13 @@ fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let mut s = st_new.borrow_mut();
         if let Err(e) = s.add_tab(&ui) {
             eprintln!("CliGJ: new tab: {e}");
+        } else {
+            publish_current_tab_changed(&ipc_new, &s);
         }
     });
 
     let st_cmd = Rc::clone(&state);
+    let ipc_cmd = ipc.clone();
     let app_weak = app.as_weak();
     app.on_cmd_type_changed(move |kind| {
         let Some(ui) = app_weak.upgrade() else {
@@ -112,6 +136,8 @@ fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let mut s = st_cmd.borrow_mut();
         if let Err(e) = s.change_current_cmd_type(kind.as_str(), &ui) {
             eprintln!("CliGJ: cmd type change: {e}");
+        } else {
+            publish_current_tab_changed(&ipc_cmd, &s);
         }
     });
 }
@@ -936,7 +962,7 @@ fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     });
 }
 
-fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
     let st_raw = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_toggle_raw_input_requested(move || {
@@ -949,6 +975,19 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
     });
 
+    let app_weak = app.as_weak();
+    let ipc_toggle = ipc.clone();
+    app.on_toggle_ipc_server_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if let Err(e) = ipc_toggle.toggle() {
+            eprintln!("CliGJ: IPC toggle: {e}");
+        }
+        let snap = ipc_toggle.snapshot();
+        ui.set_ws_ipc_running(snap.running);
+        ui.set_ws_ipc_client_count(snap.client_count as i32);
+    });
 }
 
 fn connect_rename(app: &AppWindow, state: Rc<RefCell<GuiState>>) {

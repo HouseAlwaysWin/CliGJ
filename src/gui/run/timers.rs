@@ -9,8 +9,10 @@ use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 
-use slint::{ComponentHandle, SharedString, Timer};
+use slint::{ComponentHandle, Model, SharedString, Timer};
+use serde_json::json;
 
+use crate::gui::ipc::{IpcBridge, IpcGuiCommand, IpcGuiResponse};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
@@ -357,6 +359,7 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
     app: &AppWindow,
     state: Rc<RefCell<GuiState>>,
     rx: mpsc::Receiver<TerminalChunk>,
+    ipc: IpcBridge,
 ) -> thread::JoinHandle<()> {
     let queue: Arc<Mutex<VecDeque<TerminalChunk>>> = Arc::new(Mutex::new(VecDeque::new()));
     let wake_scheduled = Arc::new(AtomicBool::new(false));
@@ -399,6 +402,7 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
                 Ok(c) => c,
                 Err(_) => break,
             };
+            ipc.publish_terminal_chunk(first.tab_id, first.text.as_str(), first.replace);
             if let Ok(mut q) = queue.lock() {
                 q.push_back(first);
                 const MAX_BATCH: usize = 256;
@@ -406,6 +410,7 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
                     let Ok(c) = rx.try_recv() else {
                         break;
                     };
+                    ipc.publish_terminal_chunk(c.tab_id, c.text.as_str(), c.replace);
                     q.push_back(c);
                 }
             } else {
@@ -426,6 +431,174 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
             }
         }
     })
+}
+
+fn handle_ipc_gui_command(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    ipc: &IpcBridge,
+    cmd: IpcGuiCommand,
+) {
+    match cmd {
+        IpcGuiCommand::OpenTab {
+            id,
+            profile,
+            focus,
+            response_tx,
+        } => {
+            let mut out_id = id;
+            if let Err(e) = s.add_tab(ui) {
+                let _ = response_tx.send(IpcGuiResponse {
+                    id: out_id,
+                    ok: false,
+                    result: json!({}),
+                    error: Some(format!("openTab failed: {e}")),
+                });
+                return;
+            }
+            if let Some(profile) = profile {
+                if !profile.trim().is_empty() {
+                    let _ = s.change_current_cmd_type(profile.as_str(), ui);
+                }
+            }
+            if s.current >= s.tabs.len() {
+                let _ = response_tx.send(IpcGuiResponse {
+                    id: out_id,
+                    ok: false,
+                    result: json!({}),
+                    error: Some("openTab failed: no current tab".to_string()),
+                });
+                return;
+            }
+            let created_index = s.current;
+            let tab = &s.tabs[created_index];
+            let created_id = tab.id;
+            let created_cmd_type = tab.cmd_type.clone();
+            let created_title = s
+                .titles
+                .row_data(created_index)
+                .unwrap_or_else(|| SharedString::from("Tab"))
+                .to_string();
+            if !focus && created_index > 0 {
+                let _ = s.switch_tab(created_index - 1, ui);
+            }
+            ipc.publish_tab_changed(
+                created_id,
+                created_index,
+                created_title,
+                created_cmd_type.clone(),
+            );
+            let _ = response_tx.send(IpcGuiResponse {
+                id: out_id.take(),
+                ok: true,
+                result: json!({
+                    "tabId": created_id,
+                    "tabIndex": created_index,
+                    "cmdType": created_cmd_type,
+                }),
+                error: None,
+            });
+        }
+        IpcGuiCommand::SendPrompt {
+            id,
+            tab_id,
+            prompt,
+            submit,
+            response_tx,
+        } => {
+            let mut out_id = id;
+            if let Some(target_id) = tab_id {
+                if let Some(idx) = s.tabs.iter().position(|t| t.id == target_id) {
+                    let _ = s.switch_tab(idx, ui);
+                } else {
+                    let _ = response_tx.send(IpcGuiResponse {
+                        id: out_id.take(),
+                        ok: false,
+                        result: json!({}),
+                        error: Some(format!("sendPrompt failed: tabId {target_id} not found")),
+                    });
+                    return;
+                }
+            }
+            if s.current >= s.tabs.len() {
+                let _ = response_tx.send(IpcGuiResponse {
+                    id: out_id.take(),
+                    ok: false,
+                    result: json!({}),
+                    error: Some("sendPrompt failed: no active tab".to_string()),
+                });
+                return;
+            }
+            ui.set_ws_prompt(SharedString::from(prompt.as_str()));
+            let cur = s.current;
+            s.tabs[cur].prompt = SharedString::from(prompt.as_str());
+            if submit {
+                if let Err(e) = s.submit_current_prompt(ui) {
+                    let _ = response_tx.send(IpcGuiResponse {
+                        id: out_id.take(),
+                        ok: false,
+                        result: json!({}),
+                        error: Some(format!("sendPrompt failed: {e}")),
+                    });
+                    return;
+                }
+            } else {
+                use crate::gui::composer_sync::sync_composer_line_to_conpty;
+                sync_composer_line_to_conpty(ui, s);
+            }
+            let tab = &s.tabs[s.current];
+            let _ = response_tx.send(IpcGuiResponse {
+                id: out_id.take(),
+                ok: true,
+                result: json!({
+                    "tabId": tab.id,
+                    "submitted": submit
+                }),
+                error: None,
+            });
+        }
+    }
+}
+
+pub(crate) fn spawn_ipc_bridge_timer(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    ipc: IpcBridge,
+    ipc_rx: mpsc::Receiver<IpcGuiCommand>,
+) -> Timer {
+    let app_weak = app.as_weak();
+    let timer = Timer::default();
+    timer.start(slint::TimerMode::Repeated, Duration::from_millis(40), move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+
+        let snap = ipc.snapshot();
+        ui.set_ws_ipc_running(snap.running);
+        ui.set_ws_ipc_client_count(snap.client_count as i32);
+        let status_text = if snap.running {
+            format!("IPC ON ({})", snap.client_count)
+        } else {
+            "IPC OFF".to_string()
+        };
+        ui.set_ws_ipc_status_text(SharedString::from(status_text.as_str()));
+
+        let mut pending: Vec<IpcGuiCommand> = Vec::new();
+        while let Ok(cmd) = ipc_rx.try_recv() {
+            pending.push(cmd);
+            if pending.len() >= 16 {
+                break;
+            }
+        }
+        if pending.is_empty() {
+            return;
+        }
+        let mut s = state.borrow_mut();
+        for cmd in pending {
+            handle_ipc_gui_command(&ui, &mut s, &ipc, cmd);
+        }
+    });
+    timer
 }
 
 pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<GuiState>>) -> Timer {

@@ -8,6 +8,9 @@ export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
+    in property <bool> ipc-running: false;
+    in property <int> ipc-client-count: 0;
+    in property <string> ipc-status-text: "IPC OFF";
     in property <[string]> interactive-command-choices: [];
     in property <[PromptImageChip]> prompt-images;
     in property <string> selected-context;
@@ -18,6 +21,7 @@ export component GjPromptDropZone inherits Rectangle {
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
+    callback ipc-toggle-requested;
     callback inject-file-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
@@ -349,6 +353,29 @@ export component GjPromptDropZone inherits Rectangle {
                         TouchArea {
                             clicked => {
                                 root.raw-input-toggle-requested();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 92px;
+                        height: 22px;
+                        border-width: 1px;
+                        border-color: root.ipc-running ? #4fb67b : AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: root.ipc-running ? #193126 : #00000000;
+
+                        Text {
+                            text: root.ipc-status-text;
+                            color: root.ipc-running ? #97f5be : AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 10px;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.ipc-toggle-requested();
                             }
                         }
                     }

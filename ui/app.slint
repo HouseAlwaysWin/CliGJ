@@ -42,6 +42,9 @@ export component AppWindow inherits Window {
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <[string]> ws-cmd-type-choices: ["Command Prompt", "PowerShell"];
     in-out property <bool> ws-raw-input: false;
+    in-out property <bool> ws-ipc-running: false;
+    in-out property <int> ws-ipc-client-count: 0;
+    in-out property <string> ws-ipc-status-text: "IPC OFF";
     in-out property <[string]> ws-interactive-command-choices: [];
     in-out property <bool> ws-interactive-manage-open: false;
     in-out property <[InteractiveCmdEditorRow]> ws-interactive-manage-rows: [];
@@ -70,6 +73,7 @@ export component AppWindow inherits Window {
     /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
+    callback toggle-ipc-server-requested;
     callback inject-file-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
@@ -211,6 +215,9 @@ export component AppWindow inherits Window {
                         prompt <=> root.ws-prompt;
                         prompt-path-chips <=> root.ws-prompt-path-chips;
                         raw-input-enabled <=> root.ws-raw-input;
+                        ipc-running: root.ws-ipc-running;
+                        ipc-client-count: root.ws-ipc-client-count;
+                        ipc-status-text: root.ws-ipc-status-text;
                         interactive-command-choices: root.ws-interactive-command-choices;
                         at-picker-open <=> root.ws-at-picker-open;
                         at-choices <=> root.ws-at-choices;
@@ -230,6 +237,9 @@ export component AppWindow inherits Window {
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();
+                        }
+                        ipc-toggle-requested => {
+                            root.toggle-ipc-server-requested();
                         }
                         inject-file-requested => {
                             root.inject-file-requested();
