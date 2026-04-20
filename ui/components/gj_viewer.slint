@@ -11,6 +11,7 @@ export component GjViewer inherits Rectangle {
     in property <int> terminal-total-lines: 0;
     in property <bool> auto-scroll: false;
     in property <bool> selection-mode: false;
+    in property <bool> raw-input-enabled: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     /// Monospace cell width (approx. 13px Cascadia Code; tune if selection drifts).
@@ -91,7 +92,7 @@ export component GjViewer inherits Rectangle {
 
     /// Global document row from mouse Y.
     function row-from-y(mouse-y: length) -> int {
-        clamp-row((mouse-y - sv.viewport-y) / root.row-height)
+        clamp-row(floor((mouse-y - sv.viewport-y) / root.row-height))
     }
 
     function col-from-x(mx: length, global-row: int) -> int {
@@ -104,7 +105,7 @@ export component GjViewer inherits Rectangle {
             return 0;
         }
         let lim = len - 1;
-        let c = (mx - root.stripe-width) / root.char-width;
+        let c = floor((mx - root.stripe-width) / root.char-width);
         min(max(c, 0), lim)
     }
 
@@ -315,8 +316,30 @@ export component GjViewer inherits Rectangle {
         }
     }
 
+    // Wheel layer: always active for terminal scrolling / interactive follow.
     TouchArea {
         z: 100;
+        enabled: root.terminal-total-lines > 0;
+        x: root.terminal-left-inset;
+        y: 0px;
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
+        height: parent.height;
+        scroll-event(event) => {
+            if (root.terminal-wheel(event.delta-y / 1px)) {
+                return accept;
+            }
+            // Natural wheel: up -> move toward top (viewport-y increases toward 0).
+            let next = sv.viewport-y + event.delta-y;
+            let max-y = min(0px, sv.height - sv.viewport-height);
+            sv.viewport-y = max(max-y, min(0px, next));
+            root.viewport-changed();
+            return accept;
+        }
+    }
+
+    // Selection layer: only active when explicit terminal selection mode is on.
+    TouchArea {
+        z: 101;
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
@@ -333,17 +356,6 @@ export component GjViewer inherits Rectangle {
             if (self.pressed) {
                 root.update-selection(self.mouse-x, self.mouse-y);
             }
-        }
-        scroll-event(event) => {
-            if (root.terminal-wheel(event.delta-y / 1px)) {
-                return accept;
-            }
-            // Natural wheel: up -> move toward top (viewport-y increases toward 0).
-            let next = sv.viewport-y + event.delta-y;
-            let max-y = min(0px, sv.height - sv.viewport-height);
-            sv.viewport-y = max(max-y, min(0px, next));
-            root.viewport-changed();
-            return accept;
         }
     }
 }

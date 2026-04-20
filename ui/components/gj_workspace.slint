@@ -79,6 +79,7 @@ export component GjWorkspace inherits Rectangle {
             terminal-total-lines: root.terminal-total-lines;
             auto-scroll: root.auto-scroll;
             selection-mode: root.terminal-select-mode;
+            raw-input-enabled: root.raw-input-enabled;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;
             selection-committed(sr, sc, er, ec) => {

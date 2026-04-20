@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use arboard::{Clipboard, ImageData};
 use image::RgbaImage;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer};
+use unicode_width::UnicodeWidthChar;
 
 use crate::terminal::key_encoding;
 use crate::terminal::render::ColoredLine;
@@ -296,31 +297,37 @@ fn colored_line_plain_text(line: &ColoredLine) -> String {
     })
 }
 
-/// Inclusive character slice (Unicode scalar indices, matching Slint `char-count`).
-fn slice_line_chars_inclusive(line: &ColoredLine, start: usize, end_inclusive: usize) -> String {
+/// Inclusive display-cell slice (terminal columns), matching viewer hit-test semantics.
+fn slice_line_cells_inclusive(line: &ColoredLine, start: usize, end_inclusive: usize) -> String {
     let s = colored_line_plain_text(line);
-    let chars: Vec<char> = s.chars().collect();
-    let n = chars.len();
-    if n == 0 || start > end_inclusive {
+    if s.is_empty() || start > end_inclusive {
         return String::new();
     }
-    let start = start.min(n - 1);
-    let end_inclusive = end_inclusive.min(n - 1);
-    chars[start..=end_inclusive].iter().collect()
-}
-
-fn slice_line_from_char(line: &ColoredLine, start: usize) -> String {
-    let s = colored_line_plain_text(line);
-    let chars: Vec<char> = s.chars().collect();
-    let n = chars.len();
-    if start >= n {
-        return String::new();
+    let mut out = String::new();
+    let mut col = 0usize;
+    for ch in s.chars() {
+        let w = UnicodeWidthChar::width(ch).unwrap_or(1).max(1);
+        let ch_start = col;
+        let ch_end = col + w - 1;
+        if ch_end < start {
+            col += w;
+            continue;
+        }
+        if ch_start > end_inclusive {
+            break;
+        }
+        out.push(ch);
+        col += w;
     }
-    chars[start..].iter().collect()
+    out
 }
 
-fn slice_line_to_char_inclusive(line: &ColoredLine, end_inclusive: usize) -> String {
-    slice_line_chars_inclusive(line, 0, end_inclusive)
+fn slice_line_from_cell(line: &ColoredLine, start: usize) -> String {
+    slice_line_cells_inclusive(line, start, usize::MAX)
+}
+
+fn slice_line_to_cell_inclusive(line: &ColoredLine, end_inclusive: usize) -> String {
+    slice_line_cells_inclusive(line, 0, end_inclusive)
 }
 
 pub(crate) fn selected_text_from_terminal_lines(
@@ -346,7 +353,7 @@ pub(crate) fn selected_text_from_terminal_lines(
     let mut out = String::new();
     if sr == er {
         let line = &tab.terminal_lines[sr];
-        return slice_line_chars_inclusive(line, sc, ec);
+        return slice_line_cells_inclusive(line, sc, ec);
     }
     for row_idx in sr..=er {
         if row_idx > sr {
@@ -354,9 +361,9 @@ pub(crate) fn selected_text_from_terminal_lines(
         }
         let line = &tab.terminal_lines[row_idx];
         if row_idx == sr {
-            out.push_str(&slice_line_from_char(line, sc));
+            out.push_str(&slice_line_from_cell(line, sc));
         } else if row_idx == er {
-            out.push_str(&slice_line_to_char_inclusive(line, ec));
+            out.push_str(&slice_line_to_cell_inclusive(line, ec));
         } else {
             out.push_str(&colored_line_plain_text(line));
         }

@@ -3,6 +3,7 @@ use std::rc::Rc;
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use unicode_width::UnicodeWidthChar;
 
 use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
@@ -96,7 +97,12 @@ pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine>
             let char_count: i32 = line
                 .spans
                 .iter()
-                .map(|s| s.text.chars().count() as i32)
+                .map(|s| {
+                    s.text
+                        .chars()
+                        .map(|ch| UnicodeWidthChar::width(ch).unwrap_or(1).max(1) as i32)
+                        .sum::<i32>()
+                })
                 .sum();
             TermLine {
                 blank: line.blank,
@@ -133,7 +139,12 @@ fn build_term_line(line: &ColoredLine) -> TermLine {
     let char_count: i32 = line
         .spans
         .iter()
-        .map(|s| s.text.chars().count() as i32)
+        .map(|s| {
+            s.text
+                .chars()
+                .map(|ch| UnicodeWidthChar::width(ch).unwrap_or(1).max(1) as i32)
+                .sum::<i32>()
+        })
         .sum();
     TermLine {
         blank: line.blank,
@@ -157,7 +168,8 @@ fn overlay_cursor_line(line: &ColoredLine, cursor_col: usize) -> ColoredLine {
         }
         let mut plain = String::new();
         for ch in chars {
-            if col == cursor_col {
+            let w = UnicodeWidthChar::width(ch).unwrap_or(1).max(1);
+            if cursor_col >= col && cursor_col < col + w {
                 if !plain.is_empty() {
                     out.spans.push(ColoredSpan {
                         text: std::mem::take(&mut plain),
@@ -174,7 +186,7 @@ fn overlay_cursor_line(line: &ColoredLine, cursor_col: usize) -> ColoredLine {
             } else {
                 plain.push(ch);
             }
-            col += 1;
+            col += w;
         }
         if !plain.is_empty() {
             out.spans.push(ColoredSpan {

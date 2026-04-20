@@ -213,6 +213,7 @@ const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
 fn snapshot_content_fingerprint(
     total_rows: usize,
     lines: &[&Line],
+    palette: &ColorPalette,
     cursor_local_row: Option<usize>,
     cursor_col: Option<usize>,
 ) -> u64 {
@@ -221,15 +222,33 @@ fn snapshot_content_fingerprint(
     lines.len().hash(&mut h);
     cursor_local_row.hash(&mut h);
     cursor_col.hash(&mut h);
-    for line in lines {
-        line.as_str().hash(&mut h);
+    for (i, line) in lines.iter().enumerate() {
+        let active_cursor_col = if cursor_local_row == Some(i) {
+            cursor_col
+        } else {
+            None
+        };
+        let built = line_to_colored_spans(line, palette, active_cursor_col);
+        built.blank.hash(&mut h);
+        built.spans.len().hash(&mut h);
+        for span in &built.spans {
+            span.text.hash(&mut h);
+            span.fg.hash(&mut h);
+            span.bg.hash(&mut h);
+        }
     }
     h.finish()
 }
 
-fn line_fingerprint_raw(line: &Line, cursor_col: Option<usize>) -> u64 {
+fn colored_line_fingerprint(line: &ColoredLine, cursor_col: Option<usize>) -> u64 {
     let mut h = DefaultHasher::new();
-    line.as_str().hash(&mut h);
+    line.blank.hash(&mut h);
+    line.spans.len().hash(&mut h);
+    for span in &line.spans {
+        span.text.hash(&mut h);
+        span.fg.hash(&mut h);
+        span.bg.hash(&mut h);
+    }
     cursor_col.hash(&mut h);
     h.finish()
 }
@@ -260,9 +279,9 @@ fn terminal_render_from_lines_cached(
         } else {
             None
         };
-        let fp = line_fingerprint_raw(lines[i], active_cursor_col);
+        let built = line_to_colored_spans(lines[i], palette, None);
+        let fp = colored_line_fingerprint(&built, active_cursor_col);
         if cache[global_idx].0 != fp {
-            let built = line_to_colored_spans(lines[i], palette, None);
             cache[global_idx] = (fp, built);
             changed_indices.push(i);
         }
@@ -414,7 +433,13 @@ pub fn start_reader_thread(
                 cursor_phys_row.checked_sub(start).filter(|row| *row < line_refs.len());
             let cursor_col = Some(cursor.x);
 
-            let fp = snapshot_content_fingerprint(total_for_render, &line_refs, cursor_local_row, cursor_col);
+            let fp = snapshot_content_fingerprint(
+                total_for_render,
+                &line_refs,
+                &palette,
+                cursor_local_row,
+                cursor_col,
+            );
             if last_snapshot_fp == Some(fp) {
                 continue;
             }
