@@ -516,6 +516,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let s = st_shell_manage.borrow();
         sync_shell_manage_editor_to_ui(&ui, &*s);
         drop(s);
+        ui.set_ws_shell_manage_saved_hint(false);
         ui.set_ws_shell_manage_open(true);
     });
 
@@ -665,7 +666,14 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if s.current < s.tabs.len() {
             ui.set_ws_cmd_type(SharedString::from(s.tabs[s.current].cmd_type.as_str()));
         }
-        ui.set_ws_shell_manage_open(false);
+        ui.set_ws_shell_manage_saved_hint(true);
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(1600), move || {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            ui.set_ws_shell_manage_saved_hint(false);
+        });
     });
 
     let app_weak = app.as_weak();
@@ -673,6 +681,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
+        ui.set_ws_shell_manage_saved_hint(false);
         ui.set_ws_shell_manage_open(false);
     });
 }
