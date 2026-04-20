@@ -132,24 +132,60 @@ fn invalidate_terminal_window_cache(tab: &mut TabState) {
     tab.last_window_total = usize::MAX;
 }
 
+fn interactive_frame_overlap_len(old_frame: &[ColoredLine], new_frame: &[ColoredLine]) -> usize {
+    let max_overlap = old_frame.len().min(new_frame.len());
+    for overlap in (0..=max_overlap).rev() {
+        if old_frame[old_frame.len().saturating_sub(overlap)..] == new_frame[..overlap] {
+            return overlap;
+        }
+    }
+    0
+}
+
 fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
-    if let Some(new_lines) = update.replace_lines {
-        tab.terminal_lines = new_lines;
+    if update.reset_terminal_buffer {
+        tab.terminal_lines.clear();
+        tab.interactive_frame_lines.clear();
         tab.terminal_text.clear();
         tab.terminal_physical_origin = 0;
-        tab.terminal_cursor_row = update.cursor_row;
+        tab.terminal_saved_scroll_top_px = 0.0;
+        invalidate_terminal_window_cache(tab);
+    }
+
+    if let Some(new_lines) = update.replace_lines {
+        let overlap = interactive_frame_overlap_len(&tab.interactive_frame_lines, &new_lines);
+        let min_frame_len = tab.interactive_frame_lines.len().min(new_lines.len());
+        let strong_overlap = overlap > 0 && overlap * 3 >= min_frame_len.max(1);
+        let history_len = tab
+            .terminal_lines
+            .len()
+            .saturating_sub(tab.interactive_frame_lines.len());
+        tab.terminal_lines.truncate(history_len);
+        if strong_overlap && overlap < tab.interactive_frame_lines.len() {
+            let archived_len = tab.interactive_frame_lines.len() - overlap;
+            tab.terminal_lines.extend(
+                tab.interactive_frame_lines[..archived_len]
+                    .iter()
+                    .cloned(),
+            );
+        }
+        tab.terminal_lines.extend(new_lines.iter().cloned());
+        tab.interactive_frame_lines = new_lines;
+        tab.terminal_text.clear();
+        tab.terminal_cursor_row = update
+            .cursor_row
+            .map(|row| tab.terminal_lines.len().saturating_sub(tab.interactive_frame_lines.len()) + row);
         tab.terminal_cursor_col = update.cursor_col;
         invalidate_terminal_window_cache(tab);
         tab.terminal_model_dirty.extend(0..tab.terminal_lines.len());
-        if update.reset_terminal_buffer {
-            tab.terminal_saved_scroll_top_px = 0.0;
-        }
+        tab.enforce_scrollback_cap();
         return;
     }
 
     if let Some(text) = update.replace_text {
         tab.terminal_text = text;
         tab.terminal_lines.clear();
+        tab.interactive_frame_lines.clear();
         tab.terminal_cursor_row = None;
         tab.terminal_cursor_col = None;
         tab.terminal_physical_origin = 0;
@@ -307,19 +343,20 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let exp = terminal_scroll_top_for_tab(tab, vh);
         let n = tab.terminal_lines.len();
+        let interactive = tab.terminal_mode == TerminalMode::InteractiveAi;
 
         let resync = tab.terminal_scroll_resync_next;
         if resync {
             tab.terminal_scroll_resync_next = false;
         }
 
-        if n > 0 && tab.auto_scroll {
+        if n > 0 && (tab.auto_scroll || interactive) {
             ui.set_ws_terminal_total_lines(n as i32);
         }
 
         let scroll_arg = if resync {
             Some(exp)
-        } else if tab.auto_scroll && n > 0 {
+        } else if (tab.auto_scroll || interactive) && n > 0 {
             Some(exp)
         } else {
             None
@@ -349,6 +386,18 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
 
     let st = ui.get_ws_terminal_scroll_top_px();
     let vh = ui.get_ws_terminal_viewport_height_px();
+    if tab.terminal_mode == TerminalMode::InteractiveAi {
+        let exp = terminal_scroll_top_for_tab(tab, vh.max(1.0));
+        if (tab.last_pushed_scroll_top - exp).abs() > 0.5
+            || (vh - tab.last_pushed_viewport_height).abs() > 0.5
+        {
+            ui.invoke_ws_apply_terminal_scroll_top_px(exp);
+            push_terminal_view_to_ui(ui, tab, Some(exp));
+            tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+        }
+        return;
+    }
+
     if (st - tab.last_pushed_scroll_top).abs() > 0.5
         || (vh - tab.last_pushed_viewport_height).abs() > 0.5
     {

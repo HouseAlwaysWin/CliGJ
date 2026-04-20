@@ -12,10 +12,9 @@ use crate::workspace_files;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TerminalChunk, TerminalMode};
+use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, UI_LAYOUT_EPOCH};
 use crate::terminal::windows_conpty;
-use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::helpers::{
     clear_all_prompt_images, clipboard_raster_image_file, contains_cjk_char, copy_to_clipboard,
@@ -319,8 +318,31 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let mut s = st_ai.borrow_mut();
         let cur_idx = s.current;
         if cur_idx >= s.tabs.len() { return; }
-        s.tabs[cur_idx].terminal_mode = TerminalMode::InteractiveAi;
+        s.prepare_current_tab_for_interactive_ai();
+        {
+            let tab = &mut s.tabs[cur_idx];
+            while tab.terminal_slint_model.row_count() > 0 {
+                tab.terminal_slint_model.remove(0);
+            }
+            ui.set_ws_terminal_text(SharedString::new());
+            ui.set_ws_terminal_line_offset(0);
+            ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_lines(slint::ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
+            ui.invoke_ws_scroll_terminal_to_top();
+        }
+        drop(s);
+
+        let app_weak_inner = ui.as_weak();
+        let st_ai_inner = Rc::clone(&st_ai);
+        slint::Timer::single_shot(std::time::Duration::from_millis(200), move || {
+            let Some(ui) = app_weak_inner.upgrade() else { return; };
+            let mut s = st_ai_inner.borrow_mut();
+            let _ = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes());
+        });
+        return;
         
+        #[cfg(any())]
+        {
         let cmd_type = s.tabs[cur_idx].cmd_type.clone();
         let tab_id = s.tabs[cur_idx].id;
         let tx = s.tx.clone();
@@ -333,6 +355,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             
             let tab = &mut s.tabs[cur_idx];
             tab.terminal_lines.clear();
+            tab.interactive_frame_lines.clear();
             tab.terminal_text.clear();
             tab.terminal_model_dirty.clear();
             tab.terminal_model_rows.clear();
@@ -343,6 +366,8 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             tab.last_window_total = 0;
             tab.last_window_first = 0;
             tab.last_window_last = 0;
+            tab.terminal_saved_scroll_top_px = 0.0;
+            tab.terminal_scroll_resync_next = true;
             
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
@@ -385,6 +410,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let mut s = st_ai_inner.borrow_mut();
             let _ = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes());
         });
+        }
     });
 }
 

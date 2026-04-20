@@ -8,7 +8,7 @@ use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
 use super::slint_ui::{AppWindow, PromptImageChip};
-use super::state::TabState;
+use super::state::{TabState, TerminalMode};
 use super::slint_ui::{TermLine, TermSpan};
 
 /// Must match `row-height` in `gj_viewer.slint`.
@@ -36,6 +36,9 @@ pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f3
     }
     let vh = viewport_height_px.max(1.0);
     let content_h = n as f32 * TERMINAL_ROW_HEIGHT_PX;
+    if tab.terminal_mode == TerminalMode::InteractiveAi {
+        return (content_h - vh).max(0.0);
+    }
     if tab.auto_scroll {
         (content_h - vh).max(0.0)
     } else {

@@ -68,6 +68,8 @@ pub struct TabState {
     pub(crate) prompt_picked_files_abs: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
+    /// Current visible frame for Interactive AI tabs; `terminal_lines` stores scrollback + frame.
+    pub(crate) interactive_frame_lines: Vec<ColoredLine>,
     /// Cached converted Slint rows + fingerprints to avoid rebuilding unchanged lines.
     pub(crate) terminal_model_rows: HashMap<usize, TermLine>,
     pub(crate) terminal_model_hashes: HashMap<usize, u64>,
@@ -137,6 +139,7 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
+            interactive_frame_lines: Vec::new(),
             terminal_model_rows: HashMap::new(),
             terminal_model_hashes: HashMap::new(),
             terminal_model_dirty: HashSet::new(),
@@ -230,6 +233,7 @@ impl TabState {
             self.terminal_text.drain(..cut);
         }
         self.terminal_lines.clear();
+        self.interactive_frame_lines.clear();
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();

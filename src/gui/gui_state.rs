@@ -14,6 +14,34 @@ use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
 impl GuiState {
+    pub(crate) fn prepare_current_tab_for_interactive_ai(&mut self) {
+        if self.current >= self.tabs.len() {
+            return;
+        }
+        let tab = &mut self.tabs[self.current];
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.interactive_frame_lines.clear();
+        tab.terminal_lines.clear();
+        tab.terminal_text.clear();
+        tab.terminal_model_rows.clear();
+        tab.terminal_model_hashes.clear();
+        tab.terminal_model_dirty.clear();
+        tab.terminal_physical_origin = 0;
+        tab.terminal_cursor_row = None;
+        tab.terminal_cursor_col = None;
+        tab.last_window_first = usize::MAX;
+        tab.last_window_last = usize::MAX;
+        tab.last_window_total = usize::MAX;
+        tab.terminal_saved_scroll_top_px = 0.0;
+        tab.terminal_scroll_resync_next = true;
+        tab.auto_scroll = true;
+        if let Some(tx) = &tab.conpty_control_tx {
+            let _ = tx.send(windows_conpty::ControlCommand::SetRenderMode(
+                ReaderRenderMode::InteractiveAi,
+            ));
+        }
+    }
+
     pub(crate) fn toggle_raw_input_current(
         &mut self,
         ui: &AppWindow,
@@ -99,6 +127,7 @@ impl GuiState {
             self.tabs[self.current].conpty = None;
             self.tabs[self.current].conpty_control_tx = None;
             self.tabs[self.current].terminal_text.clear();
+            self.tabs[self.current].interactive_frame_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
             if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {
@@ -165,6 +194,10 @@ impl GuiState {
             let tab = &self.tabs[self.current];
             format!("{}{}", tab.prompt, extra_payload).trim().to_string()
         };
+        let is_interactive_ai_launch = matches!(
+            full_command.split_whitespace().next(),
+            Some("gemini" | "codex" | "claude" | "copilot")
+        );
 
         if !full_command.is_empty() {
             let tab = &mut self.tabs[self.current];
@@ -172,6 +205,12 @@ impl GuiState {
             if history.last().map(|s| s.as_str()) != Some(full_command.as_str()) {
                 history.push(full_command.clone());
             }
+        }
+
+        if is_interactive_ai_launch {
+            self.prepare_current_tab_for_interactive_ai();
+            ui.set_ws_terminal_text(SharedString::new());
+            ui.set_ws_terminal_total_lines(0);
         }
 
         #[cfg(target_os = "windows")]

@@ -4,14 +4,14 @@ use wezterm_term::Line;
 use wezterm_term::color::ColorPalette;
 
 /// One horizontal run with the same resolved fg/bg.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ColoredSpan {
     pub text: String,
     pub fg: [u8; 3],
     pub bg: [u8; 3],
 }
 
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ColoredLine {
     /// Physically empty row (no glyphs). Keep out of layout so a cursor on the next row doesn't sit "one line down".
     pub blank: bool,

@@ -305,12 +305,13 @@ fn terminal_render_full_frame(
 #[derive(Debug)]
 pub enum ControlCommand {
     Resize { cols: u16, rows: u16 },
+    SetRenderMode(ReaderRenderMode),
 }
 
 pub fn start_reader_thread(
     mut reader: std::fs::File,
     control_rx: std::sync::mpsc::Receiver<ControlCommand>,
-    render_mode: ReaderRenderMode,
+    initial_render_mode: ReaderRenderMode,
     mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
 ) -> thread::JoinHandle<()> {
     enum Event {
@@ -364,6 +365,7 @@ pub fn start_reader_thread(
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
         let mut pending_reset = false;
+        let mut render_mode = initial_render_mode;
 
         while let Ok(event) = event_rx.recv() {
             match event {
@@ -391,6 +393,14 @@ pub fn start_reader_thread(
                         pending_reset = true;
                     }
                 }
+                Event::Control(ControlCommand::SetRenderMode(new_mode)) => {
+                    if render_mode != new_mode {
+                        render_mode = new_mode;
+                        line_cache.clear();
+                        last_snapshot_fp = None;
+                        pending_reset = true;
+                    }
+                }
             }
 
             // After processing events, render a snapshot of the recent screen/scrollback tail.
@@ -402,9 +412,9 @@ pub fn start_reader_thread(
                 .max(term_rows);
             let snapshot_row_count = match render_mode {
                 ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
-                // Keep a recent tail for UI scrolling, but still replace the whole frame on
-                // each render so resize redraws do not accumulate duplicate history.
-                ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
+                // Interactive AI tabs should read only the current visible frame from the PTY.
+                // Scrollback is reconstructed on the GUI side from frame-to-frame overlap.
+                ReaderRenderMode::InteractiveAi => term_rows.min(total.max(1)),
             };
             let start = total.saturating_sub(snapshot_row_count);
             let end = total;
