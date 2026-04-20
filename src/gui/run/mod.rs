@@ -51,6 +51,24 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     if persist_interactive || persist_shell_profiles {
         let _ = cfg.save();
     }
+    let ui_language = cfg
+        .ui_language()
+        .unwrap_or_else(|| "預設".to_string());
+    let default_shell_profile = cfg.default_shell_profile().unwrap_or_else(|| {
+        shell_profiles
+            .first()
+            .map(|(n, _)| n.clone())
+            .unwrap_or_else(|| "Command Prompt".to_string())
+    });
+    let profile_ok = shell_profiles.iter().any(|(n, _)| n == &default_shell_profile);
+    let startup_profile = if profile_ok {
+        default_shell_profile
+    } else {
+        shell_profiles
+            .first()
+            .map(|(n, _)| n.clone())
+            .unwrap_or_else(|| "Command Prompt".to_string())
+    };
 
     let state = Rc::new(RefCell::new(GuiState {
         tabs: vec![TabState::new(1, tx.clone())],
@@ -66,12 +84,16 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         timer_prompt_snapshot: None,
         interactive_commands,
         shell_profiles,
+        startup_language: ui_language.clone(),
+        startup_default_shell_profile: startup_profile.clone(),
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
     sync_interactive_command_choices_to_ui(&app, &state.borrow());
     sync_shell_profile_choices_to_ui(&app, &state.borrow());
+    app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
+    app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
 
     let _terminal_stream_dispatcher =
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);

@@ -209,6 +209,7 @@ impl GuiState {
     pub(crate) fn add_tab(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+        let startup_profile = self.startup_default_shell_profile.clone();
 
         let n = self.titles.row_count();
         let label = SharedString::from(format!("Session {}", n + 1));
@@ -221,7 +222,13 @@ impl GuiState {
         self.current = new_index;
         ui.set_current_tab(new_index as i32);
         sync_tab_count(ui, self.tabs.len());
+        if !startup_profile.trim().is_empty() {
+            self.tabs[new_index].cmd_type = startup_profile.clone();
+        }
         load_tab_to_ui(ui, &mut self.tabs[new_index]);
+        if self.tabs[new_index].cmd_type != "Command Prompt" {
+            let _ = self.change_current_cmd_type(startup_profile.as_str(), ui);
+        }
         Ok(())
     }
 

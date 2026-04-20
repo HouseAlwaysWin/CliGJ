@@ -515,7 +515,12 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         let s = st_shell_manage.borrow();
         sync_shell_manage_editor_to_ui(&ui, &*s);
+        ui.set_ws_shell_startup_language(SharedString::from(s.startup_language.as_str()));
+        ui.set_ws_shell_startup_default_profile(SharedString::from(
+            s.startup_default_shell_profile.as_str(),
+        ));
         drop(s);
+        ui.set_ws_shell_settings_nav(SharedString::from("啟動"));
         ui.set_ws_shell_manage_saved_hint(false);
         ui.set_ws_shell_manage_open(true);
     });
@@ -665,6 +670,68 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         sync_shell_profile_choices_to_ui(&ui, &*s);
         if s.current < s.tabs.len() {
             ui.set_ws_cmd_type(SharedString::from(s.tabs[s.current].cmd_type.as_str()));
+        }
+        let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _)| n.clone()).collect();
+        drop(s);
+        let configured_default = ui.get_ws_shell_startup_default_profile().to_string();
+        if !allowed.contains(&configured_default) {
+            let fallback = st_shell_save
+                .borrow()
+                .shell_profiles
+                .first()
+                .map(|(n, _)| n.clone())
+                .unwrap_or_else(|| "Command Prompt".to_string());
+            ui.set_ws_shell_startup_default_profile(SharedString::from(fallback.as_str()));
+            if let Ok(mut cfg) = AppConfig::load_or_default() {
+                cfg.set_default_shell_profile(fallback.as_str());
+                let _ = cfg.save();
+            }
+        }
+        ui.set_ws_shell_manage_saved_hint(true);
+        let ui_weak = ui.as_weak();
+        slint::Timer::single_shot(std::time::Duration::from_millis(1600), move || {
+            let Some(ui) = ui_weak.upgrade() else {
+                return;
+            };
+            ui.set_ws_shell_manage_saved_hint(false);
+        });
+    });
+
+    let st_startup_save = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_save_shell_startup_settings(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let language = ui.get_ws_shell_startup_language().to_string();
+        let mut profile = ui.get_ws_shell_startup_default_profile().to_string();
+        let choices = ui.get_ws_cmd_type_choices();
+        if choices.row_count() == 0 {
+            eprintln!("CliGJ: no shell profiles available");
+            return;
+        }
+        if (0..choices.row_count()).all(|i| choices.row_data(i).unwrap_or_default().to_string() != profile) {
+            profile = choices.row_data(0).unwrap_or_default().to_string();
+            ui.set_ws_shell_startup_default_profile(SharedString::from(profile.as_str()));
+        }
+        match AppConfig::load_or_default() {
+            Ok(mut cfg) => {
+                cfg.set_ui_language(language.as_str());
+                cfg.set_default_shell_profile(profile.as_str());
+                if let Err(e) = cfg.save() {
+                    eprintln!("CliGJ: save config: {e}");
+                    return;
+                }
+            }
+            Err(e) => {
+                eprintln!("CliGJ: load config: {e}");
+                return;
+            }
+        }
+        {
+            let mut s = st_startup_save.borrow_mut();
+            s.startup_language = language.clone();
+            s.startup_default_shell_profile = profile.clone();
         }
         ui.set_ws_shell_manage_saved_hint(true);
         let ui_weak = ui.as_weak();

@@ -281,6 +281,10 @@ pub struct GuiState {
     pub(crate) interactive_commands: Vec<(String, String)>,
     /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`.
     pub(crate) shell_profiles: Vec<(String, String)>,
+    /// Startup page setting: preferred UI language label (currently persisted only).
+    pub(crate) startup_language: String,
+    /// Startup page setting: default shell profile for newly created tabs.
+    pub(crate) startup_default_shell_profile: String,
 }
 
 #[derive(Debug)]

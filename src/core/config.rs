@@ -148,6 +148,60 @@ impl AppConfig {
             .collect();
         ui_table.insert("shell_profiles".to_string(), toml::Value::Array(arr));
     }
+
+    pub fn ui_language(&self) -> Option<String> {
+        self.data
+            .get("ui")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("language"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    pub fn default_shell_profile(&self) -> Option<String> {
+        self.data
+            .get("ui")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("default_shell_profile"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
+    pub fn set_ui_language(&mut self, language: &str) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        ui_table.insert(
+            "language".to_string(),
+            toml::Value::String(language.trim().to_string()),
+        );
+    }
+
+    pub fn set_default_shell_profile(&mut self, profile: &str) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        ui_table.insert(
+            "default_shell_profile".to_string(),
+            toml::Value::String(profile.trim().to_string()),
+        );
+    }
 }
 
 fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String)> {
