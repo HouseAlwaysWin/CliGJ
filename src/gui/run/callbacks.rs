@@ -15,6 +15,7 @@ use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, UI_LAYOUT_EPOCH};
 use crate::terminal::windows_conpty;
+use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::helpers::{
     clear_all_prompt_images, clipboard_raster_image_file, contains_cjk_char, copy_to_clipboard,
@@ -351,9 +352,14 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             // 2. 開啟新 PTY
             if let Ok(spawn) = windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
                 let (control_tx, control_rx) = std::sync::mpsc::channel();
-                windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
+                windows_conpty::start_reader_thread(
+                    spawn.reader,
+                    control_rx,
+                    ReaderRenderMode::InteractiveAi,
+                    move |render| {
                     let _ = tx.send(TerminalChunk {
                         tab_id,
+                        terminal_mode: TerminalMode::InteractiveAi,
                         text: render.text,
                         lines: render.lines,
                         full_len: render.full_len,

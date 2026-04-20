@@ -12,7 +12,7 @@ use std::time::Duration;
 use slint::{ComponentHandle, SharedString, Timer};
 
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TabState, TerminalChunk};
+use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
 use crate::terminal::render::ColoredLine;
 
@@ -56,6 +56,7 @@ fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize) {
 
 #[derive(Default)]
 struct PendingTabUpdate {
+    terminal_mode: Option<TerminalMode>,
     set_auto_scroll: Option<bool>,
     replace_text: Option<String>,
     replace_lines: Option<Vec<ColoredLine>>,
@@ -72,6 +73,7 @@ struct PendingTabUpdate {
 
 fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, PendingTabUpdate>) {
     let entry = pending.entry(chunk.tab_id).or_default();
+    entry.terminal_mode = Some(chunk.terminal_mode);
     if let Some(v) = chunk.set_auto_scroll {
         entry.set_auto_scroll = Some(v);
     }
@@ -121,6 +123,45 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     }
 }
 
+fn invalidate_terminal_window_cache(tab: &mut TabState) {
+    tab.terminal_model_rows.clear();
+    tab.terminal_model_hashes.clear();
+    tab.terminal_model_dirty.clear();
+    tab.last_window_first = usize::MAX;
+    tab.last_window_last = usize::MAX;
+    tab.last_window_total = usize::MAX;
+}
+
+fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
+    if let Some(new_lines) = update.replace_lines {
+        tab.terminal_lines = new_lines;
+        tab.terminal_text.clear();
+        tab.terminal_physical_origin = 0;
+        tab.terminal_cursor_row = update.cursor_row;
+        tab.terminal_cursor_col = update.cursor_col;
+        invalidate_terminal_window_cache(tab);
+        tab.terminal_model_dirty.extend(0..tab.terminal_lines.len());
+        if update.reset_terminal_buffer {
+            tab.terminal_saved_scroll_top_px = 0.0;
+        }
+        return;
+    }
+
+    if let Some(text) = update.replace_text {
+        tab.terminal_text = text;
+        tab.terminal_lines.clear();
+        tab.terminal_cursor_row = None;
+        tab.terminal_cursor_col = None;
+        tab.terminal_physical_origin = 0;
+        invalidate_terminal_window_cache(tab);
+        return;
+    }
+
+    if !update.append_text.is_empty() {
+        tab.append_terminal(&update.append_text);
+    }
+}
+
 fn apply_pending_updates(
     state: &mut GuiState,
     pending: HashMap<u64, PendingTabUpdate>,
@@ -137,8 +178,19 @@ fn apply_pending_updates(
             continue;
         };
         let tab = &mut state.tabs[tab_idx];
+        if let Some(mode) = update.terminal_mode {
+            tab.terminal_mode = mode;
+        }
         if let Some(v) = update.set_auto_scroll {
             tab.auto_scroll = v;
+        }
+
+        if tab.terminal_mode == TerminalMode::InteractiveAi {
+            apply_interactive_ai_update(tab, update);
+            if current_id == Some(tab.id) {
+                current_changed = true;
+            }
+            continue;
         }
 
         let mut replaced_with_vt_lines = false;

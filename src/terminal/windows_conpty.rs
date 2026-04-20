@@ -75,6 +75,12 @@ pub struct TerminalRender {
     pub reset_terminal_buffer: bool,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ReaderRenderMode {
+    Shell,
+    InteractiveAi,
+}
+
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
     unsafe {
         let mut in_read = HANDLE::default();
@@ -267,6 +273,35 @@ fn terminal_render_from_lines_cached(
     }
 }
 
+fn terminal_render_full_frame(
+    lines: &[&Line],
+    palette: &ColorPalette,
+    cursor_local_row: Option<usize>,
+    cursor_col: Option<usize>,
+) -> TerminalRender {
+    let mut rendered_lines = Vec::with_capacity(lines.len());
+    for (idx, line) in lines.iter().enumerate() {
+        let active_cursor_col = if cursor_local_row == Some(idx) {
+            cursor_col
+        } else {
+            None
+        };
+        rendered_lines.push(line_to_colored_spans(line, palette, active_cursor_col));
+    }
+
+    TerminalRender {
+        text: String::new(),
+        full_len: rendered_lines.len(),
+        lines: rendered_lines,
+        first_line_idx: 0,
+        cursor_row: cursor_local_row,
+        cursor_col,
+        filled: false,
+        changed_indices: Vec::new(),
+        reset_terminal_buffer: false,
+    }
+}
+
 #[derive(Debug)]
 pub enum ControlCommand {
     Resize { cols: u16, rows: u16 },
@@ -275,6 +310,7 @@ pub enum ControlCommand {
 pub fn start_reader_thread(
     mut reader: std::fs::File,
     control_rx: std::sync::mpsc::Receiver<ControlCommand>,
+    render_mode: ReaderRenderMode,
     mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
 ) -> thread::JoinHandle<()> {
     enum Event {
@@ -360,11 +396,16 @@ pub fn start_reader_thread(
             // After processing events, render a snapshot of the recent screen/scrollback tail.
             let screen = term.screen();
             let total = screen.scrollback_rows();
-            let cap = term_rows
+            let snapshot_cap = term_rows
                 .saturating_mul(4)
                 .min(CONPTY_SNAPSHOT_MAX_LINES)
                 .max(term_rows);
-            let snapshot_row_count = cap.min(total.max(1));
+            let snapshot_row_count = match render_mode {
+                ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
+                // Keep a recent tail for UI scrolling, but still replace the whole frame on
+                // each render so resize redraws do not accumulate duplicate history.
+                ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
+            };
             let start = total.saturating_sub(snapshot_row_count);
             let end = total;
             let total_for_render = total;
@@ -383,16 +424,21 @@ pub fn start_reader_thread(
             }
             last_snapshot_fp = Some(fp);
 
-            let mut render = terminal_render_from_lines_cached(
-                &line_refs,
-                start,
-                total_for_render,
-                term_rows,
-                &palette,
-                cursor_local_row,
-                cursor_col,
-                &mut line_cache,
-            );
+            let mut render = match render_mode {
+                ReaderRenderMode::Shell => terminal_render_from_lines_cached(
+                    &line_refs,
+                    start,
+                    total_for_render,
+                    term_rows,
+                    &palette,
+                    cursor_local_row,
+                    cursor_col,
+                    &mut line_cache,
+                ),
+                ReaderRenderMode::InteractiveAi => {
+                    terminal_render_full_frame(&line_refs, &palette, cursor_local_row, cursor_col)
+                }
+            };
             render.filled = filled;
             render.reset_terminal_buffer = pending_reset;
             pending_reset = false;

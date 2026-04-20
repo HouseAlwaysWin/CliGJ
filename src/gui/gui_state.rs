@@ -5,6 +5,8 @@ use slint::{Model, SharedString};
 
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
+#[cfg(target_os = "windows")]
+use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
 use super::slint_ui::AppWindow;
@@ -104,9 +106,14 @@ impl GuiState {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
                     let (control_tx, control_rx) = std::sync::mpsc::channel();
-                    windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
+                    windows_conpty::start_reader_thread(
+                        spawn.reader,
+                        control_rx,
+                        ReaderRenderMode::Shell,
+                        move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
+                            terminal_mode: TerminalMode::Shell,
                             text: render.text,
                             lines: render.lines,
                             full_len: render.full_len,

@@ -10,6 +10,8 @@ use super::slint_ui::TermLine;
 
 #[cfg(target_os = "windows")]
 use crate::terminal::windows_conpty;
+#[cfg(target_os = "windows")]
+use crate::terminal::windows_conpty::ReaderRenderMode;
 
 pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -166,9 +168,14 @@ impl TabState {
                 if let Ok(spawn) = windows_conpty::spawn_conpty(&me.cmd_type, 120, 40) {
                     let tab_id = me.id;
                     let (control_tx, control_rx) = mpsc::channel();
-                    windows_conpty::start_reader_thread(spawn.reader, control_rx, move |render| {
+                    windows_conpty::start_reader_thread(
+                        spawn.reader,
+                        control_rx,
+                        ReaderRenderMode::Shell,
+                        move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
+                            terminal_mode: TerminalMode::Shell,
                             text: render.text,
                             lines: render.lines,
                             full_len: render.full_len,
@@ -253,6 +260,7 @@ pub struct GuiState {
 #[derive(Debug)]
 pub struct TerminalChunk {
     pub(crate) tab_id: u64,
+    pub(crate) terminal_mode: TerminalMode,
     pub(crate) text: String,
     pub(crate) lines: Vec<ColoredLine>,
     pub(crate) full_len: usize,
