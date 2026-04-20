@@ -149,6 +149,7 @@ fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
         tab.terminal_text.clear();
         tab.terminal_physical_origin = 0;
         tab.terminal_saved_scroll_top_px = 0.0;
+        tab.interactive_follow_output = true;
         invalidate_terminal_window_cache(tab);
     }
 
@@ -344,19 +345,20 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         let exp = terminal_scroll_top_for_tab(tab, vh);
         let n = tab.terminal_lines.len();
         let interactive = tab.terminal_mode == TerminalMode::InteractiveAi;
+        let interactive_follow = interactive && tab.interactive_follow_output;
 
         let resync = tab.terminal_scroll_resync_next;
         if resync {
             tab.terminal_scroll_resync_next = false;
         }
 
-        if n > 0 && (tab.auto_scroll || interactive) {
+        if n > 0 && (tab.auto_scroll || interactive_follow) {
             ui.set_ws_terminal_total_lines(n as i32);
         }
 
         let scroll_arg = if resync {
             Some(exp)
-        } else if (tab.auto_scroll || interactive) && n > 0 {
+        } else if (tab.auto_scroll || interactive_follow) && n > 0 {
             Some(exp)
         } else {
             None
@@ -386,7 +388,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
 
     let st = ui.get_ws_terminal_scroll_top_px();
     let vh = ui.get_ws_terminal_viewport_height_px();
-    if tab.terminal_mode == TerminalMode::InteractiveAi {
+    if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
         let exp = terminal_scroll_top_for_tab(tab, vh.max(1.0));
         if (tab.last_pushed_scroll_top - exp).abs() > 0.5
             || (vh - tab.last_pushed_viewport_height).abs() > 0.5

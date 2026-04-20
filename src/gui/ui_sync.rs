@@ -37,7 +37,12 @@ pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f3
     let vh = viewport_height_px.max(1.0);
     let content_h = n as f32 * TERMINAL_ROW_HEIGHT_PX;
     if tab.terminal_mode == TerminalMode::InteractiveAi {
-        return (content_h - vh).max(0.0);
+        if tab.interactive_follow_output {
+            return (content_h - vh).max(0.0);
+        }
+        return tab
+            .terminal_saved_scroll_top_px
+            .clamp(0.0, (content_h - vh).max(0.0));
     }
     if tab.auto_scroll {
         (content_h - vh).max(0.0)

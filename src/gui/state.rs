@@ -104,6 +104,8 @@ pub struct TabState {
     /// Scroll offset (px, content top) when this tab was last shown; restored on tab switch. All tabs
     /// share one Slint `ScrollView`, so we must persist this per tab.
     pub(crate) terminal_saved_scroll_top_px: f32,
+    /// Interactive AI tabs follow the newest frame until the user manually scrolls up.
+    pub(crate) interactive_follow_output: bool,
     /// Last PTY grid size actually sent to this tab. Avoid same-size resize on tab switch because
     /// many CLIs/TUIs treat it as a redraw and pollute scrollback with duplicate frames.
     pub(crate) last_pty_cols: u16,
@@ -157,6 +159,7 @@ impl TabState {
             terminal_physical_origin: 0,
             terminal_scroll_resync_next: false,
             terminal_saved_scroll_top_px: 0.0,
+            interactive_follow_output: true,
             last_pty_cols: 120,
             last_pty_rows: 40,
             #[cfg(target_os = "windows")]

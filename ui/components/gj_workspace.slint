@@ -39,6 +39,7 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
     callback terminal-resize-requested(int, int);
+    callback terminal-wheel(int) -> bool;
     callback ai-model-selected(string);
     forward-focus: prompt-zone;
 
@@ -86,6 +87,9 @@ export component GjWorkspace inherits Rectangle {
             }
             terminal-resize-requested(cols, rows) => {
                 root.terminal-resize-requested(cols, rows);
+            }
+            terminal-wheel(delta) => {
+                root.terminal-wheel(delta)
             }
             vertical-stretch: 1;
             min-height: 220px;

@@ -35,6 +35,7 @@ impl GuiState {
         tab.terminal_saved_scroll_top_px = 0.0;
         tab.terminal_scroll_resync_next = true;
         tab.auto_scroll = true;
+        tab.interactive_follow_output = true;
         if let Some(tx) = &tab.conpty_control_tx {
             let _ = tx.send(windows_conpty::ControlCommand::SetRenderMode(
                 ReaderRenderMode::InteractiveAi,

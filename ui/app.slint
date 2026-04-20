@@ -73,6 +73,7 @@ export component AppWindow inherits Window {
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
     callback terminal-resize-requested(int, int);
+    callback terminal-wheel(int) -> bool;
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback ai-model-selected(string);
@@ -231,6 +232,9 @@ export component AppWindow inherits Window {
                         }
                         terminal-resize-requested(cols, rows) => {
                             root.terminal-resize-requested(cols, rows);
+                        }
+                        terminal-wheel(delta) => {
+                            root.terminal-wheel(delta)
                         }
                     }
                 }

@@ -19,6 +19,7 @@ export component GjViewer inherits Rectangle {
     callback selection-committed(int, int, int, int);
     callback viewport-changed;
     callback terminal-resize-requested(int, int);
+    callback terminal-wheel(int) -> bool;
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px;
     /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
@@ -333,6 +334,9 @@ export component GjViewer inherits Rectangle {
             }
         }
         scroll-event(event) => {
+            if (root.terminal-wheel(event.delta-y / 1px)) {
+                return accept;
+            }
             // Natural wheel: up -> move toward top (viewport-y increases toward 0).
             let next = sv.viewport-y + event.delta-y;
             let max-y = min(0px, sv.height - sv.viewport-height);

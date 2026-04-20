@@ -13,7 +13,10 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
-use crate::gui::ui_sync::{load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui, UI_LAYOUT_EPOCH};
+use crate::gui::ui_sync::{
+    clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui,
+    terminal_scroll_top_for_tab, TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH,
+};
 use crate::terminal::windows_conpty;
 
 use super::helpers::{
@@ -33,6 +36,7 @@ pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     connect_terminal_selection(app, Rc::clone(&state));
     connect_terminal_viewport(app, Rc::clone(&state));
     connect_terminal_resize(app, Rc::clone(&state));
+    connect_terminal_wheel(app, Rc::clone(&state));
     connect_toggles(app, Rc::clone(&state));
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
@@ -524,6 +528,49 @@ fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 let _ = conpty.resize(cols as i16, rows as i16);
             }
         });
+    });
+}
+
+fn connect_terminal_wheel(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    let st_wheel = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_wheel(move |delta| {
+        let Some(ui) = app_weak.upgrade() else {
+            return false;
+        };
+        let mut s = st_wheel.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return false;
+        }
+        if s.tabs[s.current].terminal_mode != crate::gui::state::TerminalMode::InteractiveAi {
+            return false;
+        }
+        let current = s.current;
+        let tab = &mut s.tabs[current];
+        let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        let max_scroll = ((tab.terminal_lines.len() as f32) * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
+        let current = if tab.interactive_follow_output {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else {
+            clamp_saved_scroll_top(tab, vh)
+        };
+        let steps = ((delta.abs() as f32) / 120.0).max(1.0).min(4.0);
+        let amount = TERMINAL_ROW_HEIGHT_PX * 3.0 * steps;
+        let mut next = if delta > 0 {
+            (current - amount).max(0.0)
+        } else if delta < 0 {
+            (current + amount).min(max_scroll)
+        } else {
+            current
+        };
+        if max_scroll <= 0.5 {
+            next = 0.0;
+        }
+        tab.interactive_follow_output = next >= (max_scroll - 1.0);
+        tab.terminal_saved_scroll_top_px = next;
+        ui.invoke_ws_apply_terminal_scroll_top_px(next);
+        push_terminal_view_to_ui(&ui, tab, Some(next));
+        true
     });
 }
 
