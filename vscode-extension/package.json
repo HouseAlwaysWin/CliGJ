@@ -1,0 +1,46 @@
+{
+  "name": "cligj-vscode-extension",
+  "displayName": "CliGJ Bridge",
+  "description": "VS Code bridge extension for CliGJ IPC.",
+  "version": "0.0.1",
+  "private": true,
+  "publisher": "local",
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onCommand:cligj.ping",
+    "onCommand:cligj.openTab",
+    "onCommand:cligj.sendPrompt"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "cligj.ping",
+        "title": "CliGJ: Ping IPC"
+      },
+      {
+        "command": "cligj.openTab",
+        "title": "CliGJ: Open Tab"
+      },
+      {
+        "command": "cligj.sendPrompt",
+        "title": "CliGJ: Send Prompt"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "pretest": "npm run compile"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.17",
+    "@types/vscode": "^1.90.0",
+    "typescript": "^5.8.3"
+  }
+}
