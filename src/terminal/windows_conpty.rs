@@ -86,6 +86,15 @@ pub enum ReaderRenderMode {
 }
 
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
+    let (_, cmdline) = build_shell_command(shell);
+    spawn_conpty_command_line(cmdline.as_str(), cols, rows)
+}
+
+pub fn spawn_conpty_command_line(command_line: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
+    let cmdline = command_line.trim();
+    if cmdline.is_empty() {
+        return Err("empty startup command".to_string());
+    }
     unsafe {
         let mut in_read = HANDLE::default();
         let mut in_write = HANDLE::default();
@@ -135,12 +144,11 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
         siex.StartupInfo.cb = std::mem::size_of::<STARTUPINFOEXW>() as u32;
         siex.lpAttributeList = LPPROC_THREAD_ATTRIBUTE_LIST(attr_list as *mut _);
 
-        let (app, cmdline) = build_shell_command(shell);
         let mut cmdline_w = to_wide_null(&cmdline);
 
         let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
         CreateProcessW(
-            PCWSTR(app.as_ptr()),
+            PCWSTR::null(),
             Some(PWSTR(cmdline_w.as_mut_ptr())),
             None,
             None,
@@ -156,7 +164,7 @@ pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, St
         let mut writer = std::fs::File::from_raw_handle(in_write.0 as *mut _);
         let reader = std::fs::File::from_raw_handle(out_read.0 as *mut _);
 
-        let _ = init_shell_utf8(shell, &mut writer);
+        let _ = init_shell_utf8("", &mut writer);
 
         Ok(ConptySpawn {
             session: ConptySession {

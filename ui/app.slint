@@ -40,10 +40,13 @@ export component AppWindow inherits Window {
     in-out property <string> ws-prompt: "";
     in-out property <[string]> ws-prompt-path-chips: [];
     in-out property <string> ws-cmd-type: "Command Prompt";
+    in-out property <[string]> ws-cmd-type-choices: ["Command Prompt", "PowerShell"];
     in-out property <bool> ws-raw-input: false;
     in-out property <[string]> ws-interactive-command-choices: [];
     in-out property <bool> ws-interactive-manage-open: false;
     in-out property <[InteractiveCmdEditorRow]> ws-interactive-manage-rows: [];
+    in-out property <bool> ws-shell-manage-open: false;
+    in-out property <[InteractiveCmdEditorRow]> ws-shell-manage-rows: [];
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -80,6 +83,7 @@ export component AppWindow inherits Window {
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
+    callback manage-cmd-types-requested;
     callback manage-interactive-commands-requested;
     callback manage-add-interactive-row;
     callback remove-interactive-manage-row(int);
@@ -87,6 +91,12 @@ export component AppWindow inherits Window {
     callback interactive-manage-line-edited(int, string);
     callback save-interactive-manage;
     callback close-interactive-manage;
+    callback manage-add-shell-row;
+    callback remove-shell-manage-row(int);
+    callback shell-manage-name-edited(int, string);
+    callback shell-manage-line-edited(int, string);
+    callback save-shell-manage;
+    callback close-shell-manage;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -125,11 +135,11 @@ export component AppWindow inherits Window {
         capture-key-pressed(event) => {
             let t = LogicalKey.tty_text(event);
             let m = ws_pty_mod(event);
-            if (root.ws-interactive-manage-open) {
+            if (root.ws-interactive-manage-open || root.ws-shell-manage-open) {
                 return reject;
             }
             // Fast path: normal typing stays in TextEdit, avoid Rust callback on every keystroke.
-            if (!root.ws-raw-input && !root.ws-at-picker-open && !root.ws-interactive-manage-open && m == 0
+            if (!root.ws-raw-input && !root.ws-at-picker-open && !root.ws-interactive-manage-open && !root.ws-shell-manage-open && m == 0
                     && t != "" && t != "\n" && !composer_needs_rust_key(t)) {
                 return reject;
             }
@@ -147,6 +157,7 @@ export component AppWindow inherits Window {
                 tab-count: root.tab-count;
                 current-tab: root.current-tab;
                 current-cmd-type <=> root.ws-cmd-type;
+                cmd-type-choices: root.ws-cmd-type-choices;
                 select-tab(index) => {
                     root.current-tab = index;
                     root.tab-changed(index);
@@ -159,6 +170,9 @@ export component AppWindow inherits Window {
                 }
                 cmd-type-selected(kind) => {
                     root.cmd-type-changed(kind);
+                }
+                manage-cmd-types-requested => {
+                    root.manage-cmd-types-requested();
                 }
             rename-tab(index) => {
                 root.rename-tab-requested(index);
@@ -570,6 +584,228 @@ export component AppWindow inherits Window {
                         TouchArea {
                             clicked => {
                                 root.save-interactive-manage();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.ws-shell-manage-open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        z: 107;
+
+        Rectangle {
+            width: 560px;
+            height: 420px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: AppTheme.panel;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 10px;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                Text {
+                    text: @tr("命令提示設定");
+                    color: AppTheme.text;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+
+                Text {
+                    text: @tr("預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。");
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+
+                    Rectangle {
+                        min-width: 64px;
+                        height: 26px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 8px;
+                        background: #00000000;
+
+                        Text {
+                            text: @tr("新增");
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.manage-add-shell-row();
+                            }
+                        }
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    min-height: 0px;
+
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 6px;
+
+                        for row[key_idx] in root.ws-shell-manage-rows: Rectangle {
+                            min-height: 32px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 6px;
+                            background: #00000000;
+
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                spacing: 6px;
+                                alignment: center;
+
+                                if row.key-locked: Rectangle {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    min-height: 26px;
+                                    background: #00000020;
+                                    border-radius: 4px;
+
+                                    Text {
+                                        text: row.name;
+                                        color: AppTheme.text_muted;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: left;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                if !row.key-locked: LineEdit {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    font-size: 12px;
+                                    text: row.name;
+                                    edited(new_text) => {
+                                        root.shell-manage-name-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Text {
+                                    text: ">";
+                                    color: AppTheme.text_muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+
+                                LineEdit {
+                                    horizontal-stretch: 2;
+                                    min-width: 180px;
+                                    font-size: 12px;
+                                    text: row.line;
+                                    edited(new_text) => {
+                                        root.shell-manage-line-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Rectangle {
+                                    min-width: 44px;
+                                    max-width: 52px;
+                                    height: 24px;
+                                    horizontal-stretch: 0;
+                                    border-width: 1px;
+                                    border-color: #ff4f6d;
+                                    border-radius: 6px;
+                                    background: #00000000;
+
+                                    Text {
+                                        text: @tr("刪除");
+                                        color: #ff8ca8;
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    TouchArea {
+                                        enabled: !row.key-locked;
+                                        clicked => {
+                                            root.remove-shell-manage-row(key_idx);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 8px;
+                        background: #00000000;
+
+                        Text {
+                            text: @tr("關閉");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.close-shell-manage();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.accent;
+                        border-radius: 8px;
+                        background: AppTheme.accent;
+
+                        Text {
+                            text: @tr("儲存");
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.save-shell-manage();
                             }
                         }
                     }

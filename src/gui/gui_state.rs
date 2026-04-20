@@ -9,6 +9,7 @@ use crate::terminal::windows_conpty;
 use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
+use super::shell_profiles::resolve_shell_command_line;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
@@ -55,6 +56,7 @@ impl GuiState {
             return Err("invalid current tab index");
         }
         let cmd_type = self.tabs[self.current].cmd_type.clone();
+        let startup_cmd = resolve_shell_command_line(cmd_type.as_str(), self);
 
         #[cfg(target_os = "windows")]
         {
@@ -87,8 +89,8 @@ impl GuiState {
 
             use slint::ModelRc;
 
-            if cmd_type == "Command Prompt" || cmd_type == "PowerShell" {
-                match windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
+            if let Some(startup_cmd) = startup_cmd {
+                match windows_conpty::spawn_conpty_command_line(startup_cmd.as_str(), 120, 40) {
                     Ok(spawn) => {
                         let tab_id = self.tabs[self.current].id;
                         let tx = self.tx.clone();
@@ -243,8 +245,8 @@ impl GuiState {
             self.tabs[self.current].interactive_frame_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
-            if new_cmd_type == "Command Prompt" || new_cmd_type == "PowerShell" {
-                if let Ok(spawn) = windows_conpty::spawn_conpty(new_cmd_type, 120, 40) {
+            if let Some(startup_cmd) = resolve_shell_command_line(new_cmd_type, self) {
+                if let Ok(spawn) = windows_conpty::spawn_conpty_command_line(startup_cmd.as_str(), 120, 40) {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
                     let (control_tx, control_rx) = std::sync::mpsc::channel();

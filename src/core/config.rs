@@ -119,6 +119,35 @@ impl AppConfig {
         // Old key: presets lived in code; only customs were stored. Drop after migration to unified list.
         ui_table.remove("interactive_custom_commands");
     }
+
+    /// `[[ui.shell_profiles]]` — top-right terminal picker rows (`name` + startup `command`).
+    pub fn shell_profiles(&self) -> Vec<(String, String)> {
+        read_interactive_command_array(self, "shell_profiles")
+    }
+
+    pub fn set_shell_profiles(&mut self, pairs: &[(String, String)]) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        let arr: Vec<toml::Value> = pairs
+            .iter()
+            .filter(|(n, c)| !n.is_empty() && !c.is_empty())
+            .map(|(n, c)| {
+                let mut t = toml::Table::new();
+                t.insert("name".to_string(), toml::Value::String(n.clone()));
+                t.insert("command".to_string(), toml::Value::String(c.clone()));
+                toml::Value::Table(t)
+            })
+            .collect();
+        ui_table.insert("shell_profiles".to_string(), toml::Value::Array(arr));
+    }
 }
 
 fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String)> {

@@ -13,6 +13,7 @@ use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 use crate::core::config::AppConfig;
 
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
+use super::shell_profiles::sync_shell_profile_choices_to_ui;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TabState, TerminalChunk};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count};
@@ -40,8 +41,14 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let mut cfg = AppConfig::load_or_default().unwrap_or_default();
     let (interactive_commands, persist_interactive) =
         super::interactive_commands::load_from_config(&cfg);
+    let (shell_profiles, persist_shell_profiles) = super::shell_profiles::load_from_config(&cfg);
     if persist_interactive {
         cfg.set_interactive_commands(&interactive_commands);
+    }
+    if persist_shell_profiles {
+        cfg.set_shell_profiles(&shell_profiles);
+    }
+    if persist_interactive || persist_shell_profiles {
         let _ = cfg.save();
     }
 
@@ -58,11 +65,13 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         at_picker_open_snapshot: false,
         timer_prompt_snapshot: None,
         interactive_commands,
+        shell_profiles,
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
     sync_interactive_command_choices_to_ui(&app, &state.borrow());
+    sync_shell_profile_choices_to_ui(&app, &state.borrow());
 
     let _terminal_stream_dispatcher =
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);

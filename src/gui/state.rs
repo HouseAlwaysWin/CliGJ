@@ -279,6 +279,8 @@ pub struct GuiState {
     pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
     /// From config `[[ui.interactive_commands]]`: (display name, command line).
     pub(crate) interactive_commands: Vec<(String, String)>,
+    /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`.
+    pub(crate) shell_profiles: Vec<(String, String)>,
 }
 
 #[derive(Debug)]

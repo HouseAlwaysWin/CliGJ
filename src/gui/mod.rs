@@ -3,6 +3,7 @@
 mod at_picker;
 mod composer_sync;
 mod interactive_commands;
+mod shell_profiles;
 mod gui_state;
 mod run;
 mod slint_ui;

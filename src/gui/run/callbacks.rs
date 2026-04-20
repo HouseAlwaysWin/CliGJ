@@ -16,6 +16,10 @@ use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::interactive_commands::{
     self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
 };
+use crate::gui::shell_profiles::{
+    default_shell_profile_name, normalize_shell_profile_command, sync_shell_manage_editor_to_ui,
+    sync_shell_profile_choices_to_ui,
+};
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{
@@ -42,6 +46,10 @@ fn model_interactive_editor_rows(m: &ModelRc<InteractiveCmdEditorRow>) -> Vec<In
 
 fn set_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
     ui.set_ws_interactive_manage_rows(ModelRc::new(VecModel::from(rows)));
+}
+
+fn set_shell_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
+    ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
 
 pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -497,6 +505,175 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         ui.set_ws_interactive_manage_open(false);
+    });
+
+    let st_shell_manage = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_manage_cmd_types_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let s = st_shell_manage.borrow();
+        sync_shell_manage_editor_to_ui(&ui, &*s);
+        drop(s);
+        ui.set_ws_shell_manage_open(true);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_manage_add_shell_row(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut rows = model_interactive_editor_rows(&ui.get_ws_shell_manage_rows());
+        rows.push(InteractiveCmdEditorRow {
+            name: SharedString::new(),
+            line: SharedString::new(),
+            key_locked: false,
+        });
+        set_shell_manage_rows(&ui, rows);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_remove_shell_manage_row(move |idx| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let mut rows = model_interactive_editor_rows(&ui.get_ws_shell_manage_rows());
+        if i >= rows.len() || rows[i].key_locked {
+            return;
+        }
+        rows.remove(i);
+        set_shell_manage_rows(&ui, rows);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_shell_manage_name_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_shell_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        if row.key_locked {
+            return;
+        }
+        row.name = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_shell_manage_line_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_shell_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.line = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let st_shell_save = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_save_shell_manage(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let rows_m = ui.get_ws_shell_manage_rows();
+        let n = rows_m.row_count();
+        let mut seen = HashSet::<String>::new();
+        let mut out: Vec<(String, String)> = Vec::new();
+        for i in 0..n {
+            let row = rows_m.row_data(i).unwrap();
+            let name = row.name.to_string();
+            let line = row.line.to_string();
+            let nt = name.trim();
+            let (norm_line, normalized) = normalize_shell_profile_command(line.as_str());
+            let lt = norm_line.trim();
+            if nt.is_empty() && lt.is_empty() {
+                continue;
+            }
+            if nt.is_empty() {
+                eprintln!("CliGJ: shell profile row needs a display name");
+                return;
+            }
+            if lt.is_empty() {
+                eprintln!("CliGJ: shell profile row needs a startup command");
+                return;
+            }
+            let nt = nt.to_string();
+            if !seen.insert(nt.clone()) {
+                eprintln!("CliGJ: duplicate shell profile name: {nt}");
+                return;
+            }
+            if normalized {
+                eprintln!("CliGJ: shell profile '{nt}' normalized to an in-app compatible command");
+            }
+            out.push((nt, lt.to_string()));
+        }
+
+        if out.is_empty() {
+            eprintln!("CliGJ: need at least one shell profile");
+            return;
+        }
+        if !out.iter().any(|(n, _)| n == "Command Prompt")
+            || !out.iter().any(|(n, _)| n == "PowerShell")
+        {
+            eprintln!("CliGJ: default Command Prompt / PowerShell profiles are required");
+            return;
+        }
+
+        {
+            let mut s = st_shell_save.borrow_mut();
+            s.shell_profiles = out;
+            let fallback = default_shell_profile_name(&*s);
+            let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _)| n.clone()).collect();
+            for tab in &mut s.tabs {
+                if !allowed.contains(&tab.cmd_type) {
+                    tab.cmd_type = fallback.clone();
+                }
+            }
+        }
+
+        let snapshot = st_shell_save.borrow().shell_profiles.clone();
+        match AppConfig::load_or_default() {
+            Ok(mut cfg) => {
+                cfg.set_shell_profiles(&snapshot);
+                if let Err(e) = cfg.save() {
+                    eprintln!("CliGJ: save config: {e}");
+                }
+            }
+            Err(e) => eprintln!("CliGJ: load config: {e}"),
+        }
+
+        let s = st_shell_save.borrow();
+        sync_shell_profile_choices_to_ui(&ui, &*s);
+        if s.current < s.tabs.len() {
+            ui.set_ws_cmd_type(SharedString::from(s.tabs[s.current].cmd_type.as_str()));
+        }
+        ui.set_ws_shell_manage_open(false);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_close_shell_manage(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_shell_manage_open(false);
     });
 }
 
