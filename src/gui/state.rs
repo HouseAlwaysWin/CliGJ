@@ -277,6 +277,8 @@ pub struct GuiState {
     pub(crate) at_picker_open_snapshot: bool,
     /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
     pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
+    /// From config `[[ui.interactive_commands]]`: (display name, command line).
+    pub(crate) interactive_commands: Vec<(String, String)>,
 }
 
 #[derive(Debug)]

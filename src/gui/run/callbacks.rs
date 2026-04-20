@@ -9,8 +9,10 @@ use crate::terminal::key_encoding::{self, MOD_CTRL};
 use crate::terminal::prompt_key::PromptKeyAction;
 use crate::workspace_files;
 
+use crate::core::config::AppConfig;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
+use crate::gui::interactive_commands::{self, sync_interactive_command_choices_to_ui};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{
@@ -307,115 +309,92 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
 
     let st_ai = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_ai_model_selected(move |model_name| {
+    app.on_interactive_command_selected(move |line_label| {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
-        let launch_cmd = match model_name.as_str() {
-            "gemini" => "gemini\r\n",
-            "codex" => "codex\r\n",
-            "claude" => "claude\r\n",
-            "copilot" => "copilot\r\n",
-            _ => return,
+        let launch_cmd = {
+            let s = st_ai.borrow();
+            match interactive_commands::resolve_interactive_launch(line_label.as_str(), &*s) {
+                Some(c) => c,
+                None => return,
+            }
         };
 
         let mut s = st_ai.borrow_mut();
-        let cur_idx = s.current;
-        if cur_idx >= s.tabs.len() { return; }
-        s.prepare_current_tab_for_interactive_ai();
-        {
-            let tab = &mut s.tabs[cur_idx];
-            while tab.terminal_slint_model.row_count() > 0 {
-                tab.terminal_slint_model.remove(0);
-            }
-            tab.interactive_last_archived_signature.clear();
-            ui.set_ws_terminal_text(SharedString::new());
-            ui.set_ws_terminal_line_offset(0);
-            ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_lines(slint::ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
-            ui.invoke_ws_scroll_terminal_to_top();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        if let Err(e) = s.respawn_conpty_for_interactive_command(&ui) {
+            eprintln!("CliGJ: interactive command PTY restart: {e}");
+            return;
         }
         drop(s);
 
         let app_weak_inner = ui.as_weak();
         let st_ai_inner = Rc::clone(&st_ai);
-        slint::Timer::single_shot(std::time::Duration::from_millis(200), move || {
+        slint::Timer::single_shot(std::time::Duration::from_millis(300), move || {
             let Some(ui) = app_weak_inner.upgrade() else { return; };
             let mut s = st_ai_inner.borrow_mut();
-            let _ = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes());
-        });
-        return;
-        
-        #[cfg(any())]
-        {
-        let cmd_type = s.tabs[cur_idx].cmd_type.clone();
-        let tab_id = s.tabs[cur_idx].id;
-        let tx = s.tx.clone();
-
-        // 策略：重啟 PTY 以實現絕對乾淨的切換
-        #[cfg(target_os = "windows")]
-        {
-            // 1. 關閉舊 PTY 並徹底清空所有緩存
-            s.tabs[cur_idx].conpty = None; // Drop 會觸發 ConPTY 關閉
-            
-            let tab = &mut s.tabs[cur_idx];
-            tab.terminal_lines.clear();
-            tab.interactive_frame_lines.clear();
-            tab.terminal_text.clear();
-            tab.terminal_model_dirty.clear();
-            tab.terminal_model_rows.clear();
-            tab.terminal_model_hashes.clear();
-            while tab.terminal_slint_model.row_count() > 0 {
-                tab.terminal_slint_model.remove(0);
+            if let Err(e) = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes()) {
+                eprintln!("CliGJ: inject launch command: {e}");
             }
-            tab.last_window_total = 0;
-            tab.last_window_first = 0;
-            tab.last_window_last = 0;
-            tab.terminal_saved_scroll_top_px = 0.0;
-            tab.terminal_scroll_resync_next = true;
-            
-            ui.set_ws_terminal_line_offset(0);
-            ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_lines(slint::ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
-            ui.invoke_ws_scroll_terminal_to_top();
-
-            // 2. 開啟新 PTY
-            if let Ok(spawn) = windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
-                let (control_tx, control_rx) = std::sync::mpsc::channel();
-                windows_conpty::start_reader_thread(
-                    spawn.reader,
-                    control_rx,
-                    ReaderRenderMode::InteractiveAi,
-                    move |render| {
-                    let _ = tx.send(TerminalChunk {
-                        tab_id,
-                        terminal_mode: TerminalMode::InteractiveAi,
-                        text: render.text,
-                        lines: render.lines,
-                        full_len: render.full_len,
-                        first_line_idx: render.first_line_idx,
-                        replace: true,
-                        set_auto_scroll: if render.filled { Some(true) } else { None },
-                        changed_indices: render.changed_indices,
-                        cursor_col: render.cursor_col,
-                        cursor_row: render.cursor_row,
-                        reset_terminal_buffer: render.reset_terminal_buffer,
-                    });
-                });
-                s.tabs[cur_idx].conpty = Some(spawn.session);
-                s.tabs[cur_idx].conpty_control_tx = Some(control_tx);
-            }
-        }
-
-        // 3. 延時啟動新指令
-        let app_weak_inner = ui.as_weak();
-        let st_ai_inner = Rc::clone(&st_ai);
-        slint::Timer::single_shot(std::time::Duration::from_millis(600), move || {
-            let Some(ui) = app_weak_inner.upgrade() else { return; };
-            let mut s = st_ai_inner.borrow_mut();
-            let _ = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes());
         });
+    });
+
+    let app_weak = app.as_weak();
+    app.on_add_custom_command_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_custom_cmd_name(SharedString::new());
+        ui.set_ws_custom_cmd_line(SharedString::new());
+        ui.set_ws_custom_cmd_open(true);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_custom_cmd_cancel(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_custom_cmd_open(false);
+    });
+
+    let st_cmd_save = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_custom_cmd_commit(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let name = ui.get_ws_custom_cmd_name().to_string();
+        let line = ui.get_ws_custom_cmd_line().to_string();
+        let name_t = name.trim();
+        let line_t = line.trim();
+        if name_t.is_empty() || line_t.is_empty() {
+            eprintln!("CliGJ: custom command needs a name and command line");
+            return;
         }
+        {
+            let mut s = st_cmd_save.borrow_mut();
+            if !interactive_commands::interactive_name_is_allowed(name_t, &*s) {
+                eprintln!("CliGJ: command name conflicts with a preset or existing entry");
+                return;
+            }
+            s.interactive_commands
+                .push((name_t.to_string(), line_t.to_string()));
+        }
+        let snapshot = st_cmd_save.borrow().interactive_commands.clone();
+        match AppConfig::load_or_default() {
+            Ok(mut cfg) => {
+                cfg.set_interactive_commands(&snapshot);
+                if let Err(e) = cfg.save() {
+                    eprintln!("CliGJ: save config: {e}");
+                }
+            }
+            Err(e) => eprintln!("CliGJ: load config: {e}"),
+        }
+        sync_interactive_command_choices_to_ui(&ui, &st_cmd_save.borrow());
+        ui.set_ws_custom_cmd_open(false);
     });
 }
 

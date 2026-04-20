@@ -83,6 +83,73 @@ impl AppConfig {
         set_path_value(&mut self.data, &segments, value);
         Ok(())
     }
+
+    /// `[[ui.interactive_commands]]` — display `name` + shell `command` (all launcher rows, including former "presets").
+    pub fn interactive_commands(&self) -> Vec<(String, String)> {
+        read_interactive_command_array(self, "interactive_commands")
+    }
+
+    /// Deprecated: `[[ui.interactive_custom_commands]]` — read only for migrating old files.
+    pub fn interactive_custom_commands(&self) -> Vec<(String, String)> {
+        read_interactive_command_array(self, "interactive_custom_commands")
+    }
+
+    pub fn set_interactive_commands(&mut self, pairs: &[(String, String)]) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        let arr: Vec<toml::Value> = pairs
+            .iter()
+            .filter(|(n, c)| !n.is_empty() && !c.is_empty())
+            .map(|(n, c)| {
+                let mut t = toml::Table::new();
+                t.insert("name".to_string(), toml::Value::String(n.clone()));
+                t.insert("command".to_string(), toml::Value::String(c.clone()));
+                toml::Value::Table(t)
+            })
+            .collect();
+        ui_table.insert("interactive_commands".to_string(), toml::Value::Array(arr));
+        // Old key: presets lived in code; only customs were stored. Drop after migration to unified list.
+        ui_table.remove("interactive_custom_commands");
+    }
+}
+
+fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String)> {
+    let Some(ui) = cfg.data.get("ui").and_then(|v| v.as_table()) else {
+        return Vec::new();
+    };
+    let Some(arr) = ui.get(key).and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in arr {
+        let Some(t) = item.as_table() else {
+            continue;
+        };
+        let name = t
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let command = t
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !name.is_empty() && !command.is_empty() {
+            out.push((name, command));
+        }
+    }
+    out
 }
 
 impl Default for AppConfig {

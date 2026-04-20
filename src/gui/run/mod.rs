@@ -10,6 +10,9 @@ use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 #[cfg(target_os = "windows")]
 use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
+use crate::core::config::AppConfig;
+
+use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TabState, TerminalChunk};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count};
@@ -34,6 +37,14 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
     let (tx, rx) = mpsc::channel::<TerminalChunk>();
 
+    let mut cfg = AppConfig::load_or_default().unwrap_or_default();
+    let (interactive_commands, persist_interactive) =
+        super::interactive_commands::load_from_config(&cfg);
+    if persist_interactive {
+        cfg.set_interactive_commands(&interactive_commands);
+        let _ = cfg.save();
+    }
+
     let state = Rc::new(RefCell::new(GuiState {
         tabs: vec![TabState::new(1, tx.clone())],
         titles: Rc::clone(&titles),
@@ -46,10 +57,12 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         at_picker_query_snapshot: String::new(),
         at_picker_open_snapshot: false,
         timer_prompt_snapshot: None,
+        interactive_commands,
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
     sync_tab_count(&app, state.borrow().tabs.len());
+    sync_interactive_command_choices_to_ui(&app, &state.borrow());
 
     let _terminal_stream_dispatcher =
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx);

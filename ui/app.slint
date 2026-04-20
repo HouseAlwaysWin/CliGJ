@@ -41,6 +41,10 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-prompt-path-chips: [];
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <bool> ws-raw-input: false;
+    in-out property <[string]> ws-interactive-command-choices: [];
+    in-out property <bool> ws-custom-cmd-open: false;
+    in-out property <string> ws-custom-cmd-name: "";
+    in-out property <string> ws-custom-cmd-line: "";
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -76,7 +80,10 @@ export component AppWindow inherits Window {
     callback terminal-wheel(int) -> bool;
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
-    callback ai-model-selected(string);
+    callback interactive-command-selected(string);
+    callback add-custom-command-requested;
+    callback custom-cmd-cancel;
+    callback custom-cmd-commit;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -178,6 +185,7 @@ export component AppWindow inherits Window {
                         prompt <=> root.ws-prompt;
                         prompt-path-chips <=> root.ws-prompt-path-chips;
                         raw-input-enabled <=> root.ws-raw-input;
+                        interactive-command-choices: root.ws-interactive-command-choices;
                         at-picker-open <=> root.ws-at-picker-open;
                         at-choices <=> root.ws-at-choices;
                         at-selected <=> root.ws-at-selected;
@@ -227,8 +235,11 @@ export component AppWindow inherits Window {
                         terminal-viewport-changed => {
                             root.terminal-viewport-changed();
                         }
-                        ai-model-selected(val) => {
-                            root.ai-model-selected(val);
+                        interactive-command-selected(val) => {
+                            root.interactive-command-selected(val);
+                        }
+                        add-custom-command-requested => {
+                            root.add-custom-command-requested();
                         }
                         terminal-resize-requested(cols, rows) => {
                             root.terminal-resize-requested(cols, rows);
@@ -332,6 +343,108 @@ export component AppWindow inherits Window {
                         }
                         TouchArea {
                             clicked => { root.rename-commit(root.ws-rename-index, root.ws-rename-text); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.ws-custom-cmd-open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #00000080;
+        z: 105;
+
+        Rectangle {
+            width: 400px;
+            height: 260px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: AppTheme.panel;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 10px;
+
+            VerticalLayout {
+                padding: 12px;
+                spacing: 8px;
+
+                Text {
+                    text: @tr("新增指令");
+                    color: AppTheme.text;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+
+                Text {
+                    text: @tr("顯示名稱");
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                }
+
+                TextEdit {
+                    text <=> root.ws-custom-cmd-name;
+                    min-height: 28px;
+                    font-size: 13px;
+                    wrap: no-wrap;
+                }
+
+                Text {
+                    text: @tr("指令字串");
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                }
+
+                TextEdit {
+                    text <=> root.ws-custom-cmd-line;
+                    min-height: 72px;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 8px;
+                        background: #00000000;
+                        Text {
+                            text: @tr("取消");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                        }
+                        TouchArea {
+                            clicked => { root.custom-cmd-cancel(); }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.accent;
+                        border-radius: 8px;
+                        background: AppTheme.accent;
+                        Text {
+                            text: @tr("確定");
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 700;
+                        }
+                        TouchArea {
+                            clicked => { root.custom-cmd-commit(); }
                         }
                     }
                 }

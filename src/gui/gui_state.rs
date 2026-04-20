@@ -45,6 +45,116 @@ impl GuiState {
         }
     }
 
+    /// Drop the shell, spawn a fresh ConPTY, and reset the terminal buffer for Interactive AI.
+    /// Required when switching launcher commands so input goes to a new process.
+    pub(crate) fn respawn_conpty_for_interactive_command(
+        &mut self,
+        ui: &AppWindow,
+    ) -> Result<(), &'static str> {
+        if self.current >= self.tabs.len() {
+            return Err("invalid current tab index");
+        }
+        let cmd_type = self.tabs[self.current].cmd_type.clone();
+
+        #[cfg(target_os = "windows")]
+        {
+            self.tabs[self.current].conpty = None;
+            self.tabs[self.current].conpty_control_tx = None;
+        }
+
+        {
+            let tab = &mut self.tabs[self.current];
+            // Force next bump_terminal_size → Resize to reach the new PTY (was matching old 120×40).
+            tab.last_pty_cols = 0;
+            tab.last_pty_rows = 0;
+            tab.last_pushed_scroll_top = -1.0;
+            tab.last_pushed_viewport_height = -1.0;
+        }
+
+        self.prepare_current_tab_for_interactive_ai();
+
+        {
+            let tab = &mut self.tabs[self.current];
+            while tab.terminal_slint_model.row_count() > 0 {
+                tab.terminal_slint_model.remove(0);
+            }
+            tab.interactive_last_archived_signature.clear();
+        }
+
+        #[cfg(target_os = "windows")]
+        {
+            use std::rc::Rc;
+
+            use slint::ModelRc;
+
+            if cmd_type == "Command Prompt" || cmd_type == "PowerShell" {
+                match windows_conpty::spawn_conpty(&cmd_type, 120, 40) {
+                    Ok(spawn) => {
+                        let tab_id = self.tabs[self.current].id;
+                        let tx = self.tx.clone();
+                        let (control_tx, control_rx) = std::sync::mpsc::channel();
+                        windows_conpty::start_reader_thread(
+                            spawn.reader,
+                            control_rx,
+                            ReaderRenderMode::InteractiveAi,
+                            move |render| {
+                                let _ = tx.send(TerminalChunk {
+                                    tab_id,
+                                    terminal_mode: match render.render_mode {
+                                        ReaderRenderMode::Shell => TerminalMode::Shell,
+                                        ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                                    },
+                                    text: render.text,
+                                    lines: render.lines,
+                                    full_len: render.full_len,
+                                    first_line_idx: render.first_line_idx,
+                                    cursor_row: render.cursor_row,
+                                    cursor_col: render.cursor_col,
+                                    replace: true,
+                                    set_auto_scroll: if render.filled { Some(true) } else { None },
+                                    changed_indices: render.changed_indices,
+                                    reset_terminal_buffer: render.reset_terminal_buffer,
+                                });
+                            },
+                        );
+                        let tab = &mut self.tabs[self.current];
+                        tab.conpty = Some(spawn.session);
+                        tab.conpty_control_tx = Some(control_tx);
+                    }
+                    Err(e) => eprintln!("CliGJ: spawn_conpty (interactive): {e}"),
+                }
+            }
+
+            let tab = &mut self.tabs[self.current];
+            ui.set_ws_terminal_text(SharedString::new());
+            ui.set_ws_terminal_line_offset(0);
+            ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
+            ui.invoke_ws_scroll_terminal_to_top();
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            use std::rc::Rc;
+
+            use slint::ModelRc;
+
+            let tab = &mut self.tabs[self.current];
+            ui.set_ws_terminal_text(SharedString::new());
+            ui.set_ws_terminal_line_offset(0);
+            ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
+            ui.invoke_ws_scroll_terminal_to_top();
+        }
+
+        // Do not read scroll position from the UI here: after clearing, Slint may still report the
+        // previous tab's offset for one frame — that would overwrite `prepare_*`'s 0 and balloon
+        // the scrollbar extent until the next PTY frame.
+        self.tabs[self.current].terminal_saved_scroll_top_px = 0.0;
+        load_tab_to_ui(ui, &mut self.tabs[self.current]);
+        Ok(())
+    }
+
     pub(crate) fn toggle_raw_input_current(
         &mut self,
         ui: &AppWindow,

@@ -8,6 +8,7 @@ export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
+    in property <[string]> interactive-command-choices: [];
     in property <[PromptImageChip]> prompt-images;
     in property <string> selected-context;
     callback submit-requested;
@@ -24,7 +25,8 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-image-zoom-requested(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
-    callback ai-model-selected(string);
+    callback interactive-command-selected(string);
+    callback add-custom-command-requested;
     forward-focus: prompt-input;
 
     function pty_mod(event: KeyEvent) -> int {
@@ -273,14 +275,42 @@ export component GjPromptDropZone inherits Rectangle {
                 HorizontalLayout {
                     spacing: 8px;
 
-                    ComboBox {
-                        width: 120px;
-                        height: 22px;
-                        model: ["gemini", "codex", "claude", "copilot"];
-                        current-value: @tr("AI Models");
-                        selected(val) => {
-                            root.ai-model-selected(val);
-                            self.current-value = @tr("AI Models");
+                    HorizontalLayout {
+                        spacing: 4px;
+
+                        ComboBox {
+                            min-width: 132px;
+                            height: 22px;
+                            model: root.interactive-command-choices;
+                            current-value: @tr("選擇指令");
+                            selected(val) => {
+                                root.interactive-command-selected(val);
+                                self.current-value = @tr("選擇指令");
+                            }
+                        }
+
+                        Rectangle {
+                            min-width: 28px;
+                            height: 22px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 11px;
+                            background: #00000000;
+
+                            Text {
+                                text: "+";
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 14px;
+                                font-weight: 600;
+                            }
+
+                            TouchArea {
+                                clicked => {
+                                    root.add-custom-command-requested();
+                                }
+                            }
                         }
                     }
 

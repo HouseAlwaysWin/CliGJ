@@ -2,6 +2,7 @@
 
 mod at_picker;
 mod composer_sync;
+mod interactive_commands;
 mod gui_state;
 mod run;
 mod slint_ui;

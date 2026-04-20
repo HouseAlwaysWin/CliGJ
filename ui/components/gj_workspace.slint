@@ -23,6 +23,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <[string]> at-choices;
     in-out property <int> at-selected;
     in property <string> workspace-root-label;
+    in property <[string]> interactive-command-choices;
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
@@ -40,7 +41,8 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-viewport-changed;
     callback terminal-resize-requested(int, int);
     callback terminal-wheel(int) -> bool;
-    callback ai-model-selected(string);
+    callback interactive-command-selected(string);
+    callback add-custom-command-requested;
     forward-focus: prompt-zone;
 
     background: AppTheme.bg;
@@ -108,6 +110,7 @@ export component GjWorkspace inherits Rectangle {
         prompt-zone := GjPromptDropZone {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
+            interactive-command-choices: root.interactive-command-choices;
             raw-input-enabled <=> root.raw-input-enabled;
             prompt-images: root.prompt-images;
             selected-context: root.selected-context;
@@ -147,8 +150,11 @@ export component GjWorkspace inherits Rectangle {
             prompt-chip-clear-requested => {
                 root.prompt-chip-clear-requested();
             }
-            ai-model-selected(val) => {
-                root.ai-model-selected(val);
+            interactive-command-selected(val) => {
+                root.interactive-command-selected(val);
+            }
+            add-custom-command-requested => {
+                root.add-custom-command-requested();
             }
         }
     }

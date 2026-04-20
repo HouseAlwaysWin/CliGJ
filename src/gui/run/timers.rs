@@ -278,6 +278,9 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
 
         if n > 0 && (tab.auto_scroll || interactive) {
             ui.set_ws_terminal_total_lines(n as i32);
+        } else if n == 0 && interactive {
+            // Keep Slint scroll extent in sync when the buffer was cleared (e.g. ConPTY respawn).
+            ui.set_ws_terminal_total_lines(0);
         }
 
         let scroll_arg = if resync {
