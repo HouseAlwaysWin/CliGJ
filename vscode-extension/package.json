@@ -18,7 +18,9 @@
     "onCommand:cligj.sendPrompt",
     "onCommand:cligj.fillPrompt",
     "onCommand:cligj.sendSelectionPrompt",
-    "onCommand:cligj.fillSelectionPrompt"
+    "onCommand:cligj.fillSelectionPrompt",
+    "onCommand:cligj.sendExplorerPath",
+    "onCommand:cligj.fillExplorerPath"
   ],
   "contributes": {
     "commands": [
@@ -45,6 +47,14 @@
       {
         "command": "cligj.fillSelectionPrompt",
         "title": "CliGJ: Fill Selection with Line Numbers (Editable)"
+      },
+      {
+        "command": "cligj.sendExplorerPath",
+        "title": "CliGJ: Send File Path (Direct Submit)"
+      },
+      {
+        "command": "cligj.fillExplorerPath",
+        "title": "CliGJ: Fill File Path (Editable)"
       }
     ],
     "menus": {
@@ -58,6 +68,18 @@
           "command": "cligj.fillSelectionPrompt",
           "group": "navigation@101",
           "when": "editorHasSelection"
+        }
+      ],
+      "explorer/context": [
+        {
+          "command": "cligj.sendExplorerPath",
+          "group": "navigation@100",
+          "when": "resourceScheme == file"
+        },
+        {
+          "command": "cligj.fillExplorerPath",
+          "group": "navigation@101",
+          "when": "resourceScheme == file"
         }
       ]
     }

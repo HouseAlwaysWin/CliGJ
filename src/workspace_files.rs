@@ -170,6 +170,20 @@ pub fn file_attachment_token(index_1_based: usize) -> String {
 }
 
 #[must_use]
+pub fn filepath_attachment_token(index_1_based: usize) -> String {
+    format!("[[filepath_{index_1_based}]]")
+}
+
+#[must_use]
+pub fn filepath_hint_token(file_name: &str, occurrence: usize) -> String {
+    if occurrence <= 1 {
+        format!("@{file_name}")
+    } else {
+        format!("@{file_name}_{occurrence}")
+    }
+}
+
+#[must_use]
 pub fn image_attachment_token(index_1_based: usize) -> String {
     format!("[[img{index_1_based}]]")
 }
@@ -200,17 +214,40 @@ pub fn expand_attachment_tokens(
     selection_payloads: &[String],
 ) -> String {
     let mut out = prompt.to_string();
+    let mut replacements: Vec<(String, String)> = Vec::new();
     for (i, p) in file_paths.iter().enumerate() {
         let token = file_attachment_token(i + 1);
-        out = out.replace(token.as_str(), p.as_str());
+        let token_new = filepath_attachment_token(i + 1);
+        replacements.push((token, p.clone()));
+        replacements.push((token_new, p.clone()));
+    }
+    let mut name_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for p in file_paths {
+        let file_name = file_name_label(p);
+        let count = name_counts.entry(file_name.clone()).or_insert(0);
+        *count += 1;
+        let token = filepath_hint_token(file_name.as_str(), *count);
+        replacements.push((token, p.clone()));
     }
     for (i, p) in image_paths.iter().enumerate() {
         let token = image_attachment_token(i + 1);
-        out = out.replace(token.as_str(), p.as_str());
+        replacements.push((token, p.clone()));
+    }
+    let mut image_name_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    for p in image_paths {
+        let file_name = file_name_label(p);
+        let count = image_name_counts.entry(file_name.clone()).or_insert(0);
+        *count += 1;
+        let token = filepath_hint_token(file_name.as_str(), *count);
+        replacements.push((token, p.clone()));
     }
     for (i, p) in selection_payloads.iter().enumerate() {
         let token = selection_attachment_token(i + 1);
-        out = out.replace(token.as_str(), p.as_str());
+        replacements.push((token, p.clone()));
+    }
+    replacements.sort_by(|(a, _), (b, _)| b.len().cmp(&a.len()));
+    for (token, value) in replacements {
+        out = out.replace(token.as_str(), value.as_str());
     }
     out
 }
@@ -258,11 +295,20 @@ mod tests {
 
     #[test]
     fn token_expand_replaces_file_and_image_tokens() {
-        let prompt = "ask [[file1]] with [[img1]] and [[sel1]]";
-        let files = vec!["D:/a.txt".to_string()];
+        let prompt = "ask [[file1]] [[filepath_1]] @a.txt @a.txt_2 with [[img1]] @p.png and [[sel1]]";
+        let files = vec!["D:/a.txt".to_string(), "D:/other/a.txt".to_string()];
         let images = vec!["D:/p.png".to_string()];
         let selections = vec!["code payload".to_string()];
         let out = expand_attachment_tokens(prompt, &files, &images, &selections);
-        assert_eq!(out, "ask D:/a.txt with D:/p.png and code payload");
+        assert_eq!(
+            out,
+            "ask D:/a.txt D:/a.txt D:/a.txt D:/other/a.txt with D:/p.png D:/p.png and code payload"
+        );
+    }
+
+    #[test]
+    fn filepath_hint_token_disambiguates_duplicates() {
+        assert_eq!(filepath_hint_token("main.rs", 1), "@main.rs");
+        assert_eq!(filepath_hint_token("main.rs", 2), "@main.rs_2");
     }
 }

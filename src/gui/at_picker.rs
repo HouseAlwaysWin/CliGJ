@@ -28,6 +28,31 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         .map(|(_, q)| q.split(['\r', '\n']).next().unwrap_or(""))
         .unwrap_or("")
         .to_string();
+    let qtrim = query.trim();
+    let mut hint_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let tab_for_hints = &s.tabs[s.current];
+    let file_hints = tab_for_hints.prompt_picked_files_abs.iter().map(|p| p.as_str());
+    let image_hints = tab_for_hints
+        .prompt_picked_images
+        .iter()
+        .map(|img| img.abs_path.as_str());
+    let matches_hidden_filepath_hint = file_hints.chain(image_hints).any(|abs_path| {
+        let file_name = workspace_files::file_name_label(abs_path);
+        let count = hint_counts.entry(file_name.clone()).or_insert(0);
+        *count += 1;
+        let hint = if *count <= 1 {
+            file_name
+        } else {
+            format!("{file_name}_{}", *count)
+        };
+        qtrim == hint
+    });
+    if matches_hidden_filepath_hint {
+        ui.set_ws_at_picker_open(false);
+        s.at_picker_query_snapshot.clear();
+        s.at_picker_open_snapshot = false;
+        return;
+    }
     let tab = &s.tabs[s.current];
     let root = workspace_root_for_tab(tab);
     let root_changed = s.workspace_file_cache_root.as_ref() != Some(&root);

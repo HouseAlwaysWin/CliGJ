@@ -27,8 +27,11 @@ Minimal VS Code extension scaffold for CliGJ IPC integration.
 - `CliGJ: Fill Prompt (Editable)`
 - `CliGJ: Send Selection with Line Numbers (Direct Submit)`
 - `CliGJ: Fill Selection with Line Numbers (Editable)`
+- `CliGJ: Send File Path (Direct Submit)`
+- `CliGJ: Fill File Path (Editable)`
 
-When text is selected in an editor, right-click to access both selection commands directly from the context menu.
+When text is selected in an editor, right-click to access selection commands directly from the editor context menu.
+When files are selected in Explorer, right-click to send or fill file paths directly.
 
 ## Troubleshooting
 

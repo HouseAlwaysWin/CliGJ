@@ -46,8 +46,8 @@ pub(crate) fn inject_paths_into_current(
             continue;
         }
         if !tab.prompt_picked_files_abs.contains(&abs_path) {
-            tab.prompt_picked_files_abs.push(abs_path);
-            let token = workspace_files::file_attachment_token(tab.prompt_picked_files_abs.len());
+            tab.prompt_picked_files_abs.push(abs_path.clone());
+            let token = filepath_hint_token_for_abs_path(tab, abs_path.as_str());
             let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
             tab.prompt = SharedString::from(next.as_str());
         }
@@ -63,6 +63,22 @@ fn path_has_prompt_attachment(tab: &TabState, abs_path: &str) -> bool {
             .prompt_picked_images
             .iter()
             .any(|p| p.abs_path == abs_path)
+}
+
+fn filepath_hint_token_for_abs_path(tab: &TabState, abs_path: &str) -> String {
+    let file_name = workspace_files::file_name_label(abs_path);
+    let file_count = tab
+        .prompt_picked_files_abs
+        .iter()
+        .filter(|p| workspace_files::file_name_label(p) == file_name)
+        .count();
+    let image_count = tab
+        .prompt_picked_images
+        .iter()
+        .filter(|p| workspace_files::file_name_label(p.abs_path.as_str()) == file_name)
+        .count();
+    let occurrence = file_count + image_count;
+    workspace_files::filepath_hint_token(file_name.as_str(), occurrence.max(1))
 }
 
 /// Windows: paths from Explorer copy (`CF_HDROP`). `None` if clipboard has no file list or read failed.
@@ -171,7 +187,12 @@ pub(crate) fn push_prompt_image(
         abs_path,
         preview,
     });
-    let token = workspace_files::image_attachment_token(tab.prompt_picked_images.len());
+    let newest = tab
+        .prompt_picked_images
+        .last()
+        .map(|x| x.abs_path.as_str())
+        .unwrap_or("");
+    let token = filepath_hint_token_for_abs_path(tab, newest);
     let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
     tab.prompt = SharedString::from(next.as_str());
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
@@ -217,7 +238,12 @@ pub(crate) fn inject_paths_and_images_from_paths(
                         abs_path,
                         preview,
                     });
-                    let token = workspace_files::image_attachment_token(tab.prompt_picked_images.len());
+                    let newest = tab
+                        .prompt_picked_images
+                        .last()
+                        .map(|x| x.abs_path.as_str())
+                        .unwrap_or("");
+                    let token = filepath_hint_token_for_abs_path(tab, newest);
                     let next =
                         workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
                     tab.prompt = SharedString::from(next.as_str());

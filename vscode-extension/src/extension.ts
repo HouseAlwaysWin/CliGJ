@@ -18,6 +18,11 @@ type SelectionPromptData = {
   selectionPayloads: string[];
 };
 
+type ExplorerPathPromptData = {
+  prompt: string;
+  filePathPayloads: string[];
+};
+
 function sendRequest(method: string, params: Record<string, unknown> = {}): Promise<IpcResponse> {
   return new Promise((resolve, reject) => {
     const socket = net.createConnection(PIPE_PATH);
@@ -67,17 +72,28 @@ export function activate(context: vscode.ExtensionContext): void {
   const sendPromptPayload = async (
     prompt: string,
     submit: boolean,
-    selectionPayloads: string[] = []
+    selectionPayloads: string[] = [],
+    filePathPayloads: string[] = []
   ): Promise<void> => {
     output.appendLine(
-      `[sendPrompt] submit=${submit} chars=${prompt.length} selectionPayloads=${selectionPayloads.length}`
+      `[sendPrompt] submit=${submit} chars=${prompt.length} selectionPayloads=${selectionPayloads.length} filePathPayloads=${filePathPayloads.length}`
     );
     try {
-      let resp = await sendRequest("sendPrompt", { prompt, submit, selectionPayloads });
+      let resp = await sendRequest("sendPrompt", {
+        prompt,
+        submit,
+        selectionPayloads,
+        filePathPayloads
+      });
       if (!resp.ok && (resp.error ?? "").includes("no active tab")) {
         output.appendLine("[sendPrompt] no active tab, trying openTab then retry");
         await sendRequest("openTab", { focus: true });
-        resp = await sendRequest("sendPrompt", { prompt, submit, selectionPayloads });
+        resp = await sendRequest("sendPrompt", {
+          prompt,
+          submit,
+          selectionPayloads,
+          filePathPayloads
+        });
       }
       if (resp.ok) {
         output.appendLine("[sendPrompt] success");
@@ -160,6 +176,37 @@ export function activate(context: vscode.ExtensionContext): void {
     return {
       prompt,
       selectionPayloads
+    };
+  };
+
+  const getExplorerPathPrompt = (
+    targetUri?: vscode.Uri,
+    allUris?: readonly vscode.Uri[]
+  ): ExplorerPathPromptData | undefined => {
+    const uris = (allUris && allUris.length > 0 ? allUris : targetUri ? [targetUri] : [])
+      .filter((uri) => uri.scheme === "file");
+    if (uris.length === 0) {
+      return undefined;
+    }
+
+    const uniquePaths = Array.from(new Set(uris.map((uri) => uri.fsPath)));
+    const normalizedPaths = uniquePaths.map((fsPath) => {
+      const uri = vscode.Uri.file(fsPath);
+      const workspaceFolder = vscode.workspace.getWorkspaceFolder(uri);
+      const raw = workspaceFolder ? vscode.workspace.asRelativePath(uri, false) : fsPath;
+      return raw.replace(/\\/g, "/");
+    });
+
+    const nameCounts = new Map<string, number>();
+    const promptLines = normalizedPaths.map((path) => {
+      const fileName = path.split("/").pop() || path;
+      const occurrence = (nameCounts.get(fileName) ?? 0) + 1;
+      nameCounts.set(fileName, occurrence);
+      return occurrence === 1 ? `@${fileName}` : `@${fileName}_${occurrence}`;
+    });
+    return {
+      prompt: promptLines.join("\n"),
+      filePathPayloads: normalizedPaths
     };
   };
 
@@ -249,13 +296,41 @@ export function activate(context: vscode.ExtensionContext): void {
     await sendPromptPayload(selectionData.prompt, false, selectionData.selectionPayloads);
   });
 
+  const sendExplorerPath = vscode.commands.registerCommand(
+    "cligj.sendExplorerPath",
+    async (targetUri?: vscode.Uri, allUris?: readonly vscode.Uri[]) => {
+      output.appendLine("[command] cligj.sendExplorerPath");
+      const pathData = getExplorerPathPrompt(targetUri, allUris);
+      if (!pathData) {
+        void vscode.window.showWarningMessage("No file path found from Explorer selection");
+        return;
+      }
+      await sendPromptPayload(pathData.prompt, true, [], pathData.filePathPayloads);
+    }
+  );
+
+  const fillExplorerPath = vscode.commands.registerCommand(
+    "cligj.fillExplorerPath",
+    async (targetUri?: vscode.Uri, allUris?: readonly vscode.Uri[]) => {
+      output.appendLine("[command] cligj.fillExplorerPath");
+      const pathData = getExplorerPathPrompt(targetUri, allUris);
+      if (!pathData) {
+        void vscode.window.showWarningMessage("No file path found from Explorer selection");
+        return;
+      }
+      await sendPromptPayload(pathData.prompt, false, [], pathData.filePathPayloads);
+    }
+  );
+
   context.subscriptions.push(
     ping,
     openTab,
     sendPrompt,
     fillPrompt,
     sendSelectionPrompt,
-    fillSelectionPrompt
+    fillSelectionPrompt,
+    sendExplorerPath,
+    fillExplorerPath
   );
 }
 

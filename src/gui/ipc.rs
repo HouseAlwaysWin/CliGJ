@@ -30,6 +30,7 @@ pub(crate) enum IpcGuiCommand {
         prompt: String,
         submit: bool,
         selection_payloads: Vec<String>,
+        file_path_payloads: Vec<String>,
         response_tx: mpsc::Sender<IpcGuiResponse>,
     },
 }
@@ -513,6 +514,17 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();
+            let file_path_payloads = req
+                .params
+                .get("filePathPayloads")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .filter_map(Value::as_str)
+                        .map(ToOwned::to_owned)
+                        .collect::<Vec<String>>()
+                })
+                .unwrap_or_default();
             let (tx, rx) = mpsc::channel();
             let send = gui_tx.send(IpcGuiCommand::SendPrompt {
                 id: req.id.clone(),
@@ -520,6 +532,7 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                 prompt,
                 submit,
                 selection_payloads,
+                file_path_payloads,
                 response_tx: tx,
             });
             if send.is_err() {

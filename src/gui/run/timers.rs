@@ -505,6 +505,7 @@ fn handle_ipc_gui_command(
             prompt,
             submit,
             selection_payloads,
+            file_path_payloads,
             response_tx,
         } => {
             let mut out_id = id;
@@ -534,6 +535,7 @@ fn handle_ipc_gui_command(
             let cur = s.current;
             s.tabs[cur].prompt = SharedString::from(prompt.as_str());
             s.tabs[cur].prompt_picked_selections = selection_payloads;
+            s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
             if submit {
                 if let Err(e) = s.submit_current_prompt(ui) {
                     let _ = response_tx.send(IpcGuiResponse {
