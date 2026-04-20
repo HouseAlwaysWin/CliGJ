@@ -26,7 +26,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     callback interactive-command-selected(string);
-    callback add-custom-command-requested;
+    callback manage-interactive-commands-requested;
     forward-focus: prompt-input;
 
     function pty_mod(event: KeyEvent) -> int {
@@ -277,38 +277,49 @@ export component GjPromptDropZone inherits Rectangle {
 
                     HorizontalLayout {
                         spacing: 4px;
+                        alignment: start;
+                        horizontal-stretch: 0;
 
-                        ComboBox {
-                            min-width: 132px;
+                        // Cap width so long labels don't stretch the bar; popup uses native scrolling.
+                        Rectangle {
+                            width: 168px;
                             height: 22px;
-                            model: root.interactive-command-choices;
-                            current-value: @tr("選擇指令");
-                            selected(val) => {
-                                root.interactive-command-selected(val);
-                                self.current-value = @tr("選擇指令");
+                            horizontal-stretch: 0;
+
+                            ComboBox {
+                                width: 100%;
+                                height: 22px;
+                                model: root.interactive-command-choices;
+                                current-value: @tr("選擇指令");
+                                selected(val) => {
+                                    root.interactive-command-selected(val);
+                                    self.current-value = @tr("選擇指令");
+                                }
                             }
                         }
 
                         Rectangle {
-                            min-width: 28px;
+                            width: 28px;
                             height: 22px;
+                            horizontal-stretch: 0;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
                             border-radius: 11px;
                             background: #00000000;
 
                             Text {
-                                text: "+";
+                                // ASCII — U+2026 ellipsis is missing from some embedded fonts (shows as tofu).
+                                text: "...";
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 14px;
-                                font-weight: 600;
+                                font-size: 11px;
+                                font-weight: 700;
                             }
 
                             TouchArea {
                                 clicked => {
-                                    root.add-custom-command-requested();
+                                    root.manage-interactive-commands-requested();
                                 }
                             }
                         }

@@ -42,7 +42,7 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-resize-requested(int, int);
     callback terminal-wheel(int) -> bool;
     callback interactive-command-selected(string);
-    callback add-custom-command-requested;
+    callback manage-interactive-commands-requested;
     forward-focus: prompt-zone;
 
     background: AppTheme.bg;
@@ -153,8 +153,8 @@ export component GjWorkspace inherits Rectangle {
             interactive-command-selected(val) => {
                 root.interactive-command-selected(val);
             }
-            add-custom-command-requested => {
-                root.add-custom-command-requested();
+            manage-interactive-commands-requested => {
+                root.manage-interactive-commands-requested();
             }
         }
     }

@@ -12,6 +12,14 @@ export struct PromptImageChip {
     thumb: image,
 }
 
+/// One row in the interactive-command editor (launcher name + shell command).
+export struct InteractiveCmdEditorRow {
+    name: string,
+    line: string,
+    /// Built-in preset rows: key label is read-only; name is still carried for display.
+    key-locked: bool,
+}
+
 export struct TermLine {
     // True when the PTY physical row has no visible cells (no fake row height in the viewer).
     blank: bool,

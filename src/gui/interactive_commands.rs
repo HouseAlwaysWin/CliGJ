@@ -3,7 +3,7 @@
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::core::config::AppConfig;
-use crate::gui::slint_ui::AppWindow;
+use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
 
 /// Seed when config has no `interactive_commands` (and no legacy customs).
@@ -47,6 +47,20 @@ pub(crate) fn sync_interactive_command_choices_to_ui(ui: &AppWindow, gs: &GuiSta
     ui.set_ws_interactive_command_choices(ModelRc::new(VecModel::from(labels)));
 }
 
+/// Load full name/command list into the interactive-command editor modal.
+pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
+    let rows: Vec<InteractiveCmdEditorRow> = gs
+        .interactive_commands
+        .iter()
+        .map(|(n, c)| InteractiveCmdEditorRow {
+            name: SharedString::from(n.as_str()),
+            line: SharedString::from(c.as_str()),
+            key_locked: is_reserved_preset_display_name(n),
+        })
+        .collect();
+    ui.set_ws_interactive_manage_rows(ModelRc::new(VecModel::from(rows)));
+}
+
 /// Full PTY payload including line ending(s).
 pub(crate) fn resolve_interactive_launch(line_label: &str, gs: &GuiState) -> Option<String> {
     for (name, cmd) in &gs.interactive_commands {
@@ -64,10 +78,9 @@ pub(crate) fn resolve_interactive_launch(line_label: &str, gs: &GuiState) -> Opt
     None
 }
 
-pub(crate) fn interactive_name_is_allowed(name: &str, gs: &GuiState) -> bool {
-    let name = name.trim();
-    if name.is_empty() {
-        return false;
-    }
-    !gs.interactive_commands.iter().any(|(n, _)| n == name)
+/// Built-in entries from seed config (same display `name` as in default_interactive_command_pairs).
+pub(crate) fn is_reserved_preset_display_name(name: &str) -> bool {
+    default_interactive_command_pairs()
+        .iter()
+        .any(|(n, _)| n == name)
 }

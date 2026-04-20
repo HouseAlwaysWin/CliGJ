@@ -1,9 +1,10 @@
 //! `AppWindow` callback wiring (tabs, prompt, chips, selection, rename, inject).
 
 use std::cell::RefCell;
+use std::collections::HashSet;
 use std::rc::Rc;
 
-use slint::{spawn_local, ComponentHandle, Model, SharedString};
+use slint::{spawn_local, ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::terminal::key_encoding::{self, MOD_CTRL};
 use crate::terminal::prompt_key::PromptKeyAction;
@@ -12,8 +13,10 @@ use crate::workspace_files;
 use crate::core::config::AppConfig;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
-use crate::gui::interactive_commands::{self, sync_interactive_command_choices_to_ui};
-use crate::gui::slint_ui::AppWindow;
+use crate::gui::interactive_commands::{
+    self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
+};
+use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{
     clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui,
@@ -29,6 +32,16 @@ use super::helpers::{
 
 fn is_pty_enter_key(k: &str) -> bool {
     matches!(k, "Return" | "\n" | "\r")
+}
+
+fn model_interactive_editor_rows(m: &ModelRc<InteractiveCmdEditorRow>) -> Vec<InteractiveCmdEditorRow> {
+    (0..m.row_count())
+        .filter_map(|i| m.row_data(i))
+        .collect()
+}
+
+fn set_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
+    ui.set_ws_interactive_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
 
 pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -342,48 +355,129 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         });
     });
 
+    let st_manage = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_add_custom_command_requested(move || {
+    app.on_manage_interactive_commands_requested(move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
-        ui.set_ws_custom_cmd_name(SharedString::new());
-        ui.set_ws_custom_cmd_line(SharedString::new());
-        ui.set_ws_custom_cmd_open(true);
+        let s = st_manage.borrow();
+        sync_interactive_manage_editor_to_ui(&ui, &*s);
+        drop(s);
+        ui.set_ws_interactive_manage_open(true);
     });
 
     let app_weak = app.as_weak();
-    app.on_custom_cmd_cancel(move || {
+    app.on_manage_add_interactive_row(move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
-        ui.set_ws_custom_cmd_open(false);
+        let mut rows = model_interactive_editor_rows(&ui.get_ws_interactive_manage_rows());
+        rows.push(InteractiveCmdEditorRow {
+            name: SharedString::new(),
+            line: SharedString::new(),
+            key_locked: false,
+        });
+        set_manage_rows(&ui, rows);
     });
 
-    let st_cmd_save = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_custom_cmd_commit(move || {
+    app.on_remove_interactive_manage_row(move |idx| {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
-        let name = ui.get_ws_custom_cmd_name().to_string();
-        let line = ui.get_ws_custom_cmd_line().to_string();
-        let name_t = name.trim();
-        let line_t = line.trim();
-        if name_t.is_empty() || line_t.is_empty() {
-            eprintln!("CliGJ: custom command needs a name and command line");
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let mut rows = model_interactive_editor_rows(&ui.get_ws_interactive_manage_rows());
+        if i >= rows.len() || rows[i].key_locked {
+            return;
+        }
+        rows.remove(i);
+        set_manage_rows(&ui, rows);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_name_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        if row.key_locked {
+            return;
+        }
+        row.name = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_line_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.line = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let st_save = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_save_interactive_manage(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let rows_m = ui.get_ws_interactive_manage_rows();
+        let n = rows_m.row_count();
+        let mut seen = HashSet::<String>::new();
+        let mut out: Vec<(String, String)> = Vec::new();
+        for i in 0..n {
+            let row = rows_m.row_data(i).unwrap();
+            let name = row.name.to_string();
+            let line = row.line.to_string();
+            let nt = name.trim();
+            let lt = line.trim();
+            if nt.is_empty() && lt.is_empty() {
+                continue;
+            }
+            if nt.is_empty() {
+                eprintln!("CliGJ: interactive command row needs a display name");
+                return;
+            }
+            if lt.is_empty() {
+                eprintln!("CliGJ: interactive command row needs a command line");
+                return;
+            }
+            let nt = nt.to_string();
+            if !seen.insert(nt.clone()) {
+                eprintln!("CliGJ: duplicate interactive command name: {nt}");
+                return;
+            }
+            out.push((nt, lt.to_string()));
+        }
+        if out.is_empty() {
+            eprintln!("CliGJ: need at least one interactive command");
             return;
         }
         {
-            let mut s = st_cmd_save.borrow_mut();
-            if !interactive_commands::interactive_name_is_allowed(name_t, &*s) {
-                eprintln!("CliGJ: command name conflicts with a preset or existing entry");
-                return;
-            }
-            s.interactive_commands
-                .push((name_t.to_string(), line_t.to_string()));
+            let mut s = st_save.borrow_mut();
+            s.interactive_commands = out;
         }
-        let snapshot = st_cmd_save.borrow().interactive_commands.clone();
+        let snapshot = st_save.borrow().interactive_commands.clone();
         match AppConfig::load_or_default() {
             Ok(mut cfg) => {
                 cfg.set_interactive_commands(&snapshot);
@@ -393,8 +487,16 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             }
             Err(e) => eprintln!("CliGJ: load config: {e}"),
         }
-        sync_interactive_command_choices_to_ui(&ui, &st_cmd_save.borrow());
-        ui.set_ws_custom_cmd_open(false);
+        sync_interactive_command_choices_to_ui(&ui, &st_save.borrow());
+        ui.set_ws_interactive_manage_open(false);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_close_interactive_manage(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_interactive_manage_open(false);
     });
 }
 

@@ -2,8 +2,8 @@ import { AppTheme } from "theme.slint";
 import { LogicalKey } from "key_labels.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
-import { TextEdit } from "std-widgets.slint";
-import { PromptImageChip, TermLine } from "term_types.slint";
+import { LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
+import { InteractiveCmdEditorRow, PromptImageChip, TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
     title: "CliGJ - UI Foundation";
@@ -42,9 +42,8 @@ export component AppWindow inherits Window {
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <bool> ws-raw-input: false;
     in-out property <[string]> ws-interactive-command-choices: [];
-    in-out property <bool> ws-custom-cmd-open: false;
-    in-out property <string> ws-custom-cmd-name: "";
-    in-out property <string> ws-custom-cmd-line: "";
+    in-out property <bool> ws-interactive-manage-open: false;
+    in-out property <[InteractiveCmdEditorRow]> ws-interactive-manage-rows: [];
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -81,9 +80,13 @@ export component AppWindow inherits Window {
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
-    callback add-custom-command-requested;
-    callback custom-cmd-cancel;
-    callback custom-cmd-commit;
+    callback manage-interactive-commands-requested;
+    callback manage-add-interactive-row;
+    callback remove-interactive-manage-row(int);
+    callback interactive-manage-name-edited(int, string);
+    callback interactive-manage-line-edited(int, string);
+    callback save-interactive-manage;
+    callback close-interactive-manage;
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -122,8 +125,11 @@ export component AppWindow inherits Window {
         capture-key-pressed(event) => {
             let t = LogicalKey.tty_text(event);
             let m = ws_pty_mod(event);
+            if (root.ws-interactive-manage-open) {
+                return reject;
+            }
             // Fast path: normal typing stays in TextEdit, avoid Rust callback on every keystroke.
-            if (!root.ws-raw-input && !root.ws-at-picker-open && m == 0
+            if (!root.ws-raw-input && !root.ws-at-picker-open && !root.ws-interactive-manage-open && m == 0
                     && t != "" && t != "\n" && !composer_needs_rust_key(t)) {
                 return reject;
             }
@@ -238,8 +244,8 @@ export component AppWindow inherits Window {
                         interactive-command-selected(val) => {
                             root.interactive-command-selected(val);
                         }
-                        add-custom-command-requested => {
-                            root.add-custom-command-requested();
+                        manage-interactive-commands-requested => {
+                            root.manage-interactive-commands-requested();
                         }
                         terminal-resize-requested(cols, rows) => {
                             root.terminal-resize-requested(cols, rows);
@@ -350,17 +356,17 @@ export component AppWindow inherits Window {
         }
     }
 
-    if root.ws-custom-cmd-open : Rectangle {
+    if root.ws-interactive-manage-open : Rectangle {
         x: 0px;
         y: 0px;
         width: parent.width;
         height: parent.height;
         background: #00000080;
-        z: 105;
+        z: 106;
 
         Rectangle {
-            width: 400px;
-            height: 260px;
+            width: 560px;
+            height: 420px;
             x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             background: AppTheme.panel;
@@ -373,78 +379,198 @@ export component AppWindow inherits Window {
                 spacing: 8px;
 
                 Text {
-                    text: @tr("新增指令");
+                    text: @tr("指令設定");
                     color: AppTheme.text;
                     font-size: 13px;
                     font-weight: 600;
                 }
 
                 Text {
-                    text: @tr("顯示名稱");
+                    text: @tr("內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。");
                     color: AppTheme.text_muted;
                     font-size: 11px;
-                }
-
-                TextEdit {
-                    text <=> root.ws-custom-cmd-name;
-                    min-height: 28px;
-                    font-size: 13px;
-                    wrap: no-wrap;
-                }
-
-                Text {
-                    text: @tr("指令字串");
-                    color: AppTheme.text_muted;
-                    font-size: 11px;
-                }
-
-                TextEdit {
-                    text <=> root.ws-custom-cmd-line;
-                    min-height: 72px;
-                    font-size: 13px;
                     wrap: word-wrap;
                 }
 
                 HorizontalLayout {
                     spacing: 8px;
-                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+                    alignment: end;
 
                     Rectangle {
-                        min-width: 72px;
-                        height: 28px;
+                        min-width: 64px;
+                        height: 26px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 8px;
                         background: #00000000;
+
                         Text {
-                            text: @tr("取消");
+                            text: @tr("新增");
+                            color: AppTheme.text;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            font-weight: 600;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.manage-add-interactive-row();
+                            }
+                        }
+                    }
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    min-height: 0px;
+
+                    VerticalLayout {
+                        alignment: start;
+                        spacing: 6px;
+
+                        for row[key_idx] in root.ws-interactive-manage-rows: Rectangle {
+                            min-height: 32px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 6px;
+                            background: #00000000;
+
+                            HorizontalLayout {
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                spacing: 6px;
+                                alignment: center;
+
+                                if row.key-locked: Rectangle {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    min-height: 26px;
+                                    background: #00000020;
+                                    border-radius: 4px;
+
+                                    Text {
+                                        text: row.name;
+                                        color: AppTheme.text_muted;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: left;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                if !row.key-locked: LineEdit {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    font-size: 12px;
+                                    text: row.name;
+                                    edited(new_text) => {
+                                        root.interactive-manage-name-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Text {
+                                    text: ">";
+                                    color: AppTheme.text_muted;
+                                    font-size: 12px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+
+                                LineEdit {
+                                    horizontal-stretch: 2;
+                                    min-width: 140px;
+                                    font-size: 12px;
+                                    text: row.line;
+                                    edited(new_text) => {
+                                        root.interactive-manage-line-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Rectangle {
+                                    min-width: 44px;
+                                    max-width: 52px;
+                                    height: 24px;
+                                    horizontal-stretch: 0;
+                                    border-width: 1px;
+                                    border-color: #ff4f6d;
+                                    border-radius: 6px;
+                                    background: #00000000;
+
+                                    Text {
+                                        text: @tr("刪除");
+                                        color: #ff8ca8;
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    TouchArea {
+                                        enabled: !row.key-locked;
+                                        clicked => {
+                                            root.remove-interactive-manage-row(key_idx);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 8px;
+                        background: #00000000;
+
+                        Text {
+                            text: @tr("關閉");
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             font-size: 12px;
                         }
+
                         TouchArea {
-                            clicked => { root.custom-cmd-cancel(); }
+                            clicked => {
+                                root.close-interactive-manage();
+                            }
                         }
                     }
 
                     Rectangle {
                         min-width: 72px;
                         height: 28px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.accent;
                         border-radius: 8px;
                         background: AppTheme.accent;
+
                         Text {
-                            text: @tr("確定");
+                            text: @tr("儲存");
                             color: AppTheme.text;
                             horizontal-alignment: center;
                             vertical-alignment: center;
                             font-size: 12px;
                             font-weight: 700;
                         }
+
                         TouchArea {
-                            clicked => { root.custom-cmd-commit(); }
+                            clicked => {
+                                root.save-interactive-manage();
+                            }
                         }
                     }
                 }
