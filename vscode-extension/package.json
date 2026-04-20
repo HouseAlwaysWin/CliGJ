@@ -15,7 +15,8 @@
   "activationEvents": [
     "onCommand:cligj.ping",
     "onCommand:cligj.openTab",
-    "onCommand:cligj.sendPrompt"
+    "onCommand:cligj.sendPrompt",
+    "onCommand:cligj.fillPrompt"
   ],
   "contributes": {
     "commands": [
@@ -29,7 +30,11 @@
       },
       {
         "command": "cligj.sendPrompt",
-        "title": "CliGJ: Send Prompt"
+        "title": "CliGJ: Send Prompt (Direct Submit)"
+      },
+      {
+        "command": "cligj.fillPrompt",
+        "title": "CliGJ: Fill Prompt (Editable)"
       }
     ]
   },

@@ -1,4 +1,4 @@
-use std::io::{BufRead, BufReader, Write};
+use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::thread;
@@ -6,8 +6,8 @@ use std::time::Duration;
 
 use interprocess::TryClone;
 use interprocess::local_socket::{
-    traits::Listener, GenericFilePath, GenericNamespaced, ListenerOptions, NameType, Stream,
-    ToFsName, ToNsName,
+    traits::{Listener, Stream as StreamOps},
+    GenericFilePath, GenericNamespaced, ListenerOptions, NameType, Stream, ToFsName, ToNsName,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -135,6 +135,8 @@ impl IpcBridge {
     }
 
     pub(crate) fn stop(&self) {
+        self.running.store(false, Ordering::Release);
+
         let event_sender = self
             .event_tx
             .lock()
@@ -331,28 +333,45 @@ fn run_server(
         let status_on_disconnect = Arc::clone(&status);
         let clients_on_disconnect = Arc::clone(&client_count);
         let gui_tx_clone = gui_tx.clone();
+        let running_client = Arc::clone(&running);
         thread::Builder::new()
             .name("cligj-ipc-client".to_string())
             .spawn(move || {
+                let running_for_writer = Arc::clone(&running_client);
                 let writer_handle =
                     thread::Builder::new()
                         .name("cligj-ipc-client-writer".to_string())
                         .spawn(move || {
                             let mut stream = writer_stream;
-                            while let Ok(line) = writer_rx.recv() {
-                                if stream.write_all(line.as_bytes()).is_err() {
-                                    break;
-                                }
-                                if stream.write_all(b"\n").is_err() {
-                                    break;
-                                }
-                                if stream.flush().is_err() {
-                                    break;
+                            loop {
+                                match writer_rx.recv_timeout(Duration::from_millis(40)) {
+                                    Ok(line) => {
+                                        if stream.write_all(line.as_bytes()).is_err() {
+                                            break;
+                                        }
+                                        if stream.write_all(b"\n").is_err() {
+                                            break;
+                                        }
+                                        if stream.flush().is_err() {
+                                            break;
+                                        }
+                                    }
+                                    Err(mpsc::RecvTimeoutError::Timeout) => {
+                                        if !running_for_writer.load(Ordering::Acquire) {
+                                            break;
+                                        }
+                                    }
+                                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
                                 }
                             }
                         });
 
-                handle_client_requests(incoming, writer_tx.clone(), &gui_tx_clone);
+                handle_client_requests(
+                    incoming,
+                    writer_tx.clone(),
+                    &gui_tx_clone,
+                    Arc::clone(&running_client),
+                );
                 if let Ok(mut list) = peers_on_disconnect.lock() {
                     list.retain(|s| !std::ptr::eq(s, &writer_tx));
                 }
@@ -383,16 +402,26 @@ fn handle_client_requests(
     stream: Stream,
     writer_tx: mpsc::Sender<String>,
     gui_tx: &mpsc::Sender<IpcGuiCommand>,
+    running: Arc<AtomicBool>,
 ) {
+    let _ = stream.set_nonblocking(true);
     let mut reader = BufReader::new(stream);
     let mut line = String::new();
     loop {
+        if !running.load(Ordering::Acquire) {
+            break;
+        }
         line.clear();
         let read = match reader.read_line(&mut line) {
             Ok(n) => n,
+            Err(e) if e.kind() == ErrorKind::WouldBlock => {
+                thread::sleep(Duration::from_millis(20));
+                continue;
+            }
             Err(_) => break,
         };
         if read == 0 {
+            thread::sleep(Duration::from_millis(20));
             break;
         }
         let trimmed = line.trim();

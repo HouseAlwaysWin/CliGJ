@@ -55,6 +55,35 @@ function sendRequest(method: string, params: Record<string, unknown> = {}): Prom
 }
 
 export function activate(context: vscode.ExtensionContext): void {
+  const askPrompt = async (title: string): Promise<string | undefined> => {
+    return vscode.window.showInputBox({
+      title,
+      placeHolder: "Enter prompt text...",
+      ignoreFocusOut: true
+    });
+  };
+
+  const sendPromptWithMode = async (submit: boolean): Promise<void> => {
+    const prompt = await askPrompt(
+      submit ? "Send Prompt to CliGJ (Direct Submit)" : "Fill Prompt in CliGJ Input Box (Editable)"
+    );
+    if (!prompt) {
+      return;
+    }
+    try {
+      const resp = await sendRequest("sendPrompt", { prompt, submit });
+      if (resp.ok) {
+        void vscode.window.showInformationMessage(
+          submit ? "Prompt sent to CliGJ" : "Prompt filled to CliGJ input box"
+        );
+      } else {
+        void vscode.window.showErrorMessage(`sendPrompt failed: ${resp.error ?? "unknown error"}`);
+      }
+    } catch (err) {
+      void vscode.window.showErrorMessage(`sendPrompt error: ${String(err)}`);
+    }
+  };
+
   const ping = vscode.commands.registerCommand("cligj.ping", async () => {
     try {
       const resp = await sendRequest("ping");
@@ -82,27 +111,14 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   const sendPrompt = vscode.commands.registerCommand("cligj.sendPrompt", async () => {
-    const prompt = await vscode.window.showInputBox({
-      title: "Send Prompt to CliGJ",
-      placeHolder: "Enter prompt text...",
-      ignoreFocusOut: true
-    });
-    if (!prompt) {
-      return;
-    }
-    try {
-      const resp = await sendRequest("sendPrompt", { prompt, submit: true });
-      if (resp.ok) {
-        void vscode.window.showInformationMessage("Prompt sent to CliGJ");
-      } else {
-        void vscode.window.showErrorMessage(`sendPrompt failed: ${resp.error ?? "unknown error"}`);
-      }
-    } catch (err) {
-      void vscode.window.showErrorMessage(`sendPrompt error: ${String(err)}`);
-    }
+    await sendPromptWithMode(true);
   });
 
-  context.subscriptions.push(ping, openTab, sendPrompt);
+  const fillPrompt = vscode.commands.registerCommand("cligj.fillPrompt", async () => {
+    await sendPromptWithMode(false);
+  });
+
+  context.subscriptions.push(ping, openTab, sendPrompt, fillPrompt);
 }
 
 export function deactivate(): void {}
