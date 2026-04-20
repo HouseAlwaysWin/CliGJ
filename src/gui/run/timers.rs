@@ -13,7 +13,7 @@ use slint::{ComponentHandle, SharedString, Timer};
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
-use crate::gui::ui_sync::{push_terminal_view_to_ui, sync_debug_stats, terminal_scroll_top_for_tab};
+use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
@@ -279,7 +279,6 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         if n > 0 && (tab.auto_scroll || interactive) {
             ui.set_ws_terminal_total_lines(n as i32);
         }
-        sync_debug_stats(ui, tab);
 
         let scroll_arg = if resync {
             Some(exp)
@@ -305,7 +304,6 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         tab.terminal_scroll_resync_next = false;
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let exp = terminal_scroll_top_for_tab(tab, vh);
-        sync_debug_stats(ui, tab);
         ui.invoke_ws_apply_terminal_scroll_top_px(exp);
         push_terminal_view_to_ui(ui, tab, Some(exp));
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
@@ -316,7 +314,6 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     let vh = ui.get_ws_terminal_viewport_height_px();
     if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
         let exp = terminal_scroll_top_for_tab(tab, vh.max(1.0));
-        sync_debug_stats(ui, tab);
         if (tab.last_pushed_scroll_top - exp).abs() > 0.5
             || (vh - tab.last_pushed_viewport_height).abs() > 0.5
         {
@@ -330,7 +327,6 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     if (st - tab.last_pushed_scroll_top).abs() > 0.5
         || (vh - tab.last_pushed_viewport_height).abs() > 0.5
     {
-        sync_debug_stats(ui, tab);
         push_terminal_view_to_ui(ui, tab, None);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     }
@@ -345,7 +341,6 @@ fn flush_pending_scroll(ui: &AppWindow, s: &mut GuiState) {
         let tab = &mut s.tabs[cur];
         let n = tab.terminal_lines.len() as i32;
         ui.set_ws_terminal_total_lines(n);
-        sync_debug_stats(ui, tab);
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let scroll = terminal_scroll_top_for_tab(tab, vh);
         ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
