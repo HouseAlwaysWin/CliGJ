@@ -132,20 +132,74 @@ fn invalidate_terminal_window_cache(tab: &mut TabState) {
     tab.last_window_total = usize::MAX;
 }
 
-fn frame_text_signature(lines: &[ColoredLine]) -> String {
-    lines
+fn interactive_frame_overlap_len(old_frame: &[ColoredLine], new_frame: &[ColoredLine]) -> usize {
+    let max_overlap = old_frame.len().min(new_frame.len());
+    for overlap in (1..=max_overlap).rev() {
+        if interactive_frames_text_eq(
+            &old_frame[old_frame.len() - overlap..],
+            &new_frame[..overlap],
+        ) {
+            return overlap;
+        }
+    }
+    0
+}
+
+fn interactive_line_text(line: &ColoredLine) -> String {
+    line.spans
         .iter()
-        .filter_map(|line| {
-            let text: String = line.spans.iter().map(|span| span.text.as_str()).collect();
-            let trimmed = text.trim().to_string();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(trimmed)
-            }
-        })
-        .collect::<Vec<_>>()
-        .join("\n")
+        .map(|span| span.text.as_str())
+        .collect::<String>()
+        .trim_end()
+        .to_string()
+}
+
+fn interactive_frames_text_eq(a: &[ColoredLine], b: &[ColoredLine]) -> bool {
+    a.len() == b.len()
+        && a.iter()
+            .zip(b.iter())
+            .all(|(lhs, rhs)| interactive_line_text(lhs) == interactive_line_text(rhs))
+}
+
+fn interactive_archive_prefix_len(old_frame: &[ColoredLine], new_frame: &[ColoredLine]) -> usize {
+    if old_frame.len() < 8 || new_frame.len() < 8 {
+        return 0;
+    }
+
+    let overlap = interactive_frame_overlap_len(old_frame, new_frame);
+    if overlap == 0 || overlap >= old_frame.len() {
+        return 0;
+    }
+
+    let archived_len = old_frame.len() - overlap;
+    let min_frame_len = old_frame.len().min(new_frame.len());
+    let near_full_roll = overlap + 4 >= min_frame_len;
+    let small_shift = archived_len <= 4;
+
+    // Only archive when the new frame looks like the old frame shifted upward by a small amount.
+    // This preserves scrollback for genuine terminal scrolling without turning redraws into
+    // repeated whole-screen history.
+    if near_full_roll && small_shift {
+        archived_len
+    } else {
+        0
+    }
+}
+
+fn trim_history_duplicate_prefix(
+    history: &[ColoredLine],
+    archived_chunk: &[ColoredLine],
+) -> usize {
+    let max_overlap = history.len().min(archived_chunk.len());
+    for overlap in (1..=max_overlap).rev() {
+        if interactive_frames_text_eq(
+            &history[history.len() - overlap..],
+            &archived_chunk[..overlap],
+        ) {
+            return overlap;
+        }
+    }
+    0
 }
 
 fn rebuild_interactive_terminal_lines(tab: &mut TabState) {
@@ -170,16 +224,19 @@ fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
     }
 
     if let Some(new_lines) = update.replace_lines {
-        let old_sig = frame_text_signature(&tab.interactive_frame_lines);
-        let new_sig = frame_text_signature(&new_lines);
-        if !old_sig.is_empty()
-            && old_sig != new_sig
-            && old_sig != tab.interactive_last_archived_signature
-        {
-            tab.interactive_history_lines
-                .extend(tab.interactive_frame_lines.iter().cloned());
-            tab.interactive_last_archived_signature = old_sig;
+        let archived_len =
+            interactive_archive_prefix_len(&tab.interactive_frame_lines, &new_lines);
+        if archived_len > 0 {
+            let archived_chunk = &tab.interactive_frame_lines[..archived_len];
+            let trim_prefix =
+                trim_history_duplicate_prefix(&tab.interactive_history_lines, archived_chunk);
+            if trim_prefix < archived_chunk.len() {
+                tab.interactive_history_lines.extend(
+                    archived_chunk[trim_prefix..].iter().cloned(),
+                );
+            }
         }
+        tab.interactive_last_archived_signature.clear();
         tab.interactive_frame_lines = new_lines;
         rebuild_interactive_terminal_lines(tab);
         tab.terminal_text.clear();

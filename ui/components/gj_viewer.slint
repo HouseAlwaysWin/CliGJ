@@ -16,6 +16,7 @@ export component GjViewer inherits Rectangle {
     /// Monospace cell width (approx. 13px Cascadia Code; tune if selection drifts).
     private property <length> char-width: 7.8px;
     private property <length> stripe-width: 3px;
+    private property <length> scrollbar-gutter: 14px;
     callback selection-committed(int, int, int, int);
     callback viewport-changed;
     callback terminal-resize-requested(int, int);
@@ -227,7 +228,7 @@ export component GjViewer inherits Rectangle {
         visible: true;
         mouse-drag-pan-enabled: false;
         horizontal-scrollbar-policy: always-off;
-        vertical-scrollbar-policy: as-needed;
+        vertical-scrollbar-policy: always-on;
         x: root.terminal-left-inset;
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset);
@@ -319,7 +320,7 @@ export component GjViewer inherits Rectangle {
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset);
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: parent.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
