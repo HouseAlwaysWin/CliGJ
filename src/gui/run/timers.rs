@@ -13,7 +13,7 @@ use slint::{ComponentHandle, SharedString, Timer};
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
-use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
+use crate::gui::ui_sync::{push_terminal_view_to_ui, sync_debug_stats, terminal_scroll_top_for_tab};
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
@@ -132,20 +132,36 @@ fn invalidate_terminal_window_cache(tab: &mut TabState) {
     tab.last_window_total = usize::MAX;
 }
 
-fn interactive_frame_overlap_len(old_frame: &[ColoredLine], new_frame: &[ColoredLine]) -> usize {
-    let max_overlap = old_frame.len().min(new_frame.len());
-    for overlap in (0..=max_overlap).rev() {
-        if old_frame[old_frame.len().saturating_sub(overlap)..] == new_frame[..overlap] {
-            return overlap;
-        }
-    }
-    0
+fn frame_text_signature(lines: &[ColoredLine]) -> String {
+    lines
+        .iter()
+        .filter_map(|line| {
+            let text: String = line.spans.iter().map(|span| span.text.as_str()).collect();
+            let trimmed = text.trim().to_string();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(trimmed)
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn rebuild_interactive_terminal_lines(tab: &mut TabState) {
+    tab.terminal_lines.clear();
+    tab.terminal_lines
+        .extend(tab.interactive_history_lines.iter().cloned());
+    tab.terminal_lines
+        .extend(tab.interactive_frame_lines.iter().cloned());
 }
 
 fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
     if update.reset_terminal_buffer {
         tab.terminal_lines.clear();
+        tab.interactive_history_lines.clear();
         tab.interactive_frame_lines.clear();
+        tab.interactive_last_archived_signature.clear();
         tab.terminal_text.clear();
         tab.terminal_physical_origin = 0;
         tab.terminal_saved_scroll_top_px = 0.0;
@@ -154,28 +170,22 @@ fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
     }
 
     if let Some(new_lines) = update.replace_lines {
-        let overlap = interactive_frame_overlap_len(&tab.interactive_frame_lines, &new_lines);
-        let min_frame_len = tab.interactive_frame_lines.len().min(new_lines.len());
-        let strong_overlap = overlap > 0 && overlap * 3 >= min_frame_len.max(1);
-        let history_len = tab
-            .terminal_lines
-            .len()
-            .saturating_sub(tab.interactive_frame_lines.len());
-        tab.terminal_lines.truncate(history_len);
-        if strong_overlap && overlap < tab.interactive_frame_lines.len() {
-            let archived_len = tab.interactive_frame_lines.len() - overlap;
-            tab.terminal_lines.extend(
-                tab.interactive_frame_lines[..archived_len]
-                    .iter()
-                    .cloned(),
-            );
+        let old_sig = frame_text_signature(&tab.interactive_frame_lines);
+        let new_sig = frame_text_signature(&new_lines);
+        if !old_sig.is_empty()
+            && old_sig != new_sig
+            && old_sig != tab.interactive_last_archived_signature
+        {
+            tab.interactive_history_lines
+                .extend(tab.interactive_frame_lines.iter().cloned());
+            tab.interactive_last_archived_signature = old_sig;
         }
-        tab.terminal_lines.extend(new_lines.iter().cloned());
         tab.interactive_frame_lines = new_lines;
+        rebuild_interactive_terminal_lines(tab);
         tab.terminal_text.clear();
         tab.terminal_cursor_row = update
             .cursor_row
-            .map(|row| tab.terminal_lines.len().saturating_sub(tab.interactive_frame_lines.len()) + row);
+            .map(|row| tab.interactive_history_lines.len() + row);
         tab.terminal_cursor_col = update.cursor_col;
         invalidate_terminal_window_cache(tab);
         tab.terminal_model_dirty.extend(0..tab.terminal_lines.len());
@@ -186,7 +196,9 @@ fn apply_interactive_ai_update(tab: &mut TabState, update: PendingTabUpdate) {
     if let Some(text) = update.replace_text {
         tab.terminal_text = text;
         tab.terminal_lines.clear();
+        tab.interactive_history_lines.clear();
         tab.interactive_frame_lines.clear();
+        tab.interactive_last_archived_signature.clear();
         tab.terminal_cursor_row = None;
         tab.terminal_cursor_col = None;
         tab.terminal_physical_origin = 0;
@@ -216,7 +228,9 @@ fn apply_pending_updates(
         };
         let tab = &mut state.tabs[tab_idx];
         if let Some(mode) = update.terminal_mode {
-            tab.terminal_mode = mode;
+            if !(tab.terminal_mode == TerminalMode::InteractiveAi && mode == TerminalMode::Shell) {
+                tab.terminal_mode = mode;
+            }
         }
         if let Some(v) = update.set_auto_scroll {
             tab.auto_scroll = v;
@@ -352,9 +366,10 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
             tab.terminal_scroll_resync_next = false;
         }
 
-        if n > 0 && (tab.auto_scroll || interactive_follow) {
+        if n > 0 && (tab.auto_scroll || interactive) {
             ui.set_ws_terminal_total_lines(n as i32);
         }
+        sync_debug_stats(ui, tab);
 
         let scroll_arg = if resync {
             Some(exp)
@@ -380,6 +395,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         tab.terminal_scroll_resync_next = false;
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let exp = terminal_scroll_top_for_tab(tab, vh);
+        sync_debug_stats(ui, tab);
         ui.invoke_ws_apply_terminal_scroll_top_px(exp);
         push_terminal_view_to_ui(ui, tab, Some(exp));
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
@@ -390,6 +406,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     let vh = ui.get_ws_terminal_viewport_height_px();
     if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
         let exp = terminal_scroll_top_for_tab(tab, vh.max(1.0));
+        sync_debug_stats(ui, tab);
         if (tab.last_pushed_scroll_top - exp).abs() > 0.5
             || (vh - tab.last_pushed_viewport_height).abs() > 0.5
         {
@@ -403,6 +420,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     if (st - tab.last_pushed_scroll_top).abs() > 0.5
         || (vh - tab.last_pushed_viewport_height).abs() > 0.5
     {
+        sync_debug_stats(ui, tab);
         push_terminal_view_to_ui(ui, tab, None);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     }
@@ -417,6 +435,7 @@ fn flush_pending_scroll(ui: &AppWindow, s: &mut GuiState) {
         let tab = &mut s.tabs[cur];
         let n = tab.terminal_lines.len() as i32;
         ui.set_ws_terminal_total_lines(n);
+        sync_debug_stats(ui, tab);
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let scroll = terminal_scroll_top_for_tab(tab, vh);
         ui.invoke_ws_apply_terminal_scroll_top_px(scroll);

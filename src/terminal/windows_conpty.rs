@@ -61,6 +61,7 @@ pub struct ConptySpawn {
 }
 
 pub struct TerminalRender {
+    pub render_mode: ReaderRenderMode,
     pub text: String,
     /// ONLY lines that changed (matches changed_indices length).
     pub lines: Vec<ColoredLine>,
@@ -261,6 +262,7 @@ fn terminal_render_from_lines_cached(
         .collect();
 
     TerminalRender {
+        render_mode: ReaderRenderMode::InteractiveAi,
         text: String::new(),
         lines: changed_lines,
         full_len: num_lines,
@@ -290,6 +292,7 @@ fn terminal_render_full_frame(
     }
 
     TerminalRender {
+        render_mode: ReaderRenderMode::Shell,
         text: String::new(),
         full_len: rendered_lines.len(),
         lines: rendered_lines,

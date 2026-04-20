@@ -328,6 +328,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             while tab.terminal_slint_model.row_count() > 0 {
                 tab.terminal_slint_model.remove(0);
             }
+            tab.interactive_last_archived_signature.clear();
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);

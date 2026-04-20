@@ -377,6 +377,20 @@ pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
 
+pub(crate) fn sync_debug_stats(ui: &AppWindow, tab: &TabState) {
+    let mode = match tab.terminal_mode {
+        TerminalMode::Shell => "sh",
+        TerminalMode::InteractiveAi => "ai",
+    };
+    ui.set_ws_debug_stats(SharedString::from(format!(
+        "{mode} h:{} f:{} t:{} ttl:{}",
+        tab.interactive_history_lines.len(),
+        tab.interactive_frame_lines.len(),
+        tab.terminal_lines.len(),
+        ui.get_ws_terminal_total_lines()
+    )));
+}
+
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.file_path = ui.get_ws_file_path().to_string();
     tab.selected_line = ui.get_ws_selected_line();
@@ -426,6 +440,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
 
     let n = tab.terminal_lines.len();
     ui.set_ws_terminal_total_lines(n as i32);
+    sync_debug_stats(ui, tab);
     // 清空舊 model 資料，強制 push_terminal_view_to_ui 完整重建
     {
         let model = &tab.terminal_slint_model;

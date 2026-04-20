@@ -68,8 +68,12 @@ pub struct TabState {
     pub(crate) prompt_picked_files_abs: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
     pub(crate) terminal_lines: Vec<ColoredLine>,
+    /// Archived prior screens for Interactive AI tabs.
+    pub(crate) interactive_history_lines: Vec<ColoredLine>,
     /// Current visible frame for Interactive AI tabs; `terminal_lines` stores scrollback + frame.
     pub(crate) interactive_frame_lines: Vec<ColoredLine>,
+    /// Deduplicate archived Interactive AI frames so redraws do not keep appending the same screen.
+    pub(crate) interactive_last_archived_signature: String,
     /// Cached converted Slint rows + fingerprints to avoid rebuilding unchanged lines.
     pub(crate) terminal_model_rows: HashMap<usize, TermLine>,
     pub(crate) terminal_model_hashes: HashMap<usize, u64>,
@@ -141,7 +145,9 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             terminal_lines: Vec::new(),
+            interactive_history_lines: Vec::new(),
             interactive_frame_lines: Vec::new(),
+            interactive_last_archived_signature: String::new(),
             terminal_model_rows: HashMap::new(),
             terminal_model_hashes: HashMap::new(),
             terminal_model_dirty: HashSet::new(),
@@ -181,7 +187,10 @@ impl TabState {
                         move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
-                            terminal_mode: TerminalMode::Shell,
+                            terminal_mode: match render.render_mode {
+                                ReaderRenderMode::Shell => TerminalMode::Shell,
+                                ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                            },
                             text: render.text,
                             lines: render.lines,
                             full_len: render.full_len,
@@ -211,6 +220,10 @@ impl TabState {
         let excess = self.terminal_lines.len() - TERMINAL_SCROLLBACK_CAP;
         self.terminal_lines.drain(0..excess);
         self.terminal_physical_origin = self.terminal_physical_origin.saturating_add(excess);
+        let hist_excess = excess.min(self.interactive_history_lines.len());
+        if hist_excess > 0 {
+            self.interactive_history_lines.drain(0..hist_excess);
+        }
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();
@@ -236,7 +249,9 @@ impl TabState {
             self.terminal_text.drain(..cut);
         }
         self.terminal_lines.clear();
+        self.interactive_history_lines.clear();
         self.interactive_frame_lines.clear();
+        self.interactive_last_archived_signature.clear();
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();

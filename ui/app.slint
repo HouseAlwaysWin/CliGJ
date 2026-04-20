@@ -6,7 +6,7 @@ import { TextEdit } from "std-widgets.slint";
 import { PromptImageChip, TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
-    title: "CliGJ - UI Foundation";
+    title: "CliGJ - UI Foundation" + (root.ws-debug-stats == "" ? "" : " [" + root.ws-debug-stats + "]");
     preferred-width: 800px;
     preferred-height: 600px;
     min-width: 520px;
@@ -40,6 +40,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-prompt: "";
     in-out property <[string]> ws-prompt-path-chips: [];
     in-out property <string> ws-cmd-type: "Command Prompt";
+    in-out property <string> ws-debug-stats: "";
     in-out property <bool> ws-raw-input: false;
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).

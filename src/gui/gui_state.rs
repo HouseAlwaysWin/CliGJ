@@ -20,7 +20,9 @@ impl GuiState {
         }
         let tab = &mut self.tabs[self.current];
         tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.interactive_history_lines.clear();
         tab.interactive_frame_lines.clear();
+        tab.interactive_last_archived_signature.clear();
         tab.terminal_lines.clear();
         tab.terminal_text.clear();
         tab.terminal_model_rows.clear();
@@ -143,7 +145,10 @@ impl GuiState {
                         move |render| {
                         let _ = tx.send(TerminalChunk {
                             tab_id,
-                            terminal_mode: TerminalMode::Shell,
+                            terminal_mode: match render.render_mode {
+                                ReaderRenderMode::Shell => TerminalMode::Shell,
+                                ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                            },
                             text: render.text,
                             lines: render.lines,
                             full_len: render.full_len,
