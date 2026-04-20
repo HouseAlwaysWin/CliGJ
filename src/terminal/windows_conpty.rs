@@ -276,36 +276,6 @@ fn terminal_render_from_lines_cached(
     }
 }
 
-fn terminal_render_full_frame(
-    lines: &[&Line],
-    palette: &ColorPalette,
-    cursor_local_row: Option<usize>,
-    cursor_col: Option<usize>,
-) -> TerminalRender {
-    let mut rendered_lines = Vec::with_capacity(lines.len());
-    for (idx, line) in lines.iter().enumerate() {
-        let active_cursor_col = if cursor_local_row == Some(idx) {
-            cursor_col
-        } else {
-            None
-        };
-        rendered_lines.push(line_to_colored_spans(line, palette, active_cursor_col));
-    }
-
-    TerminalRender {
-        render_mode: ReaderRenderMode::Shell,
-        text: String::new(),
-        full_len: rendered_lines.len(),
-        lines: rendered_lines,
-        first_line_idx: 0,
-        cursor_row: cursor_local_row,
-        cursor_col,
-        filled: false,
-        changed_indices: Vec::new(),
-        reset_terminal_buffer: false,
-    }
-}
-
 #[derive(Debug)]
 pub enum ControlCommand {
     Resize { cols: u16, rows: u16 },
@@ -474,13 +444,14 @@ pub fn start_reader_thread(
 }
 
 fn init_shell_utf8(shell: &str, writer: &mut std::fs::File) -> std::io::Result<()> {
-    let cmd = if shell == "PowerShell" {
+    let cmd = if shell == "PowerShell" 
+    {
         "[Console]::InputEncoding=[System.Text.UTF8Encoding]::new(); \
-[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); \
-chcp 65001 > $null\r\n"
+        [Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); \
+        chcp 65001 > $null\r\n"
             .to_string()
     } else {
-        "@chcp 65001 > nul\r\n".to_string()
+        "@chcp 65001".to_string()
     };
     writer.write_all(cmd.as_bytes())?;
     writer.flush()?;
