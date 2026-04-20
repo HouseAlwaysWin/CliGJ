@@ -33,3 +33,13 @@ windows = { version = "0.62.0", features = [
 
 [build-dependencies]
 slint-build = "1.15.1"
+
+[profile.fastdev]
+inherits = "dev"
+opt-level = 1
+debug = true
+incremental = true
+codegen-units = 128
+
+[profile.fastdev.package."CliGJ"]
+opt-level = 2
