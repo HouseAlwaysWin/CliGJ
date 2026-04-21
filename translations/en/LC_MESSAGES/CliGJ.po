@@ -30,6 +30,9 @@ msgstr "Language"
 msgid "終端字型"
 msgstr "Terminal font"
 
+msgid "中文補字字型"
+msgstr "CJK fallback font"
+
 msgid "預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。"
 msgstr "Built-in Command Prompt / PowerShell cannot be removed; you can add custom startup commands."
 

@@ -13,9 +13,11 @@ export component GjShellManagePanel inherits Rectangle {
     in-out property <string> startup-default-profile;
     in-out property <string> startup-language;
     in-out property <string> startup-terminal-font-family;
+    in-out property <string> startup-terminal-cjk-fallback-font-family;
     in property <[string]> cmd-type-choices;
     in property <[string]> startup-language-choices;
     in property <[string]> startup-terminal-font-choices;
+    in property <[string]> startup-terminal-cjk-fallback-font-choices;
     in-out property <[InteractiveCmdEditorRow]> shell-manage-rows;
     in-out property <bool> manage-saved-hint;
 
@@ -311,6 +313,57 @@ export component GjShellManagePanel inherits Rectangle {
                                     current-value <=> root.startup-terminal-font-family;
                                     selected(val) => {
                                         root.startup-terminal-font-family = val;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 42px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 6px;
+                        background: #00000000;
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 10px;
+                            alignment: center;
+
+                            Rectangle {
+                                width: 140px;
+                                horizontal-stretch: 0;
+                                height: parent.height;
+
+                                Text {
+                                    width: 100%;
+                                    height: 100%;
+                                    text: @tr("中文補字字型");
+                                    color: AppTheme.text_muted;
+                                    font-size: 12px;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: #00000000;
+                            }
+
+                            Rectangle {
+                                width: 240px;
+                                horizontal-stretch: 0;
+                                background: #00000000;
+
+                                ComboBox {
+                                    width: 100%;
+                                    model: root.startup-terminal-cjk-fallback-font-choices;
+                                    current-value <=> root.startup-terminal-cjk-fallback-font-family;
+                                    selected(val) => {
+                                        root.startup-terminal-cjk-fallback-font-family = val;
                                     }
                                 }
                             }

@@ -12,7 +12,11 @@ use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
 use crate::core::config::AppConfig;
 
-use super::fonts::{normalize_terminal_font_family, terminal_font_choices};
+use super::font_assets::register_embedded_ui_fonts;
+use super::fonts::{
+    normalize_terminal_cjk_fallback_font_family, normalize_terminal_font_family,
+    terminal_cjk_fallback_font_choices, terminal_font_choices,
+};
 use super::i18n::apply_slint_language_from_shell_setting;
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::ipc::{IpcBridge, IpcGuiCommand};
@@ -26,6 +30,8 @@ mod helpers;
 mod timers;
 
 pub fn run_gui(inject_file: Option<PathBuf>) {
+    register_embedded_ui_fonts();
+
     #[cfg(target_os = "windows")]
     {
         if let Err(e) = slint::BackendSelector::new()
@@ -60,6 +66,12 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         .unwrap_or_else(|| "預設".to_string());
     let terminal_font_family = normalize_terminal_font_family(
         cfg.terminal_font_family().as_deref().unwrap_or(""),
+    )
+    .to_string();
+    let terminal_cjk_fallback_font_family = normalize_terminal_cjk_fallback_font_family(
+        cfg.terminal_cjk_fallback_font_family()
+            .as_deref()
+            .unwrap_or(""),
     )
     .to_string();
 
@@ -107,6 +119,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         startup_language: ui_language.clone(),
         startup_default_shell_profile: startup_profile.clone(),
         startup_terminal_font_family: terminal_font_family.clone(),
+        startup_terminal_cjk_fallback_font_family: terminal_cjk_fallback_font_family.clone(),
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
@@ -116,11 +129,23 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
     app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
     app.set_ws_terminal_font_family(SharedString::from(terminal_font_family.as_str()));
+    app.set_ws_terminal_cjk_fallback_font_family(SharedString::from(
+        terminal_cjk_fallback_font_family.as_str(),
+    ));
     app.set_ws_shell_startup_terminal_font_family(SharedString::from(
         terminal_font_family.as_str(),
     ));
+    app.set_ws_shell_startup_terminal_cjk_fallback_font_family(SharedString::from(
+        terminal_cjk_fallback_font_family.as_str(),
+    ));
     app.set_ws_shell_startup_terminal_font_choices(ModelRc::new(VecModel::from(
         terminal_font_choices()
+            .iter()
+            .map(|name| SharedString::from(*name))
+            .collect::<Vec<_>>(),
+    )));
+    app.set_ws_shell_startup_terminal_cjk_fallback_font_choices(ModelRc::new(VecModel::from(
+        terminal_cjk_fallback_font_choices()
             .iter()
             .map(|name| SharedString::from(*name))
             .collect::<Vec<_>>(),

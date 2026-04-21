@@ -332,6 +332,8 @@ pub struct GuiState {
     pub(crate) startup_default_shell_profile: String,
     /// Startup page setting: terminal font family used by the in-app terminal viewer.
     pub(crate) startup_terminal_font_family: String,
+    /// Startup page setting: CJK fallback font used when the main terminal font lacks glyphs.
+    pub(crate) startup_terminal_cjk_fallback_font_family: String,
 }
 
 #[derive(Debug)]

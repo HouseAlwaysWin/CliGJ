@@ -8,7 +8,6 @@ use unicode_width::UnicodeWidthChar;
 use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
-use super::fonts::TERMINAL_CJK_FALLBACK_FONT_FAMILY;
 use super::slint_ui::{AppWindow, PromptImageChip};
 use super::state::{TabState, TerminalMode};
 use super::slint_ui::{TermLine, TermSpan};
@@ -121,31 +120,31 @@ fn is_cjk_or_bopomofo_char(ch: char) -> bool {
     )
 }
 
-fn term_span_font_family(ch: char) -> &'static str {
+fn term_span_font_family(ch: char, cjk_fallback_font_family: &str) -> String {
     if is_emoji_char(ch) {
-        "Segoe UI Emoji"
+        "Segoe UI Emoji".to_string()
     } else if is_symbol_char(ch) {
-        "Segoe UI Symbol"
+        "Segoe UI Symbol".to_string()
     } else if is_cjk_or_bopomofo_char(ch) {
-        TERMINAL_CJK_FALLBACK_FONT_FAMILY
+        cjk_fallback_font_family.to_string()
     } else {
-        ""
+        String::new()
     }
 }
 
-fn split_term_span_by_font(span: &ColoredSpan) -> Vec<TermSpan> {
+fn split_term_span_by_font(span: &ColoredSpan, cjk_fallback_font_family: &str) -> Vec<TermSpan> {
     let mut out: Vec<TermSpan> = Vec::new();
     let mut current_text = String::new();
-    let mut current_font = "";
+    let mut current_font = String::new();
 
     for ch in span.text.chars() {
-        let font = term_span_font_family(ch);
+        let font = term_span_font_family(ch, cjk_fallback_font_family);
         if !current_text.is_empty() && font != current_font {
             out.push(TermSpan {
                 text: SharedString::from(current_text.as_str()),
                 fg: rgb_color(span.fg),
                 bg: term_bg_for_ui(span.bg),
-                font_family: SharedString::from(current_font),
+                font_family: SharedString::from(current_font.as_str()),
             });
             current_text.clear();
         }
@@ -158,7 +157,7 @@ fn split_term_span_by_font(span: &ColoredSpan) -> Vec<TermSpan> {
             text: SharedString::from(current_text.as_str()),
             fg: rgb_color(span.fg),
             bg: term_bg_for_ui(span.bg),
-            font_family: SharedString::from(current_font),
+            font_family: SharedString::from(current_font.as_str()),
         });
     }
 
@@ -176,13 +175,14 @@ fn split_term_span_by_font(span: &ColoredSpan) -> Vec<TermSpan> {
 
 #[allow(dead_code)]
 pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
+    let cjk_fallback_font_family = "MingLiU";
     let rows: Vec<TermLine> = lines
         .iter()
         .map(|line| {
             let spans: Vec<TermSpan> = line
                 .spans
                 .iter()
-                .flat_map(split_term_span_by_font)
+                .flat_map(|span| split_term_span_by_font(span, cjk_fallback_font_family))
                 .collect();
             let char_count: i32 = line
                 .spans
@@ -216,11 +216,11 @@ fn line_fingerprint(line: &ColoredLine) -> u64 {
     h.finish()
 }
 
-fn build_term_line(line: &ColoredLine) -> TermLine {
+fn build_term_line(line: &ColoredLine, cjk_fallback_font_family: &str) -> TermLine {
     let spans: Vec<TermSpan> = line
         .spans
         .iter()
-        .flat_map(split_term_span_by_font)
+        .flat_map(|span| split_term_span_by_font(span, cjk_fallback_font_family))
         .collect();
     let char_count: i32 = line
         .spans
@@ -304,7 +304,12 @@ fn empty_term_line() -> TermLine {
 
 /// Incremental cache: only rebuild rows inside [first, last] whose VT content changed.
 /// Returns true when cached rows in this window changed.
-pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, last: usize) -> bool {
+pub(crate) fn sync_terminal_model_cache_range(
+    tab: &mut TabState,
+    first: usize,
+    last: usize,
+    cjk_fallback_font_family: &str,
+) -> bool {
     let n = tab.terminal_lines.len();
     let mut changed = false;
     if n == 0 || first > last {
@@ -345,7 +350,7 @@ pub(crate) fn sync_terminal_model_cache_range(tab: &mut TabState, first: usize, 
             continue;
         }
         
-        let built = build_term_line(&rendered);
+        let built = build_term_line(&rendered, cjk_fallback_font_family);
         tab.terminal_model_rows.insert(idx, built);
         tab.terminal_model_hashes.insert(idx, fp);
         tab.terminal_model_dirty.insert(idx);
@@ -364,6 +369,7 @@ pub(crate) fn push_terminal_view_to_ui(
     tab: &mut TabState,
     scroll_top_override: Option<f32>,
 ) {
+    let cjk_fallback_font_family = ui.get_ws_terminal_cjk_fallback_font_family().to_string();
     let scroll_top = scroll_top_override.unwrap_or_else(|| ui.get_ws_terminal_scroll_top_px());
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     tab.terminal_scroll_top_px = scroll_top;
@@ -400,7 +406,12 @@ pub(crate) fn push_terminal_view_to_ui(
     let first = first.min(last);
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != n;
-    let content_changed = sync_terminal_model_cache_range(tab, first, last);
+    let content_changed = sync_terminal_model_cache_range(
+        tab,
+        first,
+        last,
+        cjk_fallback_font_family.as_str(),
+    );
 
     if window_changed {
         ui.set_ws_terminal_line_offset(first as i32);

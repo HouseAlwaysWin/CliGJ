@@ -66,9 +66,12 @@ export component AppWindow inherits Window {
     in-out property <string> ws-shell-startup-language: "預設";
     in-out property <string> ws-shell-startup-default-profile: "Command Prompt";
     in-out property <string> ws-shell-startup-terminal-font-family: "DejaVu Sans Mono";
+    in-out property <string> ws-shell-startup-terminal-cjk-fallback-font-family: "MingLiU";
     in-out property <[string]> ws-shell-startup-language-choices: ["預設", "中文", "English"];
-    in-out property <[string]> ws-shell-startup-terminal-font-choices: ["Cascadia Mono", "Cascadia Code", "MingLiU", "DejaVu Sans Mono"];
+    in-out property <[string]> ws-shell-startup-terminal-font-choices: ["Cascadia Mono", "Cascadia Code", "MingLiU", "DejaVu Sans Mono", "Microsoft JhengHei", "Noto Sans TC"];
+    in-out property <[string]> ws-shell-startup-terminal-cjk-fallback-font-choices: ["MingLiU", "Microsoft JhengHei", "Noto Sans TC", "PMingLiU"];
     in-out property <string> ws-terminal-font-family: "DejaVu Sans Mono";
+    in-out property <string> ws-terminal-cjk-fallback-font-family: "MingLiU";
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -386,9 +389,11 @@ export component AppWindow inherits Window {
         startup-default-profile <=> root.ws-shell-startup-default-profile;
         startup-language <=> root.ws-shell-startup-language;
         startup-terminal-font-family <=> root.ws-shell-startup-terminal-font-family;
+        startup-terminal-cjk-fallback-font-family <=> root.ws-shell-startup-terminal-cjk-fallback-font-family;
         cmd-type-choices: root.ws-cmd-type-choices;
         startup-language-choices: root.ws-shell-startup-language-choices;
         startup-terminal-font-choices: root.ws-shell-startup-terminal-font-choices;
+        startup-terminal-cjk-fallback-font-choices: root.ws-shell-startup-terminal-cjk-fallback-font-choices;
         shell-manage-rows <=> root.ws-shell-manage-rows;
         manage-saved-hint <=> root.ws-shell-manage-saved-hint;
         close-requested => {

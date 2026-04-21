@@ -1,7 +1,9 @@
 use std::fs::File;
+use std::fs;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    generate_embedded_ui_fonts();
     slint_build::compile_with_config(
         "ui/app.slint",
         slint_build::CompilerConfiguration::new()
@@ -11,6 +13,46 @@ fn main() {
     )
     .expect("failed to compile Slint UI");
     embed_windows_exe_icon();
+}
+
+fn generate_embedded_ui_fonts() {
+    let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
+    let fonts_dir = manifest_dir.join("ui/fonts");
+    println!("cargo:rerun-if-changed={}", fonts_dir.display());
+
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let out_file = out_dir.join("embedded_ui_fonts.rs");
+
+    let mut entries: Vec<PathBuf> = Vec::new();
+    if let Ok(read_dir) = fs::read_dir(&fonts_dir) {
+        for entry in read_dir.flatten() {
+            let path = entry.path();
+            let Some(ext) = path.extension().and_then(|x| x.to_str()) else {
+                continue;
+            };
+            let ext = ext.to_ascii_lowercase();
+            if matches!(ext.as_str(), "ttf" | "otf" | "ttc") {
+                entries.push(path);
+            }
+        }
+    }
+    entries.sort();
+
+    let mut body = String::new();
+    body.push_str("pub(crate) static EMBEDDED_UI_FONTS: &[EmbeddedFontAsset] = &[\n");
+    for path in entries {
+        let file_name = path.file_name().and_then(|x| x.to_str()).unwrap_or("font");
+        body.push_str("    EmbeddedFontAsset {\n");
+        body.push_str(&format!("        file_name: {:?},\n", file_name));
+        body.push_str(&format!(
+            "        data: include_bytes!(r#\"{}\"#),\n",
+            path.display()
+        ));
+        body.push_str("    },\n");
+    }
+    body.push_str("];\n");
+
+    fs::write(out_file, body).expect("failed to write embedded_ui_fonts.rs");
 }
 
 /// Multi-resolution .ico from `src/asset/logo3.png` + `winres` (Windows exe icon).
