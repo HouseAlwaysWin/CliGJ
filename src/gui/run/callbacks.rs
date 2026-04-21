@@ -25,7 +25,7 @@ use crate::gui::shell_profiles::{
     default_shell_profile_name, normalize_shell_profile_command, sync_shell_manage_editor_to_ui,
     sync_shell_profile_choices_to_ui,
 };
-use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
+use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{
     clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui,
@@ -36,7 +36,7 @@ use crate::terminal::windows_conpty;
 use super::helpers::{
     clear_all_prompt_images, clipboard_raster_image_file, contains_cjk_char, copy_to_clipboard,
     inject_paths_and_images_from_paths, is_local_prompt_edit_key, remove_prompt_image_at,
-    selected_text_from_terminal_lines,
+    selected_text_from_terminal_lines, terminal_history_plain_text,
 };
 
 fn is_pty_enter_key(k: &str) -> bool {
@@ -70,7 +70,12 @@ fn publish_current_tab_changed(ipc: &IpcBridge, s: &GuiState) {
     ipc.publish_tab_changed(tab.id, s.current, title, tab.cmd_type.clone());
 }
 
-pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
+pub(crate) fn connect(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    ipc: IpcBridge,
+    history_window: Rc<TerminalHistoryWindow>,
+) {
     connect_tabs(app, Rc::clone(&state), ipc.clone());
     connect_prompt_and_picker(app, Rc::clone(&state));
     connect_chips(app, Rc::clone(&state));
@@ -78,6 +83,7 @@ pub(crate) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBri
     connect_terminal_viewport(app, Rc::clone(&state));
     connect_terminal_resize(app, Rc::clone(&state));
     connect_terminal_wheel(app, Rc::clone(&state));
+    connect_terminal_history(app, Rc::clone(&state), Rc::clone(&history_window));
     connect_toggles(app, Rc::clone(&state), ipc.clone());
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
@@ -958,6 +964,45 @@ fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let current = s.current;
         s.tabs[current].selected_context = SharedString::from(selected.as_str());
         ui.set_ws_selected_context(SharedString::from(selected.as_str()));
+    });
+}
+
+fn connect_terminal_history(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    history_window: Rc<TerminalHistoryWindow>,
+) {
+    let st_hist = Rc::clone(&state);
+    let history_window_open = Rc::clone(&history_window);
+    let app_weak = app.as_weak();
+    app.on_terminal_history_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let s = st_hist.borrow();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let tab = &s.tabs[s.current];
+        let title = s
+            .titles
+            .row_data(s.current)
+            .unwrap_or_else(|| SharedString::from("Tab"))
+            .to_string();
+        let history_title = format!("{title} - 終端歷史");
+        history_window_open.set_history_title(SharedString::from(history_title.as_str()));
+        history_window_open
+            .set_history_text(SharedString::from(terminal_history_plain_text(tab).as_str()));
+        history_window_open
+            .set_terminal_font_family(ui.get_ws_terminal_font_family());
+        if let Err(e) = history_window_open.show() {
+            eprintln!("CliGJ: show terminal history window: {e}");
+        }
+    });
+
+    let history_window_close = Rc::clone(&history_window);
+    history_window.on_close_requested(move || {
+        let _ = history_window_close.hide();
     });
 }
 

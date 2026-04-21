@@ -21,7 +21,7 @@ use super::i18n::apply_slint_language_from_shell_setting;
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::ipc::{IpcBridge, IpcGuiCommand};
 use super::shell_profiles::sync_shell_profile_choices_to_ui;
-use super::slint_ui::AppWindow;
+use super::slint_ui::{AppWindow, TerminalHistoryWindow};
 use super::state::{GuiState, TabState, TerminalChunk};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count};
 
@@ -43,6 +43,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     }
 
     let app = AppWindow::new().expect("failed to build app window");
+    let history_window = Rc::new(
+        TerminalHistoryWindow::new().expect("failed to build terminal history window"),
+    );
     #[cfg(target_os = "windows")]
     let tray_icon: Rc<RefCell<Option<tray_icon::TrayIcon>>> = Rc::new(RefCell::new(None));
     #[cfg(target_os = "windows")]
@@ -161,7 +164,12 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     let _terminal_stream_dispatcher =
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx, ipc_bridge.clone());
-    callbacks::connect(&app, Rc::clone(&state), ipc_bridge.clone());
+    callbacks::connect(
+        &app,
+        Rc::clone(&state),
+        ipc_bridge.clone(),
+        Rc::clone(&history_window),
+    );
 
     #[cfg(target_os = "windows")]
     {

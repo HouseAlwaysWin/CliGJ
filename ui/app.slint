@@ -1,5 +1,6 @@
 import { AppTheme } from "theme.slint";
 import { LogicalKey } from "key_labels.slint";
+import { TextEdit } from "std-widgets.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { GjWindowChrome } from "components/gj_window_chrome.slint";
@@ -114,6 +115,7 @@ export component AppWindow inherits Window {
     callback interactive-command-selected(string);
     callback manage-cmd-types-requested;
     callback manage-interactive-commands-requested;
+    callback terminal-history-requested;
     callback manage-add-interactive-row;
     callback remove-interactive-manage-row(int);
     callback interactive-manage-name-edited(int, string);
@@ -339,6 +341,9 @@ export component AppWindow inherits Window {
                         manage-interactive-commands-requested => {
                             root.manage-interactive-commands-requested();
                         }
+                        terminal-history-requested => {
+                            root.terminal-history-requested();
+                        }
                         terminal-resize-requested(cols, rows) => {
                             root.terminal-resize-requested(cols, rows);
                         }
@@ -451,4 +456,98 @@ export component AppWindow inherits Window {
     }
 
     if root.ws-file-drop-visible : GjFileDropOverlay {}
+}
+
+export component TerminalHistoryWindow inherits Window {
+    title: @tr("終端歷史");
+    icon: @image-url("../src/asset/logo3.png");
+    preferred-width: 860px;
+    preferred-height: 680px;
+    min-width: 520px;
+    min-height: 360px;
+    background: AppTheme.bg;
+    default-font-family: AppTheme.ui_font_family;
+
+    in-out property <string> history-title: @tr("終端歷史");
+    in-out property <string> history-text: "";
+    in-out property <string> terminal-font-family: "DejaVu Sans Mono";
+    callback close-requested;
+
+    Rectangle {
+        background: AppTheme.bg;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 10px;
+
+            Rectangle {
+                height: 34px;
+                background: #00000000;
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    Text {
+                        text: root.history-title;
+                        color: AppTheme.text;
+                        font-size: 16px;
+                        font-weight: 700;
+                        vertical-alignment: center;
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+
+                    Rectangle {
+                        min-width: 64px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 14px;
+                        background: close_ta.has-hover ? #2b2d33 : #00000000;
+
+                        Text {
+                            text: @tr("關閉");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: 100%;
+                            height: 100%;
+                        }
+
+                        close_ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => {
+                                root.close-requested();
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                border-width: 1px;
+                border-color: AppTheme.prompt_chrome_border;
+                border-radius: 10px;
+                background: #0c0f15;
+
+                TextEdit {
+                    x: 0px;
+                    y: 0px;
+                    width: parent.width;
+                    height: parent.height;
+                    text <=> root.history-text;
+                    read-only: true;
+                    font-family: root.terminal-font-family;
+                    font-size: 13px;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
 }

@@ -49,6 +49,7 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-wheel(int) -> bool;
     callback interactive-command-selected(string);
     callback manage-interactive-commands-requested;
+    callback terminal-history-requested;
     forward-focus: prompt-zone;
 
     background: AppTheme.bg;
@@ -173,6 +174,9 @@ export component GjWorkspace inherits Rectangle {
             }
             manage-interactive-commands-requested => {
                 root.manage-interactive-commands-requested();
+            }
+            terminal-history-requested => {
+                root.terminal-history-requested();
             }
         }
     }

@@ -32,6 +32,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-chip-clear-requested;
     callback interactive-command-selected(string);
     callback manage-interactive-commands-requested;
+    callback terminal-history-requested;
     forward-focus: prompt-input;
 
     function pty_mod(event: KeyEvent) -> int {
@@ -361,6 +362,30 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     // Raw: SVG — 固定寬度，避免 min-width + stretch 被拉成寬膠囊
+                    Rectangle {
+                        min-width: 52px;
+                        height: 22px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        Text {
+                            text: @tr("歷史");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 11px;
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.terminal-history-requested();
+                            }
+                        }
+                    }
+
                     Rectangle {
                         width: 28px;
                         height: 22px;

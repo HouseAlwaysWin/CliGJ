@@ -333,6 +333,18 @@ fn colored_line_plain_text(line: &ColoredLine) -> String {
     })
 }
 
+pub(crate) fn terminal_history_plain_text(tab: &TabState) -> String {
+    if !tab.terminal_lines.is_empty() {
+        return tab
+            .terminal_lines
+            .iter()
+            .map(colored_line_plain_text)
+            .collect::<Vec<_>>()
+            .join("\n");
+    }
+    tab.terminal_text.clone()
+}
+
 /// Inclusive display-cell slice (terminal columns), matching viewer hit-test semantics.
 fn slice_line_cells_inclusive(line: &ColoredLine, start: usize, end_inclusive: usize) -> String {
     let s = colored_line_plain_text(line);
