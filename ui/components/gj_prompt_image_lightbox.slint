@@ -1,0 +1,50 @@
+import { AppTheme } from "../theme.slint";
+import { PromptImageChip } from "../term_types.slint";
+
+export component GjPromptImageLightbox inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: #0a0a0fe8;
+    z: 450;
+
+    in-out property <int> zoom-index;
+    in property <[PromptImageChip]> prompt-images;
+
+    TouchArea {
+        width: 100%;
+        height: 100%;
+        clicked => {
+            root.zoom-index = -1;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            padding: 24px;
+            spacing: 10px;
+
+            Rectangle {
+                width: min(parent.width - 48px, 900px);
+                height: min(parent.height - 80px, 720px);
+                border-width: 1px;
+                border-color: AppTheme.prompt_chrome_border;
+                border-radius: 12px;
+                background: #14161c;
+                clip: true;
+
+                Image {
+                    source: root.prompt-images[root.zoom-index].thumb;
+                    width: 100%;
+                    height: 100%;
+                    image-fit: contain;
+                }
+            }
+
+            Text {
+                text: @tr("點擊任意處關閉");
+                color: AppTheme.text_muted;
+                font-size: 12px;
+                horizontal-alignment: center;
+            }
+        }
+    }
+}

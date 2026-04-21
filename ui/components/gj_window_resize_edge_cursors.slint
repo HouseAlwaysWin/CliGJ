@@ -1,0 +1,103 @@
+import { AppTheme } from "../theme.slint";
+
+/// Edge-only layer so resize cursors stay visible (caption TouchAreas otherwise force Default).
+/// Must sit above GjViewer terminal wheel/selection TouchAreas (z≈100–101); below image zoom (450).
+/// Winit still handles border drags before Slint mouse handlers; strips are only ~border px wide.
+export component GjWindowResizeEdgeCursors inherits Rectangle {
+    width: 100%;
+    height: 100%;
+    background: transparent;
+    z: 400;
+
+    callback window-chrome-title-double-click();
+
+    property <length> b: AppTheme.chrome_resize_border;
+    // Caption controls width (must match title strip 3×46px).
+    property <length> caption-ctrl-w: 138px;
+
+    TouchArea {
+        x: root.width - b;
+        y: 0px;
+        width: b;
+        height: root.height;
+        mouse-cursor: e-resize;
+    }
+
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: b;
+        height: root.height;
+        mouse-cursor: w-resize;
+    }
+
+    TouchArea {
+        x: 0px;
+        y: root.height - b;
+        width: root.width;
+        height: b;
+        mouse-cursor: s-resize;
+    }
+
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: root.width - caption-ctrl-w - b;
+        height: b;
+        mouse-cursor: n-resize;
+        double-clicked => {
+            root.window-chrome-title-double-click();
+        }
+    }
+
+    // Top edge above min/max/close (fills the strip we previously skipped; abuts the east vertical strip).
+    TouchArea {
+        x: root.width - caption-ctrl-w - b;
+        y: 0px;
+        width: caption-ctrl-w;
+        height: b;
+        mouse-cursor: n-resize;
+        double-clicked => {
+            root.window-chrome-title-double-click();
+        }
+    }
+
+    TouchArea {
+        x: root.width - b;
+        y: root.height - b;
+        width: b;
+        height: b;
+        mouse-cursor: se-resize;
+    }
+
+    TouchArea {
+        x: 0px;
+        y: root.height - b;
+        width: b;
+        height: b;
+        mouse-cursor: sw-resize;
+    }
+
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: b;
+        height: b;
+        mouse-cursor: nw-resize;
+        double-clicked => {
+            root.window-chrome-title-double-click();
+        }
+    }
+
+    // Top-right corner: sits above the east strip hit target so the diagonal resize cursor shows.
+    TouchArea {
+        x: root.width - b;
+        y: 0px;
+        width: b;
+        height: b;
+        mouse-cursor: ne-resize;
+        double-clicked => {
+            root.window-chrome-title-double-click();
+        }
+    }
+}

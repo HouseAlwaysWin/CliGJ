@@ -1,0 +1,158 @@
+import { AppTheme } from "../theme.slint";
+
+/// Custom title bar: logo, centered title, minimize / maximize / close (frameless window).
+export component GjWindowChrome inherits Rectangle {
+    height: 34px;
+    in-out property <bool> window-maximized;
+    callback window-chrome-drag();
+    callback window-chrome-minimize();
+    callback window-chrome-maximize();
+    callback window-chrome-close();
+    callback window-chrome-title-double-click();
+
+    background: AppTheme.tab_bar_bg;
+    border-width: 0px;
+
+    HorizontalLayout {
+        spacing: 0px;
+        alignment: stretch;
+
+        Rectangle {
+            width: 138px;
+            height: 34px;
+            background: #00000000;
+
+            Image {
+                x: 10px;
+                y: (parent.height - self.height) / 2;
+                width: 22px;
+                height: 22px;
+                source: @image-url("../../src/asset/logo3.png");
+            }
+
+            left-chrome-drag := TouchArea {
+                y: AppTheme.chrome_resize_border;
+                width: 100%;
+                height: parent.height - AppTheme.chrome_resize_border;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        root.window-chrome-drag();
+                    }
+                }
+                double-clicked => {
+                    root.window-chrome-title-double-click();
+                }
+            }
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+            min-height: 34px;
+            background: #00000000;
+
+            Text {
+                width: 100%;
+                height: 100%;
+                text: "CliGJ";
+                color: AppTheme.text;
+                font-size: 14px;
+                font-weight: 700;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+
+            center-chrome-drag := TouchArea {
+                y: AppTheme.chrome_resize_border;
+                width: 100%;
+                height: parent.height - AppTheme.chrome_resize_border;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                        root.window-chrome-drag();
+                    }
+                }
+                double-clicked => {
+                    root.window-chrome-title-double-click();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+
+            Rectangle {
+                width: 46px;
+                height: 34px;
+                background: min_ta.has-hover ? #3c3c3c : #00000000;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "\u{e921}";
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                    font-family: AppTheme.chrome_caption_icon_font;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                min_ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.window-chrome-minimize();
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 46px;
+                height: 34px;
+                background: max_ta.has-hover ? #3c3c3c : #00000000;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: root.window-maximized ? "\u{e923}" : "\u{e922}";
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                    font-family: AppTheme.chrome_caption_icon_font;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                max_ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.window-chrome-maximize();
+                    }
+                }
+            }
+
+            Rectangle {
+                width: 46px;
+                height: 34px;
+                background: close_ta.has-hover ? #e81123 : #00000000;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "\u{e8bb}";
+                    color: close_ta.has-hover ? #ffffff : AppTheme.text_muted;
+                    font-size: 11px;
+                    font-family: AppTheme.chrome_caption_icon_font;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                close_ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.window-chrome-close();
+                    }
+                }
+            }
+        }
+    }
+}

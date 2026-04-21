@@ -2,7 +2,13 @@ import { AppTheme } from "theme.slint";
 import { LogicalKey } from "key_labels.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
-import { ComboBox, LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
+import { GjWindowChrome } from "components/gj_window_chrome.slint";
+import { GjWindowResizeEdgeCursors } from "components/gj_window_resize_edge_cursors.slint";
+import { GjRenameTabDialog } from "components/gj_rename_tab_dialog.slint";
+import { GjInteractiveManageDialog } from "components/gj_interactive_manage_dialog.slint";
+import { GjShellManagePanel } from "components/gj_shell_manage_panel.slint";
+import { GjPromptImageLightbox } from "components/gj_prompt_image_lightbox.slint";
+import { GjFileDropOverlay } from "components/gj_file_drop_overlay.slint";
 import { InteractiveCmdEditorRow, PromptImageChip, TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
@@ -175,154 +181,22 @@ export component AppWindow inherits Window {
         VerticalLayout {
             spacing: 0px;
 
-            Rectangle {
-                height: 34px;
-                background: AppTheme.tab_bar_bg;
-                border-width: 0px;
-
-                // Title strip: [ icon | empty pad same width as controls ] [ centered title ] [ min / max / close ]
-                // Left and right rails are both 138px (3×46px) so "CliGJ" sits on the visual center line.
-                HorizontalLayout {
-                    spacing: 0px;
-                    alignment: stretch;
-
-                    Rectangle {
-                        width: 138px;
-                        height: 34px;
-                        background: #00000000;
-
-                        Image {
-                            x: 10px;
-                            y: (parent.height - self.height) / 2;
-                            width: 22px;
-                            height: 22px;
-                            source: @image-url("../src/asset/logo3.png");
-                        }
-
-                        left-chrome-drag := TouchArea {
-                            y: AppTheme.chrome_resize_border;
-                            width: 100%;
-                            height: parent.height - AppTheme.chrome_resize_border;
-                            pointer-event(e) => {
-                                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                                    root.window-chrome-drag();
-                                }
-                            }
-                            double-clicked => {
-                                root.window-chrome-title-double-click();
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        min-height: 34px;
-                        background: #00000000;
-
-                        Text {
-                            width: 100%;
-                            height: 100%;
-                            text: "CliGJ";
-                            color: AppTheme.text;
-                            font-size: 14px;
-                            font-weight: 700;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                        }
-
-                        center-chrome-drag := TouchArea {
-                            y: AppTheme.chrome_resize_border;
-                            width: 100%;
-                            height: parent.height - AppTheme.chrome_resize_border;
-                            pointer-event(e) => {
-                                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
-                                    root.window-chrome-drag();
-                                }
-                            }
-                            double-clicked => {
-                                root.window-chrome-title-double-click();
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 0px;
-
-                        Rectangle {
-                            width: 46px;
-                            height: 34px;
-                            background: min_ta.has-hover ? #3c3c3c : #00000000;
-
-                            Text {
-                                width: 100%;
-                                height: 100%;
-                                text: "\u{e921}";
-                                color: AppTheme.text_muted;
-                                font-size: 11px;
-                                font-family: AppTheme.chrome_caption_icon_font;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-
-                            min_ta := TouchArea {
-                                width: 100%;
-                                height: 100%;
-                                clicked => {
-                                    root.window-chrome-minimize();
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 46px;
-                            height: 34px;
-                            background: max_ta.has-hover ? #3c3c3c : #00000000;
-
-                            Text {
-                                width: 100%;
-                                height: 100%;
-                                text: root.ws-window-maximized ? "\u{e923}" : "\u{e922}";
-                                color: AppTheme.text_muted;
-                                font-size: 11px;
-                                font-family: AppTheme.chrome_caption_icon_font;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-
-                            max_ta := TouchArea {
-                                width: 100%;
-                                height: 100%;
-                                clicked => {
-                                    root.window-chrome-maximize();
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            width: 46px;
-                            height: 34px;
-                            background: close_ta.has-hover ? #e81123 : #00000000;
-
-                            Text {
-                                width: 100%;
-                                height: 100%;
-                                text: "\u{e8bb}";
-                                color: close_ta.has-hover ? #ffffff : AppTheme.text_muted;
-                                font-size: 11px;
-                                font-family: AppTheme.chrome_caption_icon_font;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-
-                            close_ta := TouchArea {
-                                width: 100%;
-                                height: 100%;
-                                clicked => {
-                                    root.window-chrome-close();
-                                }
-                            }
-                        }
-                    }
+            GjWindowChrome {
+                window-maximized <=> root.ws-window-maximized;
+                window-chrome-drag => {
+                    root.window-chrome-drag();
+                }
+                window-chrome-minimize => {
+                    root.window-chrome-minimize();
+                }
+                window-chrome-maximize => {
+                    root.window-chrome-maximize();
+                }
+                window-chrome-close => {
+                    root.window-chrome-close();
+                }
+                window-chrome-title-double-click => {
+                    root.window-chrome-title-double-click();
                 }
             }
 
@@ -354,12 +228,12 @@ export component AppWindow inherits Window {
                 manage-cmd-types-requested => {
                     root.manage-cmd-types-requested();
                 }
-            rename-tab(index) => {
-                root.rename-tab-requested(index);
-            }
-            move-tab(from, to) => {
-                root.move-tab-requested(from, to);
-            }
+                rename-tab(index) => {
+                    root.rename-tab-requested(index);
+                }
+                move-tab(from, to) => {
+                    root.move-tab-requested(from, to);
+                }
             }
 
             Rectangle {
@@ -463,936 +337,82 @@ export component AppWindow inherits Window {
         workspace.bump-terminal-size();
     }
 
-    if root.ws-rename-open : Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: #00000080;
-        z: 100;
-
-        Rectangle {
-            width: 360px;
-            height: 140px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            background: AppTheme.panel;
-            border-width: 1px;
-            border-color: AppTheme.prompt_chrome_border;
-            border-radius: 10px;
-
-            VerticalLayout {
-                padding: 12px;
-                spacing: 10px;
-
-                Text {
-                    text: @tr("重新命名標籤");
-                    color: AppTheme.text;
-                    font-size: 13px;
-                    font-weight: 600;
-                }
-
-                TextEdit {
-                    text <=> root.ws-rename-text;
-                    font-size: 13px;
-                    wrap: no-wrap;
-                    key-pressed(event) => {
-                        if (event.text == Key.Return) {
-                            root.rename-commit(root.ws-rename-index, root.ws-rename-text);
-                            accept
-                        } else if (event.text == Key.Escape) {
-                            root.rename-cancel();
-                            accept
-                        } else {
-                            reject
-                        }
-                    }
-                }
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    Rectangle { horizontal-stretch: 1; background: #00000000; }
-
-                    Rectangle {
-                        min-width: 72px;
-                        height: 28px;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 8px;
-                        background: #00000000;
-                        Text {
-                            text: @tr("取消");
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                        }
-                        TouchArea {
-                            clicked => { root.rename-cancel(); }
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 72px;
-                        height: 28px;
-                        border-width: 1px;
-                        border-color: AppTheme.accent;
-                        border-radius: 8px;
-                        background: AppTheme.accent;
-                        Text {
-                            text: @tr("確定");
-                            color: AppTheme.text;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                            font-weight: 700;
-                        }
-                        TouchArea {
-                            clicked => { root.rename-commit(root.ws-rename-index, root.ws-rename-text); }
-                        }
-                    }
-                }
-            }
+    if root.ws-rename-open : GjRenameTabDialog {
+        rename-text <=> root.ws-rename-text;
+        rename-index: root.ws-rename-index;
+        rename-commit(index, text) => {
+            root.rename-commit(index, text);
+        }
+        rename-cancel => {
+            root.rename-cancel();
         }
     }
 
-    if root.ws-interactive-manage-open : Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: #00000080;
-        z: 106;
-
-        Rectangle {
-            width: 560px;
-            height: 420px;
-            x: (parent.width - self.width) / 2;
-            y: (parent.height - self.height) / 2;
-            background: AppTheme.panel;
-            border-width: 1px;
-            border-color: AppTheme.prompt_chrome_border;
-            border-radius: 10px;
-
-            VerticalLayout {
-                padding: 12px;
-                spacing: 8px;
-
-                Text {
-                    text: @tr("指令設定");
-                    color: AppTheme.text;
-                    font-size: 13px;
-                    font-weight: 600;
-                }
-
-                Text {
-                    text: @tr("內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。");
-                    color: AppTheme.text_muted;
-                    font-size: 11px;
-                    wrap: word-wrap;
-                }
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    alignment: end;
-
-                    Rectangle {
-                        min-width: 64px;
-                        height: 26px;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 8px;
-                        background: #00000000;
-
-                        Text {
-                            text: @tr("新增");
-                            color: AppTheme.text;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                            font-weight: 600;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.manage-add-interactive-row();
-                            }
-                        }
-                    }
-                }
-
-                ScrollView {
-                    vertical-stretch: 1;
-                    min-height: 0px;
-
-                    VerticalLayout {
-                        alignment: start;
-                        spacing: 6px;
-
-                        for row[key_idx] in root.ws-interactive-manage-rows: Rectangle {
-                            min-height: 32px;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            border-radius: 6px;
-                            background: #00000000;
-
-                            HorizontalLayout {
-                                padding-left: 6px;
-                                padding-right: 6px;
-                                spacing: 6px;
-                                alignment: center;
-
-                                if row.key-locked: Rectangle {
-                                    horizontal-stretch: 1;
-                                    min-width: 96px;
-                                    min-height: 26px;
-                                    background: #00000020;
-                                    border-radius: 4px;
-
-                                    Text {
-                                        text: row.name;
-                                        color: AppTheme.text_muted;
-                                        font-size: 12px;
-                                        vertical-alignment: center;
-                                        horizontal-alignment: left;
-                                        overflow: elide;
-                                    }
-                                }
-
-                                if !row.key-locked: LineEdit {
-                                    horizontal-stretch: 1;
-                                    min-width: 96px;
-                                    font-size: 12px;
-                                    text: row.name;
-                                    edited(new_text) => {
-                                        root.interactive-manage-name-edited(key_idx, new_text);
-                                    }
-                                }
-
-                                Text {
-                                    text: ">";
-                                    color: AppTheme.text_muted;
-                                    font-size: 12px;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 0;
-                                }
-
-                                LineEdit {
-                                    horizontal-stretch: 2;
-                                    min-width: 140px;
-                                    font-size: 12px;
-                                    text: row.line;
-                                    edited(new_text) => {
-                                        root.interactive-manage-line-edited(key_idx, new_text);
-                                    }
-                                }
-
-                                Rectangle {
-                                    min-width: 44px;
-                                    max-width: 52px;
-                                    height: 24px;
-                                    horizontal-stretch: 0;
-                                    border-width: 1px;
-                                    border-color: #ff4f6d;
-                                    border-radius: 6px;
-                                    background: #00000000;
-
-                                    Text {
-                                        text: @tr("刪除");
-                                        color: #ff8ca8;
-                                        font-size: 11px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-
-                                    TouchArea {
-                                        enabled: !row.key-locked;
-                                        clicked => {
-                                            root.remove-interactive-manage-row(key_idx);
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                HorizontalLayout {
-                    spacing: 8px;
-                    Rectangle {
-                        horizontal-stretch: 1;
-                        background: #00000000;
-                    }
-
-                    Rectangle {
-                        min-width: 72px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 8px;
-                        background: #00000000;
-
-                        Text {
-                            text: @tr("關閉");
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.close-interactive-manage();
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        min-width: 72px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: AppTheme.accent;
-                        border-radius: 8px;
-                        background: AppTheme.accent;
-
-                        Text {
-                            text: @tr("儲存");
-                            color: AppTheme.text;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                            font-weight: 700;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.save-interactive-manage();
-                            }
-                        }
-                    }
-                }
-            }
+    if root.ws-interactive-manage-open : GjInteractiveManageDialog {
+        manage-rows <=> root.ws-interactive-manage-rows;
+        manage-add-row => {
+            root.manage-add-interactive-row();
+        }
+        remove-row(idx) => {
+            root.remove-interactive-manage-row(idx);
+        }
+        name-edited(idx, name) => {
+            root.interactive-manage-name-edited(idx, name);
+        }
+        line-edited(idx, line) => {
+            root.interactive-manage-line-edited(idx, line);
+        }
+        save => {
+            root.save-interactive-manage();
+        }
+        close => {
+            root.close-interactive-manage();
         }
     }
 
-    if root.ws-shell-manage-open : Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: AppTheme.bg;
-        z: 107;
-        HorizontalLayout {
-            spacing: 0px;
-
-            Rectangle {
-                width: 196px;
-                vertical-stretch: 1;
-                background: AppTheme.panel;
-                border-width: 0px;
-
-                VerticalLayout {
-                    padding: 10px;
-                    spacing: 8px;
-
-                    Rectangle {
-                        min-width: 64px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: AppTheme.prompt_chrome_border;
-                        border-radius: 8px;
-                        background: #00000000;
-
-                        Text {
-                            text: @tr("返回");
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.close-shell-manage();
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        height: 1px;
-                        background: AppTheme.prompt_chrome_border;
-                    }
-
-                    for nav in [@tr("啟動"), @tr("命令提示設定")]: Rectangle {
-                        height: 30px;
-                        border-radius: 6px;
-                        background: nav == root.ws-shell-settings-nav ? #2d2d30 : #00000000;
-
-                        Text {
-                            text: nav;
-                            color: nav == root.ws-shell-settings-nav ? AppTheme.text : AppTheme.text_muted;
-                            vertical-alignment: center;
-                            horizontal-alignment: center;
-                            width: 100%;
-                            font-size: 12px;
-                            overflow: elide;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                root.ws-shell-settings-nav = nav;
-                                root.ws-shell-manage-saved-hint = false;
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        vertical-stretch: 1;
-                        background: #00000000;
-                    }
-                }
-            }
-
-            Rectangle {
-                width: 1px;
-                vertical-stretch: 1;
-                background: AppTheme.prompt_chrome_border;
-            }
-
-            Rectangle {
-                vertical-stretch: 1;
-                horizontal-stretch: 1;
-                background: AppTheme.bg;
-
-                VerticalLayout {
-                    padding: 12px;
-                    spacing: 8px;
-
-                    Text {
-                        text: root.ws-shell-settings-nav == @tr("啟動")
-                            ? @tr("設定 / 啟動")
-                            : @tr("設定 / 命令提示設定");
-                        color: AppTheme.text;
-                        font-size: 13px;
-                        font-weight: 600;
-                    }
-
-                    if root.ws-shell-settings-nav == @tr("啟動"): VerticalLayout {
-                        spacing: 10px;
-                        vertical-stretch: 1;
-
-                        Text {
-                            text: @tr("設定新分頁預設啟動行為。");
-                            color: AppTheme.text_muted;
-                            font-size: 11px;
-                            wrap: word-wrap;
-                        }
-
-                        Rectangle {
-                            height: 42px;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            border-radius: 6px;
-                            background: #00000000;
-
-                            HorizontalLayout {
-                                padding-left: 10px;
-                                padding-right: 10px;
-                                spacing: 10px;
-                                alignment: center;
-
-                                Rectangle {
-                                    width: 140px;
-                                    horizontal-stretch: 0;
-                                    height: parent.height;
-
-                                    Text {
-                                        width: 100%;
-                                        height: 100%;
-                                        text: @tr("預設設定檔");
-                                        color: AppTheme.text_muted;
-                                        font-size: 12px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-                                }
-
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    background: #00000000;
-                                }
-
-                                Rectangle {
-                                    width: 240px;
-                                    horizontal-stretch: 0;
-                                    background: #00000000;
-
-                                    ComboBox {
-                                        width: 100%;
-                                        model: root.ws-cmd-type-choices;
-                                        current-value <=> root.ws-shell-startup-default-profile;
-                                        selected(val) => {
-                                            root.ws-shell-startup-default-profile = val;
-                                            self.current-value = val;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            height: 42px;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            border-radius: 6px;
-                            background: #00000000;
-
-                            HorizontalLayout {
-                                padding-left: 10px;
-                                padding-right: 10px;
-                                spacing: 10px;
-                                alignment: center;
-
-                                Rectangle {
-                                    width: 140px;
-                                    horizontal-stretch: 0;
-                                    height: parent.height;
-
-                                    Text {
-                                        width: 100%;
-                                        height: 100%;
-                                        text: @tr("語言");
-                                        color: AppTheme.text_muted;
-                                        font-size: 12px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-                                }
-
-                                Rectangle {
-                                    horizontal-stretch: 1;
-                                    background: #00000000;
-                                }
-
-                                Rectangle {
-                                    width: 240px;
-                                    horizontal-stretch: 0;
-                                    background: #00000000;
-
-                                    ComboBox {
-                                        width: 100%;
-                                        model: root.ws-shell-startup-language-choices;
-                                        current-value <=> root.ws-shell-startup-language;
-                                        selected(val) => {
-                                            root.ws-shell-startup-language = val;
-                                            self.current-value = val;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        Rectangle {
-                            vertical-stretch: 1;
-                            background: #00000000;
-                        }
-                    }
-
-                    if root.ws-shell-settings-nav == @tr("命令提示設定"): VerticalLayout {
-                        spacing: 8px;
-                        vertical-stretch: 1;
-
-                        Text {
-                            text: @tr("預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。");
-                            color: AppTheme.text_muted;
-                            font-size: 11px;
-                            horizontal-alignment: left;
-                            wrap: word-wrap;
-                        }
-
-                        HorizontalLayout {
-                            spacing: 8px;
-                            alignment: end;
-
-                            Rectangle {
-                                min-width: 64px;
-                                height: 26px;
-                                horizontal-stretch: 0;
-                                border-width: 1px;
-                                border-color: AppTheme.prompt_chrome_border;
-                                border-radius: 8px;
-                                background: #00000000;
-
-                                Text {
-                                    text: @tr("新增");
-                                    color: AppTheme.text;
-                                    horizontal-alignment: center;
-                                    vertical-alignment: center;
-                                    font-size: 12px;
-                                    font-weight: 600;
-                                }
-
-                                TouchArea {
-                                    clicked => {
-                                        root.manage-add-shell-row();
-                                    }
-                                }
-                            }
-                        }
-
-                        ScrollView {
-                            vertical-stretch: 1;
-                            min-height: 0px;
-
-                            VerticalLayout {
-                                alignment: start;
-                                spacing: 6px;
-
-                                for row[key_idx] in root.ws-shell-manage-rows: Rectangle {
-                                    border-width: 1px;
-                                    border-color: AppTheme.prompt_chrome_border;
-                                    border-radius: 6px;
-                                    background: #00000000;
-
-                                    VerticalLayout {
-                                        padding: 0px;
-                                        spacing: 0px;
-
-                                        Rectangle {
-                                            min-height: 34px;
-                                            background: #00000000;
-
-                                            HorizontalLayout {
-                                                padding-left: 8px;
-                                                padding-right: 8px;
-                                                spacing: 8px;
-                                                alignment: start;
-
-                                                Text {
-                                                    text: row.expanded ? "v" : ">";
-                                                    color: AppTheme.text_muted;
-                                                    font-size: 12px;
-                                                    vertical-alignment: center;
-                                                    horizontal-stretch: 0;
-                                                    width: 14px;
-                                                    horizontal-alignment: left;
-                                                }
-
-                                                Text {
-                                                    text: row.name;
-                                                    color: row.key-locked ? AppTheme.text_muted : AppTheme.text;
-                                                    font-size: 12px;
-                                                    font-weight: 600;
-                                                    vertical-alignment: center;
-                                                    horizontal-stretch: 1;
-                                                    horizontal-alignment: left;
-                                                    overflow: elide;
-                                                }
-                                            }
-
-                                            TouchArea {
-                                                clicked => {
-                                                    root.toggle-shell-manage-row-expanded(key_idx);
-                                                }
-                                            }
-                                        }
-
-                                        if row.expanded: VerticalLayout {
-                                            padding-left: 8px;
-                                            padding-right: 8px;
-                                            padding-bottom: 8px;
-                                            spacing: 8px;
-
-                                            HorizontalLayout {
-                                                spacing: 6px;
-                                                alignment: start;
-
-                                                if row.key-locked: Rectangle {
-                                                    horizontal-stretch: 1;
-                                                    min-width: 96px;
-                                                    min-height: 26px;
-                                                    background: #00000020;
-                                                    border-radius: 4px;
-
-                                                    Text {
-                                                        text: row.name;
-                                                        color: AppTheme.text_muted;
-                                                        font-size: 12px;
-                                                        vertical-alignment: center;
-                                                        horizontal-alignment: left;
-                                                        overflow: elide;
-                                                    }
-                                                }
-
-                                                if !row.key-locked: LineEdit {
-                                                    horizontal-stretch: 1;
-                                                    min-width: 96px;
-                                                    font-size: 12px;
-                                                    text: row.name;
-                                                    edited(new_text) => {
-                                                        root.shell-manage-name-edited(key_idx, new_text);
-                                                    }
-                                                }
-
-                                                Text {
-                                                    text: ">";
-                                                    color: AppTheme.text_muted;
-                                                    font-size: 12px;
-                                                    vertical-alignment: center;
-                                                    horizontal-stretch: 0;
-                                                }
-
-                                                LineEdit {
-                                                    horizontal-stretch: 2;
-                                                    min-width: 180px;
-                                                    font-size: 12px;
-                                                    text: row.line;
-                                                    edited(new_text) => {
-                                                        root.shell-manage-line-edited(key_idx, new_text);
-                                                    }
-                                                }
-
-                                                Rectangle {
-                                                    min-width: 44px;
-                                                    max-width: 52px;
-                                                    height: 24px;
-                                                    horizontal-stretch: 0;
-                                                    border-width: 1px;
-                                                    border-color: #ff4f6d;
-                                                    border-radius: 6px;
-                                                    background: #00000000;
-
-                                                    Text {
-                                                        text: @tr("刪除");
-                                                        color: #ff8ca8;
-                                                        font-size: 11px;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                    }
-
-                                                    TouchArea {
-                                                        enabled: !row.key-locked;
-                                                        clicked => {
-                                                            root.remove-shell-manage-row(key_idx);
-                                                        }
-                                                    }
-                                                }
-                                            }
-
-                                            VerticalLayout {
-                                                spacing: 4px;
-
-                                                Text {
-                                                    text: @tr("工作區設定");
-                                                    color: AppTheme.text_muted;
-                                                    font-size: 11px;
-                                                    horizontal-alignment: left;
-                                                    wrap: word-wrap;
-                                                }
-
-                                                HorizontalLayout {
-                                                    spacing: 8px;
-                                                    alignment: start;
-
-                                                    LineEdit {
-                                                        horizontal-stretch: 1;
-                                                        min-height: 28px;
-                                                        font-size: 12px;
-                                                        text: row.workspace-path;
-                                                        edited(new_text) => {
-                                                            root.shell-manage-workspace-edited(key_idx, new_text);
-                                                        }
-                                                    }
-
-                                                    Rectangle {
-                                                        min-width: 88px;
-                                                        height: 28px;
-                                                        horizontal-stretch: 0;
-                                                        border-width: 1px;
-                                                        border-color: AppTheme.prompt_chrome_border;
-                                                        border-radius: 8px;
-                                                        background: #00000000;
-
-                                                        Text {
-                                                            text: @tr("選擇資料夾");
-                                                            color: AppTheme.text;
-                                                            horizontal-alignment: center;
-                                                            vertical-alignment: center;
-                                                            font-size: 12px;
-                                                            font-weight: 600;
-                                                        }
-
-                                                        TouchArea {
-                                                            clicked => {
-                                                                root.shell-manage-workspace-pick-folder(key_idx);
-                                                            }
-                                                        }
-                                                    }
-                                                }
-
-                                                Text {
-                                                    text: @tr("空白則使用目前工作區（分頁資料夾或啟動目錄）；有填則以該路徑為工作區根目錄。");
-                                                    color: AppTheme.text_muted;
-                                                    font-size: 10px;
-                                                    horizontal-alignment: left;
-                                                    wrap: word-wrap;
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Text {
-                            text: root.ws-shell-manage-saved-hint ? @tr("已儲存設定") : "";
-                            color: #7fdc9a;
-                            font-size: 12px;
-                            vertical-alignment: center;
-                            horizontal-stretch: 1;
-                        }
-
-                        Rectangle {
-                            min-width: 72px;
-                            height: 28px;
-                            horizontal-stretch: 0;
-                            border-width: 1px;
-                            border-color: AppTheme.accent;
-                            border-radius: 8px;
-                            background: AppTheme.accent;
-
-                            Text {
-                                text: @tr("儲存");
-                                color: AppTheme.text;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                font-size: 12px;
-                                font-weight: 700;
-                            }
-
-                            TouchArea {
-                                clicked => {
-                                    if root.ws-shell-settings-nav == @tr("啟動") {
-                                        root.save-shell-startup-settings();
-                                    } else if root.ws-shell-settings-nav == @tr("命令提示設定") {
-                                        root.save-shell-manage();
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+    if root.ws-shell-manage-open : GjShellManagePanel {
+        settings-nav <=> root.ws-shell-settings-nav;
+        startup-default-profile <=> root.ws-shell-startup-default-profile;
+        startup-language <=> root.ws-shell-startup-language;
+        cmd-type-choices: root.ws-cmd-type-choices;
+        startup-language-choices: root.ws-shell-startup-language-choices;
+        shell-manage-rows <=> root.ws-shell-manage-rows;
+        manage-saved-hint <=> root.ws-shell-manage-saved-hint;
+        close-requested => {
+            root.close-shell-manage();
+        }
+        add-shell-row => {
+            root.manage-add-shell-row();
+        }
+        remove-shell-row(idx) => {
+            root.remove-shell-manage-row(idx);
+        }
+        shell-name-edited(idx, name) => {
+            root.shell-manage-name-edited(idx, name);
+        }
+        shell-line-edited(idx, line) => {
+            root.shell-manage-line-edited(idx, line);
+        }
+        shell-workspace-edited(idx, path) => {
+            root.shell-manage-workspace-edited(idx, path);
+        }
+        shell-workspace-pick-folder(idx) => {
+            root.shell-manage-workspace-pick-folder(idx);
+        }
+        save-shell-manage => {
+            root.save-shell-manage();
+        }
+        save-startup-settings => {
+            root.save-shell-startup-settings();
+        }
+        toggle-row-expanded(idx) => {
+            root.toggle-shell-manage-row-expanded(idx);
         }
     }
 
-    // Edge-only layer so resize cursors stay visible (caption TouchAreas otherwise force Default).
-    // Must sit above GjViewer terminal wheel/selection TouchAreas (z≈100–101); below image zoom (450).
-    // Winit still handles border drags before Slint mouse handlers; strips are only ~border px wide.
-    window-resize-edge-cursors := Rectangle {
-        x: 0px;
-        y: 0px;
-        width: 100%;
-        height: 100%;
-        background: transparent;
-        z: 400;
-
-        property <length> b: AppTheme.chrome_resize_border;
-        property <length> title-h: 34px;
-        // Caption controls width (must match title strip 3×46px).
-        property <length> caption-ctrl-w: 138px;
-
-        TouchArea {
-            x: root.width - b;
-            y: 0px;
-            width: b;
-            height: root.height;
-            mouse-cursor: e-resize;
-        }
-
-        TouchArea {
-            x: 0px;
-            y: 0px;
-            width: b;
-            height: root.height;
-            mouse-cursor: w-resize;
-        }
-
-        TouchArea {
-            x: 0px;
-            y: root.height - b;
-            width: root.width;
-            height: b;
-            mouse-cursor: s-resize;
-        }
-
-        TouchArea {
-            x: 0px;
-            y: 0px;
-            width: root.width - caption-ctrl-w - b;
-            height: b;
-            mouse-cursor: n-resize;
-            double-clicked => {
-                root.window-chrome-title-double-click();
-            }
-        }
-
-        // Top edge above min/max/close (fills the strip we previously skipped; abuts the east vertical strip).
-        TouchArea {
-            x: root.width - caption-ctrl-w - b;
-            y: 0px;
-            width: caption-ctrl-w;
-            height: b;
-            mouse-cursor: n-resize;
-            double-clicked => {
-                root.window-chrome-title-double-click();
-            }
-        }
-
-        TouchArea {
-            x: root.width - b;
-            y: root.height - b;
-            width: b;
-            height: b;
-            mouse-cursor: se-resize;
-        }
-
-        TouchArea {
-            x: 0px;
-            y: root.height - b;
-            width: b;
-            height: b;
-            mouse-cursor: sw-resize;
-        }
-
-        TouchArea {
-            x: 0px;
-            y: 0px;
-            width: b;
-            height: b;
-            mouse-cursor: nw-resize;
-            double-clicked => {
-                root.window-chrome-title-double-click();
-            }
-        }
-
-        // Top-right corner: sits above the east strip hit target so the diagonal resize cursor shows.
-        TouchArea {
-            x: root.width - b;
-            y: 0px;
-            width: b;
-            height: b;
-            mouse-cursor: ne-resize;
-            double-clicked => {
-                root.window-chrome-title-double-click();
-            }
+    GjWindowResizeEdgeCursors {
+        window-chrome-title-double-click => {
+            root.window-chrome-title-double-click();
         }
     }
 
@@ -1400,88 +420,10 @@ export component AppWindow inherits Window {
     out property <float> ws-terminal-viewport-height-px: workspace.terminal-viewport-height-px;
 
     if root.ws-image-zoom-index >= 0
-            && root.ws-image-zoom-index < root.ws-prompt-images.length: Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: #0a0a0fe8;
-        z: 450;
-
-        TouchArea {
-            width: 100%;
-            height: 100%;
-            clicked => {
-                root.ws-image-zoom-index = -1;
-            }
-
-            VerticalLayout {
-                alignment: center;
-                padding: 24px;
-                spacing: 10px;
-
-                Rectangle {
-                    width: min(parent.width - 48px, 900px);
-                    height: min(parent.height - 80px, 720px);
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 12px;
-                    background: #14161c;
-                    clip: true;
-
-                    Image {
-                        source: root.ws-prompt-images[root.ws-image-zoom-index].thumb;
-                        width: 100%;
-                        height: 100%;
-                        image-fit: contain;
-                    }
-                }
-
-                Text {
-                    text: @tr("點擊任意處關閉");
-                    color: AppTheme.text_muted;
-                    font-size: 12px;
-                    horizontal-alignment: center;
-                }
-            }
-        }
+            && root.ws-image-zoom-index < root.ws-prompt-images.length: GjPromptImageLightbox {
+        zoom-index <=> root.ws-image-zoom-index;
+        prompt-images: root.ws-prompt-images;
     }
 
-    if root.ws-file-drop-visible : Rectangle {
-        x: 0px;
-        y: 0px;
-        width: parent.width;
-        height: parent.height;
-        background: #1a1b26c0; // 半透明背景
-        z: 500;
-
-        Rectangle {
-            width: 240px;
-            height: 120px;
-            border-width: 2px;
-            border-color: AppTheme.accent;
-            border-radius: 12px;
-            background: AppTheme.bg;
-
-            VerticalLayout {
-                alignment: center;
-                spacing: 12px;
-                Text {
-                    // ASCII "+" — U+2295 (⊕) is often missing from bundled UI fonts and renders as tofu.
-                    text: "+";
-                    font-size: 32px;
-                    font-weight: 300;
-                    color: AppTheme.accent;
-                    horizontal-alignment: center;
-                }
-                Text {
-                    text: @tr("放開以加入檔案");
-                    font-size: 16px;
-                    font-weight: 600;
-                    color: AppTheme.text;
-                    horizontal-alignment: center;
-                }
-            }
-        }
-    }
+    if root.ws-file-drop-visible : GjFileDropOverlay {}
 }
