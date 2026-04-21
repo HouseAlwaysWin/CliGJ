@@ -181,7 +181,7 @@ export function activate(context: vscode.ExtensionContext): void {
     const fileToken = `@${fileNameFromPath(normalizedFilePath)}`;
 
     const selectionPayloads: string[] = [];
-    const promptLines: string[] = [fileToken];
+    const promptParts: string[] = [];
     nonEmptySelections.forEach((selection, index) => {
       const startLine = selection.start.line;
       const endLine =
@@ -190,7 +190,6 @@ export function activate(context: vscode.ExtensionContext): void {
           : selection.end.line;
       const selectedText = document.getText(selection).trimEnd();
       const safeText = selectedText.length > 0 ? selectedText : document.lineAt(startLine).text;
-      const token = `[[sel${index + 1}]]`;
       const range = `L${startLine + 1}-L${endLine + 1}`;
       selectionPayloads.push(
         [
@@ -202,10 +201,12 @@ export function activate(context: vscode.ExtensionContext): void {
           "[[/selection]]"
         ].join("\n")
       );
-      promptLines.push(`Selection ${index + 1} (${range}): ${token}`);
+      const lineLabel =
+        startLine === endLine ? `${startLine + 1}` : `${startLine + 1}-${endLine + 1}`;
+      promptParts.push(`${fileToken}(${lineLabel})`);
     });
 
-    const prompt = promptLines.join("\n");
+    const prompt = promptParts.join(" | ");
     let totalPayloadChars = selectionPayloads.reduce((sum, block) => sum + block.length, 0);
     if (totalPayloadChars > MAX_SELECTION_PAYLOAD_CHARS) {
       const trimmed: string[] = [];
