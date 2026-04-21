@@ -3,6 +3,7 @@ import { AppTheme } from "../theme.slint";
 /// Optional `@` file list (workspace-relative paths). Shown above the prompt `TextEdit`.
 export component GjAtFilePicker inherits Rectangle {
     in property <bool> open: false;
+    in property <string> terminal-font-family: "DejaVu Sans Mono";
     in property <string> root-label;
     in property <[string]> choices;
     in-out property <int> selected-index: 0;
@@ -59,7 +60,7 @@ export component GjAtFilePicker inherits Rectangle {
                             text: path;
                             color: AppTheme.text;
                             font-size: 12px;
-                            font-family: AppTheme.terminal_font_family;
+                            font-family: root.terminal-font-family;
                             vertical-alignment: center;
                         }
                     }

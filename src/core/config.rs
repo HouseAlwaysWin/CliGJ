@@ -173,6 +173,16 @@ impl AppConfig {
             .filter(|s| !s.is_empty())
     }
 
+    pub fn terminal_font_family(&self) -> Option<String> {
+        self.data
+            .get("ui")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("terminal_font_family"))
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+    }
+
     pub fn set_ui_language(&mut self, language: &str) {
         let ui = self
             .data
@@ -204,6 +214,23 @@ impl AppConfig {
         ui_table.insert(
             "default_shell_profile".to_string(),
             toml::Value::String(profile.trim().to_string()),
+        );
+    }
+
+    pub fn set_terminal_font_family(&mut self, family: &str) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        ui_table.insert(
+            "terminal_font_family".to_string(),
+            toml::Value::String(family.trim().to_string()),
         );
     }
 }

@@ -1,8 +1,9 @@
 //! Slint UI shell: tab/workspace, ConPTY, composer, `@` file picker.
 
 mod at_picker;
-mod i18n;
 mod composer_sync;
+mod fonts;
+mod i18n;
 mod ipc;
 mod interactive_commands;
 mod shell_profiles;

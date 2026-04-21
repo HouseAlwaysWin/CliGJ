@@ -13,6 +13,7 @@ use crate::workspace_files;
 use crate::core::config::AppConfig;
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
+use crate::gui::fonts::normalize_terminal_font_family;
 use crate::gui::ipc::IpcBridge;
 use crate::gui::interactive_commands::{
     self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
@@ -548,6 +549,9 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         ui.set_ws_shell_startup_default_profile(SharedString::from(
             s.startup_default_shell_profile.as_str(),
         ));
+        ui.set_ws_shell_startup_terminal_font_family(SharedString::from(
+            s.startup_terminal_font_family.as_str(),
+        ));
         drop(s);
         ui.set_ws_shell_settings_nav(SharedString::from("startup"));
         ui.set_ws_shell_manage_saved_hint(false);
@@ -802,6 +806,10 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         let language = ui.get_ws_shell_startup_language().to_string();
         let mut profile = ui.get_ws_shell_startup_default_profile().to_string();
+        let terminal_font_family = normalize_terminal_font_family(
+            ui.get_ws_shell_startup_terminal_font_family().as_str(),
+        )
+        .to_string();
         let choices = ui.get_ws_cmd_type_choices();
         if choices.row_count() == 0 {
             eprintln!("CliGJ: no shell profiles available");
@@ -815,6 +823,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             Ok(mut cfg) => {
                 cfg.set_ui_language(language.as_str());
                 cfg.set_default_shell_profile(profile.as_str());
+                cfg.set_terminal_font_family(terminal_font_family.as_str());
                 if let Err(e) = cfg.save() {
                     eprintln!("CliGJ: save config: {e}");
                     return;
@@ -829,8 +838,13 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let mut s = st_startup_save.borrow_mut();
             s.startup_language = language.clone();
             s.startup_default_shell_profile = profile.clone();
+            s.startup_terminal_font_family = terminal_font_family.clone();
         }
         apply_slint_language_from_shell_setting(&ui, language.as_str());
+        ui.set_ws_terminal_font_family(SharedString::from(terminal_font_family.as_str()));
+        ui.set_ws_shell_startup_terminal_font_family(SharedString::from(
+            terminal_font_family.as_str(),
+        ));
         ui.set_ws_shell_manage_saved_hint(true);
         let ui_weak = ui.as_weak();
         slint::Timer::single_shot(std::time::Duration::from_millis(1600), move || {

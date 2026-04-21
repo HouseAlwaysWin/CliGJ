@@ -330,6 +330,8 @@ pub struct GuiState {
     pub(crate) startup_language: String,
     /// Startup page setting: default shell profile for newly created tabs.
     pub(crate) startup_default_shell_profile: String,
+    /// Startup page setting: terminal font family used by the in-app terminal viewer.
+    pub(crate) startup_terminal_font_family: String,
 }
 
 #[derive(Debug)]

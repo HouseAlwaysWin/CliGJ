@@ -12,6 +12,7 @@ use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
 use crate::core::config::AppConfig;
 
+use super::fonts::{normalize_terminal_font_family, terminal_font_choices};
 use super::i18n::apply_slint_language_from_shell_setting;
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::ipc::{IpcBridge, IpcGuiCommand};
@@ -57,6 +58,10 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let ui_language = cfg
         .ui_language()
         .unwrap_or_else(|| "預設".to_string());
+    let terminal_font_family = normalize_terminal_font_family(
+        cfg.terminal_font_family().as_deref().unwrap_or(""),
+    )
+    .to_string();
 
     let titles = Rc::new(VecModel::from(vec![SharedString::from(
         super::i18n::tab_title_for_index(ui_language.as_str(), 1),
@@ -101,6 +106,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         shell_profiles,
         startup_language: ui_language.clone(),
         startup_default_shell_profile: startup_profile.clone(),
+        startup_terminal_font_family: terminal_font_family.clone(),
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));
@@ -109,6 +115,16 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     sync_shell_profile_choices_to_ui(&app, &state.borrow());
     app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
     app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
+    app.set_ws_terminal_font_family(SharedString::from(terminal_font_family.as_str()));
+    app.set_ws_shell_startup_terminal_font_family(SharedString::from(
+        terminal_font_family.as_str(),
+    ));
+    app.set_ws_shell_startup_terminal_font_choices(ModelRc::new(VecModel::from(
+        terminal_font_choices()
+            .iter()
+            .map(|name| SharedString::from(*name))
+            .collect::<Vec<_>>(),
+    )));
     apply_slint_language_from_shell_setting(&app, ui_language.as_str());
     app.set_ws_ipc_status_text(SharedString::from("IPC OFF"));
     app.set_ws_ipc_running(false);

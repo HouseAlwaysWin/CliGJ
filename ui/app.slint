@@ -15,6 +15,7 @@ export component AppWindow inherits Window {
     title: "CliGJ";
     icon: @image-url("../src/asset/logo3.png");
     no-frame: true;
+    default-font-family: AppTheme.ui_font_family;
     resize-border-width: AppTheme.chrome_resize_border;
     preferred-width: 800px;
     preferred-height: 600px;
@@ -64,7 +65,10 @@ export component AppWindow inherits Window {
     in-out property <string> ws-shell-settings-nav: "startup";
     in-out property <string> ws-shell-startup-language: "預設";
     in-out property <string> ws-shell-startup-default-profile: "Command Prompt";
+    in-out property <string> ws-shell-startup-terminal-font-family: "DejaVu Sans Mono";
     in-out property <[string]> ws-shell-startup-language-choices: ["預設", "中文", "English"];
+    in-out property <[string]> ws-shell-startup-terminal-font-choices: ["Cascadia Mono", "Cascadia Code", "MingLiU", "DejaVu Sans Mono"];
+    in-out property <string> ws-terminal-font-family: "DejaVu Sans Mono";
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -262,6 +266,7 @@ export component AppWindow inherits Window {
                         prompt <=> root.ws-prompt;
                         prompt-path-chips <=> root.ws-prompt-path-chips;
                         raw-input-enabled <=> root.ws-raw-input;
+                        terminal-font-family: root.ws-terminal-font-family;
                         ipc-running: root.ws-ipc-running;
                         ipc-client-count: root.ws-ipc-client-count;
                         ipc-status-text: root.ws-ipc-status-text;
@@ -380,8 +385,10 @@ export component AppWindow inherits Window {
         settings-nav <=> root.ws-shell-settings-nav;
         startup-default-profile <=> root.ws-shell-startup-default-profile;
         startup-language <=> root.ws-shell-startup-language;
+        startup-terminal-font-family <=> root.ws-shell-startup-terminal-font-family;
         cmd-type-choices: root.ws-cmd-type-choices;
         startup-language-choices: root.ws-shell-startup-language-choices;
+        startup-terminal-font-choices: root.ws-shell-startup-terminal-font-choices;
         shell-manage-rows <=> root.ws-shell-manage-rows;
         manage-saved-hint <=> root.ws-shell-manage-saved-hint;
         close-requested => {

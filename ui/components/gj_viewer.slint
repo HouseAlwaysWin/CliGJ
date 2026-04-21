@@ -4,6 +4,7 @@ import { TermLine } from "../term_types.slint";
 
 export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
+    in property <string> terminal-font-family: "DejaVu Sans Mono";
     in-out property <[TermLine]> terminal-lines;
     /// Global index of `terminal-lines[0]` in the full document.
     in property <int> terminal-line-offset: 0;
@@ -248,7 +249,7 @@ export component GjViewer inherits Rectangle {
                 text: root.terminal-text;
                 color: AppTheme.text_muted;
                 font-size: 13px;
-                font-family: AppTheme.terminal_font_family;
+                font-family: root.terminal-font-family;
                 wrap: word-wrap;
             }
 
@@ -296,7 +297,7 @@ export component GjViewer inherits Rectangle {
                                 text: span.text;
                                 color: span.fg;
                                 font-size: 13px;
-                                font-family: AppTheme.terminal_font_family;
+                                font-family: span.font-family == "" ? root.terminal-font-family : span.font-family;
                                 wrap: no-wrap;
                                 vertical-alignment: center;
                                 horizontal-alignment: left;

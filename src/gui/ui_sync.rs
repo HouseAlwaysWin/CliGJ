@@ -8,6 +8,7 @@ use unicode_width::UnicodeWidthChar;
 use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
+use super::fonts::TERMINAL_CJK_FALLBACK_FONT_FAMILY;
 use super::slint_ui::{AppWindow, PromptImageChip};
 use super::state::{TabState, TerminalMode};
 use super::slint_ui::{TermLine, TermSpan};
@@ -80,6 +81,99 @@ fn term_bg_for_ui(bg: [u8; 3]) -> Color {
     rgb_color(rgb)
 }
 
+fn is_emoji_char(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x1F000..=0x1FAFF | 0xFE0F
+    )
+}
+
+fn is_symbol_char(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x2600..=0x27BF
+            | 0x2B00..=0x2BFF
+            | 0x2190..=0x21FF
+            | 0x2300..=0x23FF
+            | 0x2460..=0x24FF
+    )
+}
+
+fn is_cjk_or_bopomofo_char(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x2E80..=0x2EFF
+            | 0x2F00..=0x2FDF
+            | 0x3000..=0x303F
+            | 0x3100..=0x312F
+            | 0x31A0..=0x31BF
+            | 0x3400..=0x4DBF
+            | 0x4E00..=0x9FFF
+            | 0xF900..=0xFAFF
+            | 0xFE30..=0xFE4F
+            | 0xFF00..=0xFFEF
+            | 0x20000..=0x2A6DF
+            | 0x2A700..=0x2B73F
+            | 0x2B740..=0x2B81F
+            | 0x2B820..=0x2CEAF
+            | 0x2CEB0..=0x2EBEF
+            | 0x2EBF0..=0x2EE5F
+    )
+}
+
+fn term_span_font_family(ch: char) -> &'static str {
+    if is_emoji_char(ch) {
+        "Segoe UI Emoji"
+    } else if is_symbol_char(ch) {
+        "Segoe UI Symbol"
+    } else if is_cjk_or_bopomofo_char(ch) {
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY
+    } else {
+        ""
+    }
+}
+
+fn split_term_span_by_font(span: &ColoredSpan) -> Vec<TermSpan> {
+    let mut out: Vec<TermSpan> = Vec::new();
+    let mut current_text = String::new();
+    let mut current_font = "";
+
+    for ch in span.text.chars() {
+        let font = term_span_font_family(ch);
+        if !current_text.is_empty() && font != current_font {
+            out.push(TermSpan {
+                text: SharedString::from(current_text.as_str()),
+                fg: rgb_color(span.fg),
+                bg: term_bg_for_ui(span.bg),
+                font_family: SharedString::from(current_font),
+            });
+            current_text.clear();
+        }
+        current_font = font;
+        current_text.push(ch);
+    }
+
+    if !current_text.is_empty() {
+        out.push(TermSpan {
+            text: SharedString::from(current_text.as_str()),
+            fg: rgb_color(span.fg),
+            bg: term_bg_for_ui(span.bg),
+            font_family: SharedString::from(current_font),
+        });
+    }
+
+    if out.is_empty() {
+        out.push(TermSpan {
+            text: SharedString::from(span.text.as_str()),
+            fg: rgb_color(span.fg),
+            bg: term_bg_for_ui(span.bg),
+            font_family: SharedString::new(),
+        });
+    }
+
+    out
+}
+
 #[allow(dead_code)]
 pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine> {
     let rows: Vec<TermLine> = lines
@@ -88,11 +182,7 @@ pub(crate) fn colored_lines_to_model(lines: &[ColoredLine]) -> ModelRc<TermLine>
             let spans: Vec<TermSpan> = line
                 .spans
                 .iter()
-                .map(|s| TermSpan {
-                    text: SharedString::from(s.text.as_str()),
-                    fg: rgb_color(s.fg),
-                    bg: term_bg_for_ui(s.bg),
-                })
+                .flat_map(split_term_span_by_font)
                 .collect();
             let char_count: i32 = line
                 .spans
@@ -130,11 +220,7 @@ fn build_term_line(line: &ColoredLine) -> TermLine {
     let spans: Vec<TermSpan> = line
         .spans
         .iter()
-        .map(|s| TermSpan {
-            text: SharedString::from(s.text.as_str()),
-            fg: rgb_color(s.fg),
-            bg: term_bg_for_ui(s.bg),
-        })
+        .flat_map(split_term_span_by_font)
         .collect();
     let char_count: i32 = line
         .spans

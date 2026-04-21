@@ -273,6 +273,7 @@ export component GjPromptDropZone inherits Rectangle {
                     placeholder-text: root.raw-input-enabled
                         ? @tr("TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject")
                         : @tr("Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V");
+                    font-family: AppTheme.ui_font_family;
                     font-size: 13px;
                     wrap: word-wrap;
                 }
