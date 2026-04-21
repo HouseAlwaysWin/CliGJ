@@ -471,6 +471,7 @@ export component TerminalHistoryWindow inherits Window {
     in-out property <string> history-title: @tr("終端歷史");
     in-out property <string> history-text: "";
     in-out property <string> terminal-font-family: "DejaVu Sans Mono";
+    callback refresh-requested;
     callback close-requested;
 
     Rectangle {
@@ -498,6 +499,33 @@ export component TerminalHistoryWindow inherits Window {
                     Rectangle {
                         horizontal-stretch: 1;
                         background: #00000000;
+                    }
+
+                    Rectangle {
+                        min-width: 72px;
+                        height: 28px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 14px;
+                        background: refresh_ta.has-hover ? #2b2d33 : #00000000;
+
+                        Text {
+                            text: @tr("重新整理");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: 100%;
+                            height: 100%;
+                        }
+
+                        refresh_ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            clicked => {
+                                root.refresh-requested();
+                            }
+                        }
                     }
 
                     Rectangle {
