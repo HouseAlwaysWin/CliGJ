@@ -133,6 +133,7 @@ export component AppWindow inherits Window {
     callback toggle-shell-manage-row-expanded(int);
     callback window-chrome-drag();
     callback window-chrome-minimize();
+    callback window-chrome-minimize-to-tray();
     callback window-chrome-maximize();
     callback window-chrome-close();
     /// 標題列（非最小化/最大化/關閉按鈕區）雙擊：切換最大化，與 Windows 標題列行為一致。
@@ -198,6 +199,9 @@ export component AppWindow inherits Window {
                 }
                 window-chrome-minimize => {
                     root.window-chrome-minimize();
+                }
+                window-chrome-minimize-to-tray => {
+                    root.window-chrome-minimize-to-tray();
                 }
                 window-chrome-maximize => {
                     root.window-chrome-maximize();

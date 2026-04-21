@@ -43,6 +43,10 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     }
 
     let app = AppWindow::new().expect("failed to build app window");
+    #[cfg(target_os = "windows")]
+    let tray_icon: Rc<RefCell<Option<tray_icon::TrayIcon>>> = Rc::new(RefCell::new(None));
+    #[cfg(target_os = "windows")]
+    install_windows_tray_event_handler(&app);
 
     let (tx, rx) = mpsc::channel::<TerminalChunk>();
     let (ipc_gui_tx, ipc_gui_rx) = mpsc::channel::<IpcGuiCommand>();
@@ -182,6 +186,24 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         });
 
         let app_weak = app.as_weak();
+        let tray_icon_min = Rc::clone(&tray_icon);
+        app.on_window_chrome_minimize_to_tray(move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };            
+            {
+                let mut tray = tray_icon_min.borrow_mut();
+                if let Err(e) = super::windows_tray::ensure_tray_icon(&mut *tray) {
+                    eprintln!("CliGJ: {e}");
+                    return;
+                }
+            }
+            let _ = ui.window().with_winit_window(|w| {
+                w.set_visible(false);
+            });
+        });
+
+        let app_weak = app.as_weak();
         app.on_window_chrome_maximize(move || {
             let Some(ui) = app_weak.upgrade() else {
                 return;
@@ -213,11 +235,18 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     {
         app.on_window_chrome_drag(|| {});
         app.on_window_chrome_minimize(|| {});
+        app.on_window_chrome_minimize_to_tray(|| {});
         app.on_window_chrome_maximize(|| {});
         app.on_window_chrome_title_double_click(|| {});
     }
 
-    app.on_window_chrome_close(|| {
+    #[cfg(target_os = "windows")]
+    let tray_icon_close = Rc::clone(&tray_icon);
+    app.on_window_chrome_close(move || {
+        #[cfg(target_os = "windows")]
+        {
+            tray_icon_close.borrow_mut().take();
+        }
         let _ = slint::quit_event_loop();
     });
 
@@ -236,6 +265,23 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         inject_file.map(|path| timers::spawn_inject_startup_timer(&app, Rc::clone(&state), path));
 
     app.run().expect("failed to run app window");
+}
+
+#[cfg(target_os = "windows")]
+fn install_windows_tray_event_handler(app: &AppWindow) {
+    let app_weak = app.as_weak();
+    tray_icon::TrayIconEvent::set_event_handler(Some(move |event| {
+        if !super::windows_tray::should_restore_from_event(event) {
+            return;
+        }
+        let _ = app_weak.upgrade_in_event_loop(|ui| {
+            let _ = ui.window().with_winit_window(|w| {
+                w.set_visible(true);
+                w.set_minimized(false);
+                w.focus_window();
+            });
+        });
+    }));
 }
 
 #[cfg(target_os = "windows")]

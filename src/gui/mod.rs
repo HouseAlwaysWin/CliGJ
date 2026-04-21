@@ -13,5 +13,7 @@ mod run;
 mod slint_ui;
 mod state;
 mod ui_sync;
+#[cfg(target_os = "windows")]
+mod windows_tray;
 
 pub use run::run_gui;

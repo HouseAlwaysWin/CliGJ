@@ -6,6 +6,7 @@ export component GjWindowChrome inherits Rectangle {
     in-out property <bool> window-maximized;
     callback window-chrome-drag();
     callback window-chrome-minimize();
+    callback window-chrome-minimize-to-tray();
     callback window-chrome-maximize();
     callback window-chrome-close();
     callback window-chrome-title-double-click();
@@ -78,6 +79,31 @@ export component GjWindowChrome inherits Rectangle {
 
         HorizontalLayout {
             spacing: 0px;
+
+            Rectangle {
+                width: 46px;
+                height: 34px;
+                background: tray_ta.has-hover ? #3c3c3c : #00000000;
+
+                Text {
+                    width: 100%;
+                    height: 100%;
+                    text: "T";
+                    color: AppTheme.text_muted;
+                    font-size: 12px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+
+                tray_ta := TouchArea {
+                    width: 100%;
+                    height: 100%;
+                    clicked => {
+                        root.window-chrome-minimize-to-tray();
+                    }
+                }
+            }
 
             Rectangle {
                 width: 46px;
