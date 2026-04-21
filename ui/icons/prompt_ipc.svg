@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2.35" stroke-linecap="round" stroke-linejoin="round">
+  <!-- IPC: simple centered link -->
+  <circle cx="7" cy="12" r="2.8"/>
+  <circle cx="17" cy="12" r="2.8"/>
+  <line x1="9.5" y1="12" x2="14.5" y2="12"/>
+</svg>

@@ -278,7 +278,7 @@ export component GjPromptDropZone inherits Rectangle {
                 }
 
                 HorizontalLayout {
-                    spacing: 8px;
+                    spacing: 6px;
 
                     HorizontalLayout {
                         spacing: 4px;
@@ -359,46 +359,75 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
                     }
 
+                    // Raw: SVG — 固定寬度，避免 min-width + stretch 被拉成寬膠囊
                     Rectangle {
-                        min-width: 56px;
+                        width: 28px;
                         height: 22px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: root.raw-input-enabled ? AppTheme.accent : AppTheme.prompt_chrome_border;
                         border-radius: 11px;
                         background: root.raw-input-enabled ? #ff4f6f : #00000000;
 
-                        Text {
-                            text: root.raw-input-enabled ? @tr("R ON") : @tr("R OFF");
-                            color: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 10px;
+                        Image {
+                            width: 14px;
+                            height: 14px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            source: root.raw-input-enabled
+                                ? @image-url("../icons/prompt_raw_on.svg")
+                                : @image-url("../icons/prompt_raw_off.svg");
+                            colorize: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
                         }
 
                         TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            accessible-role: button;
+                            accessible-label: root.raw-input-enabled
+                                ? @tr("原始輸入：按鍵送往終端")
+                                : @tr("行內編輯：關閉原始輸入以使用插入與組字");
+                            accessible-checkable: true;
+                            accessible-checked: root.raw-input-enabled;
                             clicked => {
                                 root.raw-input-toggle-requested();
                             }
                         }
                     }
 
+                    // IPC: SVG 鏈條；連線中顯示客戶端數量
                     Rectangle {
-                        min-width: 92px;
+                        width: root.ipc-running && root.ipc-client-count > 0 ? 38px : 28px;
                         height: 22px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: root.ipc-running ? #4fb67b : AppTheme.prompt_chrome_border;
                         border-radius: 11px;
                         background: root.ipc-running ? #193126 : #00000000;
 
-                        Text {
-                            text: root.ipc-status-text;
-                            color: root.ipc-running ? #97f5be : AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 10px;
+                        Image {
+                            width: 20px;
+                            height: 20px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            source: @image-url("../icons/prompt_ipc.svg");
+                            colorize: root.ipc-running ? #97f5be : AppTheme.text_muted;
                         }
 
-                        TouchArea {
+                        if root.ipc-running && root.ipc-client-count > 0: Text {
+                            text: "\{root.ipc-client-count}";
+                            color: #97f5be;
+                            font-size: 8px;
+                            font-weight: 700;
+                            x: parent.width - self.width - 4px;
+                            y: 1px;
+                        }
+
+                        ipc_toggle_ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
+                            accessible-role: button;
+                            accessible-label: root.ipc-status-text;
                             clicked => {
                                 root.ipc-toggle-requested();
                             }
@@ -406,24 +435,28 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        min-width: 40px;
+                        width: 28px;
                         height: 22px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 11px;
                         background: #00000000;
 
-                        Text {
-                            text: @tr("File");
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 11px;
+                        Image {
+                            width: 14px;
+                            height: 14px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            source: @image-url("../icons/prompt_file.svg");
+                            colorize: AppTheme.text_muted;
                         }
 
                         inject_file_ta := TouchArea {
                             width: parent.width;
                             height: parent.height;
+                            accessible-role: button;
+                            accessible-label: @tr("插入檔案");
                             clicked => {
                                 root.inject-file-requested();
                             }
@@ -431,24 +464,31 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        min-width: 36px;
+                        width: 28px;
                         height: 22px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 11px;
                         background: #00000000;
 
                         Text {
-                            text: @tr("Img");
+                            width: 100%;
+                            height: 100%;
+                            // EB9F = Photo（山景框）；E8B9 在 MDL2 常是字型／字元，會變成 A+▼
+                            text: "\u{eb9f}";
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 11px;
+                            font-size: 12px;
+                            font-family: AppTheme.chrome_caption_icon_font;
                         }
 
                         TouchArea {
                             width: parent.width;
                             height: parent.height;
+                            accessible-role: button;
+                            accessible-label: @tr("插入圖片");
                             clicked => {
                                 root.inject-image-requested();
                             }
@@ -458,10 +498,13 @@ export component GjPromptDropZone inherits Rectangle {
                     Rectangle {
                         width: 34px;
                         height: 22px;
+                        horizontal-stretch: 0;
                         border-width: 1px;
-                        border-color: AppTheme.accent;
+                        border-color: AppTheme.prompt_submit_border;
                         border-radius: 11px;
-                        background: submit_ta.has-hover ? #ff4f6f : AppTheme.accent;
+                        background: submit_ta.has-hover
+                            ? AppTheme.prompt_submit_bg_hover
+                            : AppTheme.prompt_submit_bg;
 
                         Text {
                             text: "↑";

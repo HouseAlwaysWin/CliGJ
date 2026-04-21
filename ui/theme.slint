@@ -15,7 +15,7 @@ export global AppTheme {
     in property <length> chrome_resize_border: 8px;
     in property <string> chrome_caption_icon_font: "Segoe MDL2 Assets";
 
-    // Windows Terminal–style chrome
+    // Windows Terminal??style chrome
     in property <color> tab_bar_bg: #1e1e1e;
     in property <color> tab_inactive: #2b2b2b;
     in property <color> tab_active: #1e1e1e;
@@ -24,11 +24,16 @@ export global AppTheme {
     // Fixed tab width: keeps titles readable; overflow uses horizontal ScrollView (no shrink-to "...").
     in property <length> tab_width: 160px;
 
-    // VS Code / Cursor–style prompt composer
+    // VS Code / Cursor-style prompt composer
     in property <color> prompt_chrome_bg: #252526;
     in property <color> prompt_chrome_border: #3c3c3c;
     in property <length> prompt_chrome_radius: 12px;
 
-    // `@` file picker — solid muted bar (avoids harsh/cyan-looking overlays on some GPUs)
+    /// Prompt bar - send / submit (blue, distinct from `accent` red Raw toggle)
+    in property <color> prompt_submit_bg: #1f6feb;
+    in property <color> prompt_submit_bg_hover: #388bfd;
+    in property <color> prompt_submit_border: #1158c7;
+
+    // `@` file picker - solid muted bar (avoids harsh/cyan-looking overlays on some GPUs)
     in property <color> picker_row_selected: #30343d;
 }

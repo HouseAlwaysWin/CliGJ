@@ -104,3 +104,15 @@ msgstr "R ON"
 
 msgid "R OFF"
 msgstr "R OFF"
+
+msgid "原始輸入：按鍵送往終端"
+msgstr "Raw input: keys go to the terminal"
+
+msgid "行內編輯：關閉原始輸入以使用插入與組字"
+msgstr "Line composer: turn off raw input to use inject and composition"
+
+msgid "插入檔案"
+msgstr "Insert file"
+
+msgid "插入圖片"
+msgstr "Insert image"

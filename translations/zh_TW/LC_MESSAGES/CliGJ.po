@@ -79,7 +79,7 @@ msgid "清除圖"
 msgstr "清除圖"
 
 msgid "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-msgstr "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
+msgstr "TTY：按鍵會送到終端機 — @／Shift+Tab 在此有效；關閉 R 以使用行內編輯與插入"
 
 msgid "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
 msgstr "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
@@ -100,7 +100,19 @@ msgid "設定"
 msgstr "設定"
 
 msgid "R ON"
-msgstr "R ON"
+msgstr "R 開"
 
 msgid "R OFF"
-msgstr "R OFF"
+msgstr "R 關"
+
+msgid "原始輸入：按鍵送往終端"
+msgstr "原始輸入：按鍵送往終端"
+
+msgid "行內編輯：關閉原始輸入以使用插入與組字"
+msgstr "行內編輯：關閉原始輸入以使用插入與組字"
+
+msgid "插入檔案"
+msgstr "插入檔案"
+
+msgid "插入圖片"
+msgstr "插入圖片"
