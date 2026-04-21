@@ -78,11 +78,11 @@ msgstr "放開以加入檔案"
 msgid "清除圖"
 msgstr "清除圖"
 
-msgid "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-msgstr "TTY：按鍵會送到終端機 — @／Shift+Tab 在此有效；關閉 R 以使用行內編輯與插入"
+msgid "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
+msgstr "TTY 模式: 按鍵送到終端機; @ / Shift+Tab 仍可用. 關閉原始輸入可使用行內編輯與插入"
 
-msgid "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
-msgstr "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
+msgid "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan、Build、/ - @ 搜尋檔案 - 用檔案/圖片按鈕，或拖放、Ctrl+V 貼上"
 
 msgid "選擇指令"
 msgstr "選擇指令"

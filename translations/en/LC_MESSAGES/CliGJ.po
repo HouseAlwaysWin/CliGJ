@@ -78,11 +78,11 @@ msgstr "Release to add files"
 msgid "清除圖"
 msgstr "Clear images"
 
-msgid "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
-msgstr "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
+msgid "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
+msgstr "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
 
-msgid "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
-msgstr "Plan, Build, / — @ search files — File / Img — drag & drop or Ctrl+V to paste files and images"
+msgid "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
 
 msgid "選擇指令"
 msgstr "Choose command"
