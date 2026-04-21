@@ -1,6 +1,6 @@
 //! `AppWindow` callback wiring (tabs, prompt, chips, selection, rename, inject).
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -76,22 +76,45 @@ pub(crate) fn connect(
     ipc: IpcBridge,
     history_window: Rc<TerminalHistoryWindow>,
 ) {
-    connect_tabs(app, Rc::clone(&state), ipc.clone());
+    let history_window_visible = Rc::new(Cell::new(false));
+    let history_refresh_on_tab_change: Rc<RefCell<Option<Rc<dyn Fn()>>>> = Rc::new(RefCell::new(None));
+
+    connect_tabs(
+        app,
+        Rc::clone(&state),
+        ipc.clone(),
+        Rc::clone(&history_window_visible),
+        Rc::clone(&history_refresh_on_tab_change),
+    );
     connect_prompt_and_picker(app, Rc::clone(&state));
     connect_chips(app, Rc::clone(&state));
     connect_terminal_selection(app, Rc::clone(&state));
     connect_terminal_viewport(app, Rc::clone(&state));
     connect_terminal_resize(app, Rc::clone(&state));
     connect_terminal_wheel(app, Rc::clone(&state));
-    connect_terminal_history(app, Rc::clone(&state), Rc::clone(&history_window));
+    connect_terminal_history(
+        app,
+        Rc::clone(&state),
+        Rc::clone(&history_window),
+        Rc::clone(&history_window_visible),
+        Rc::clone(&history_refresh_on_tab_change),
+    );
     connect_toggles(app, Rc::clone(&state), ipc.clone());
     connect_rename(app, Rc::clone(&state));
     connect_move_inject(app, Rc::clone(&state));
 }
 
-fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
+fn connect_tabs(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    ipc: IpcBridge,
+    history_window_visible: Rc<Cell<bool>>,
+    history_refresh_on_tab_change: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
+) {
     let st_tab = Rc::clone(&state);
     let ipc_tab = ipc.clone();
+    let history_visible_tab = Rc::clone(&history_window_visible);
+    let history_refresh_tab = Rc::clone(&history_refresh_on_tab_change);
     let app_weak = app.as_weak();
     app.on_tab_changed(move |new_index| {
         let Some(ui) = app_weak.upgrade() else {
@@ -103,6 +126,11 @@ fn connect_tabs(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
             eprintln!("CliGJ: tab switch: {e}");
         } else {
             publish_current_tab_changed(&ipc_tab, &s);
+            if history_visible_tab.get() {
+                if let Some(refresh) = history_refresh_tab.borrow().as_ref() {
+                    refresh();
+                }
+            }
         }
     });
 
@@ -971,6 +999,8 @@ fn connect_terminal_history(
     app: &AppWindow,
     state: Rc<RefCell<GuiState>>,
     history_window: Rc<TerminalHistoryWindow>,
+    history_window_visible: Rc<Cell<bool>>,
+    history_refresh_on_tab_change: Rc<RefCell<Option<Rc<dyn Fn()>>>>,
 ) {
     let refresh_history_snapshot: Rc<dyn Fn()> = Rc::new({
         let st_hist = Rc::clone(&state);
@@ -998,13 +1028,17 @@ fn connect_terminal_history(
             history_window.set_terminal_font_family(ui.get_ws_terminal_font_family());
         }
     });
+    *history_refresh_on_tab_change.borrow_mut() = Some(Rc::clone(&refresh_history_snapshot));
 
     let refresh_on_open = Rc::clone(&refresh_history_snapshot);
     let history_window_open = Rc::clone(&history_window);
+    let history_visible_open = Rc::clone(&history_window_visible);
     app.on_terminal_history_requested(move || {
         refresh_on_open();
+        history_visible_open.set(true);
         if let Err(e) = history_window_open.show() {
             eprintln!("CliGJ: show terminal history window: {e}");
+            history_visible_open.set(false);
         }
     });
 
@@ -1013,8 +1047,22 @@ fn connect_terminal_history(
         refresh_on_demand();
     });
 
+    let st_copy = Rc::clone(&state);
+    history_window.on_copy_all_requested(move || {
+        let s = st_copy.borrow();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let text = terminal_history_plain_text(&s.tabs[s.current]);
+        if let Err(e) = copy_to_clipboard(text.as_str()) {
+            eprintln!("CliGJ: copy terminal history: {e}");
+        }
+    });
+
     let history_window_close = Rc::clone(&history_window);
+    let history_visible_close = Rc::clone(&history_window_visible);
     history_window.on_close_requested(move || {
+        history_visible_close.set(false);
         let _ = history_window_close.hide();
     });
 }
