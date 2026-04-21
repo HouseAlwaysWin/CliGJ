@@ -368,7 +368,7 @@ export component GjPromptDropZone inherits Rectangle {
                         background: root.raw-input-enabled ? #ff4f6f : #00000000;
 
                         Text {
-                            text: root.raw-input-enabled ? "R ON" : "R OFF";
+                            text: root.raw-input-enabled ? @tr("R ON") : @tr("R OFF");
                             color: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;

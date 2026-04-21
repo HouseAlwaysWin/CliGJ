@@ -19,6 +19,7 @@ dependencies = [
  "serde_json",
  "slint",
  "slint-build",
+ "sys-locale",
  "tokio",
  "toml 1.1.2+spec-1.1.0",
  "unicode-width",

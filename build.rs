@@ -2,7 +2,14 @@ use std::fs::File;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    slint_build::compile("ui/app.slint").expect("failed to compile Slint UI");
+    slint_build::compile_with_config(
+        "ui/app.slint",
+        slint_build::CompilerConfiguration::new()
+            .with_bundled_translations("translations")
+            // Hand-written `.po` has plain msgids only; default `ComponentName` context would leave `en`/`zh_TW` empty.
+            .with_default_translation_context(slint_build::DefaultTranslationContext::None),
+    )
+    .expect("failed to compile Slint UI");
     embed_windows_exe_icon();
 }
 

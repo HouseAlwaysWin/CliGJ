@@ -220,7 +220,10 @@ impl GuiState {
         let startup_profile = self.startup_default_shell_profile.clone();
 
         let n = self.titles.row_count();
-        let label = SharedString::from(format!("Session {}", n + 1));
+        let label = SharedString::from(crate::gui::i18n::tab_title_for_index(
+            self.startup_language.as_str(),
+            n + 1,
+        ));
         self.titles.push(label);
         let id = self.next_id;
         self.next_id += 1;

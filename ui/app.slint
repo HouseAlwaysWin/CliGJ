@@ -60,7 +60,8 @@ export component AppWindow inherits Window {
     in-out property <bool> ws-shell-manage-open: false;
     in-out property <[InteractiveCmdEditorRow]> ws-shell-manage-rows: [];
     in-out property <bool> ws-shell-manage-saved-hint: false;
-    in-out property <string> ws-shell-settings-nav: "啟動";
+    /// Internal keys: `startup` | `shell_cmds` (not translated).
+    in-out property <string> ws-shell-settings-nav: "startup";
     in-out property <string> ws-shell-startup-language: "預設";
     in-out property <string> ws-shell-startup-default-profile: "Command Prompt";
     in-out property <[string]> ws-shell-startup-language-choices: ["預設", "中文", "English"];
@@ -120,6 +121,7 @@ export component AppWindow inherits Window {
     callback shell-manage-workspace-pick-folder(int);
     callback save-shell-manage;
     callback save-shell-startup-settings;
+    callback shell-ui-language-changed(string);
     callback close-shell-manage;
     callback toggle-shell-manage-row-expanded(int);
     callback window-chrome-drag();
@@ -408,6 +410,9 @@ export component AppWindow inherits Window {
         }
         save-startup-settings => {
             root.save-shell-startup-settings();
+        }
+        shell-ui-language-changed(lang) => {
+            root.shell-ui-language-changed(lang);
         }
         toggle-row-expanded(idx) => {
             root.toggle-shell-manage-row-expanded(idx);

@@ -17,6 +17,7 @@ use crate::gui::ipc::IpcBridge;
 use crate::gui::interactive_commands::{
     self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
 };
+use crate::gui::i18n::apply_slint_language_from_shell_setting;
 use crate::gui::shell_profiles::{
     default_shell_profile_name, normalize_shell_profile_command, sync_shell_manage_editor_to_ui,
     sync_shell_profile_choices_to_ui,
@@ -548,7 +549,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             s.startup_default_shell_profile.as_str(),
         ));
         drop(s);
-        ui.set_ws_shell_settings_nav(SharedString::from("啟動"));
+        ui.set_ws_shell_settings_nav(SharedString::from("startup"));
         ui.set_ws_shell_manage_saved_hint(false);
         ui.set_ws_shell_manage_open(true);
     });
@@ -829,6 +830,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             s.startup_language = language.clone();
             s.startup_default_shell_profile = profile.clone();
         }
+        apply_slint_language_from_shell_setting(&ui, language.as_str());
         ui.set_ws_shell_manage_saved_hint(true);
         let ui_weak = ui.as_weak();
         slint::Timer::single_shot(std::time::Duration::from_millis(1600), move || {
@@ -837,6 +839,16 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             };
             ui.set_ws_shell_manage_saved_hint(false);
         });
+    });
+
+    let st_lang_sync = Rc::clone(&state);
+    let app_weak_lang = app.as_weak();
+    app.on_shell_ui_language_changed(move |lang| {
+        let Some(ui) = app_weak_lang.upgrade() else {
+            return;
+        };
+        st_lang_sync.borrow_mut().startup_language = lang.to_string();
+        apply_slint_language_from_shell_setting(&ui, lang.as_str());
     });
 
     let app_weak = app.as_weak();

@@ -27,6 +27,8 @@ export component GjShellManagePanel inherits Rectangle {
     callback save-shell-manage;
     callback save-startup-settings;
     callback toggle-row-expanded(int);
+    /// Fired when the startup language ComboBox changes (immediate UI language switch).
+    callback shell-ui-language-changed(string);
 
     HorizontalLayout {
         spacing: 0px;
@@ -70,14 +72,14 @@ export component GjShellManagePanel inherits Rectangle {
                     background: AppTheme.prompt_chrome_border;
                 }
 
-                for nav in [@tr("啟動"), @tr("命令提示設定")]: Rectangle {
+                Rectangle {
                     height: 30px;
                     border-radius: 6px;
-                    background: nav == root.settings-nav ? #2d2d30 : #00000000;
+                    background: root.settings-nav == "startup" ? #2d2d30 : #00000000;
 
                     Text {
-                        text: nav;
-                        color: nav == root.settings-nav ? AppTheme.text : AppTheme.text_muted;
+                        text: @tr("啟動");
+                        color: root.settings-nav == "startup" ? AppTheme.text : AppTheme.text_muted;
                         vertical-alignment: center;
                         horizontal-alignment: center;
                         width: 100%;
@@ -87,7 +89,30 @@ export component GjShellManagePanel inherits Rectangle {
 
                     TouchArea {
                         clicked => {
-                            root.settings-nav = nav;
+                            root.settings-nav = "startup";
+                            root.manage-saved-hint = false;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 30px;
+                    border-radius: 6px;
+                    background: root.settings-nav == "shell_cmds" ? #2d2d30 : #00000000;
+
+                    Text {
+                        text: @tr("命令提示設定");
+                        color: root.settings-nav == "shell_cmds" ? AppTheme.text : AppTheme.text_muted;
+                        vertical-alignment: center;
+                        horizontal-alignment: center;
+                        width: 100%;
+                        font-size: 12px;
+                        overflow: elide;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.settings-nav = "shell_cmds";
                             root.manage-saved-hint = false;
                         }
                     }
@@ -116,7 +141,7 @@ export component GjShellManagePanel inherits Rectangle {
                 spacing: 8px;
 
                 Text {
-                    text: root.settings-nav == @tr("啟動")
+                    text: root.settings-nav == "startup"
                         ? @tr("設定 / 啟動")
                         : @tr("設定 / 命令提示設定");
                     color: AppTheme.text;
@@ -124,7 +149,7 @@ export component GjShellManagePanel inherits Rectangle {
                     font-weight: 600;
                 }
 
-                if root.settings-nav == @tr("啟動"): VerticalLayout {
+                if root.settings-nav == "startup": VerticalLayout {
                     spacing: 10px;
                     vertical-stretch: 1;
 
@@ -230,9 +255,9 @@ export component GjShellManagePanel inherits Rectangle {
                                     width: 100%;
                                     model: root.startup-language-choices;
                                     current-value <=> root.startup-language;
-                                    selected(val) => {
-                                        root.startup-language = val;
-                                        self.current-value = val;
+                                    // `changed startup-language` does not always run when the ComboBox updates the binding.
+                                    selected(lang) => {
+                                        root.shell-ui-language-changed(lang);
                                     }
                                 }
                             }
@@ -245,7 +270,7 @@ export component GjShellManagePanel inherits Rectangle {
                     }
                 }
 
-                if root.settings-nav == @tr("命令提示設定"): VerticalLayout {
+                if root.settings-nav == "shell_cmds": VerticalLayout {
                     spacing: 8px;
                     vertical-stretch: 1;
 
@@ -522,9 +547,9 @@ export component GjShellManagePanel inherits Rectangle {
 
                         TouchArea {
                             clicked => {
-                                if root.settings-nav == @tr("啟動") {
+                                if root.settings-nav == "startup" {
                                     root.save-startup-settings();
-                                } else if root.settings-nav == @tr("命令提示設定") {
+                                } else if root.settings-nav == "shell_cmds" {
                                     root.save-shell-manage();
                                 }
                             }

@@ -12,6 +12,7 @@ use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
 
 use crate::core::config::AppConfig;
 
+use super::i18n::apply_slint_language_from_shell_setting;
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::ipc::{IpcBridge, IpcGuiCommand};
 use super::shell_profiles::sync_shell_profile_choices_to_ui;
@@ -36,7 +37,6 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
     let app = AppWindow::new().expect("failed to build app window");
 
-    let titles = Rc::new(VecModel::from(vec![SharedString::from("工作階段 1")]));
     let (tx, rx) = mpsc::channel::<TerminalChunk>();
     let (ipc_gui_tx, ipc_gui_rx) = mpsc::channel::<IpcGuiCommand>();
     let ipc_bridge = IpcBridge::new(ipc_gui_tx);
@@ -57,6 +57,11 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let ui_language = cfg
         .ui_language()
         .unwrap_or_else(|| "預設".to_string());
+
+    let titles = Rc::new(VecModel::from(vec![SharedString::from(
+        super::i18n::tab_title_for_index(ui_language.as_str(), 1),
+    )]));
+
     let default_shell_profile = cfg.default_shell_profile().unwrap_or_else(|| {
         shell_profiles
             .first()
@@ -104,6 +109,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     sync_shell_profile_choices_to_ui(&app, &state.borrow());
     app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
     app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
+    apply_slint_language_from_shell_setting(&app, ui_language.as_str());
     app.set_ws_ipc_status_text(SharedString::from("IPC OFF"));
     app.set_ws_ipc_running(false);
     app.set_ws_ipc_client_count(0);

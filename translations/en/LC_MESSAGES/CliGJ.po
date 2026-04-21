@@ -1,0 +1,106 @@
+# English UI strings for CliGJ (bundled Slint translations).
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+
+msgid "返回"
+msgstr "Back"
+
+msgid "啟動"
+msgstr "Startup"
+
+msgid "命令提示設定"
+msgstr "Shell profiles"
+
+msgid "設定 / 啟動"
+msgstr "Settings / Startup"
+
+msgid "設定 / 命令提示設定"
+msgstr "Settings / Shell profiles"
+
+msgid "設定新分頁預設啟動行為。"
+msgstr "Configure default behavior for new tabs."
+
+msgid "預設設定檔"
+msgstr "Default profile"
+
+msgid "語言"
+msgstr "Language"
+
+msgid "預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。"
+msgstr "Built-in Command Prompt / PowerShell cannot be removed; you can add custom startup commands."
+
+msgid "新增"
+msgstr "Add"
+
+msgid "刪除"
+msgstr "Delete"
+
+msgid "工作區設定"
+msgstr "Workspace"
+
+msgid "選擇資料夾"
+msgstr "Choose folder"
+
+msgid "空白則使用目前工作區（分頁資料夾或啟動目錄）；有填則以該路徑為工作區根目錄。"
+msgstr "Leave empty to use the current workspace (tab folder or startup directory); if set, that path is the workspace root."
+
+msgid "已儲存設定"
+msgstr "Settings saved"
+
+msgid "儲存"
+msgstr "Save"
+
+msgid "點擊任意處關閉"
+msgstr "Click anywhere to close"
+
+msgid "指令設定"
+msgstr "Command settings"
+
+msgid "內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。"
+msgstr "Built-in Gemini / Codex / Claude / Copilot cannot be removed; press Save after changes."
+
+msgid "關閉"
+msgstr "Close"
+
+msgid "重新命名標籤"
+msgstr "Rename tab"
+
+msgid "取消"
+msgstr "Cancel"
+
+msgid "確定"
+msgstr "OK"
+
+msgid "放開以加入檔案"
+msgstr "Release to add files"
+
+msgid "清除圖"
+msgstr "Clear images"
+
+msgid "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
+msgstr "TTY: keys → terminal — @ / Shift+Tab work here; R OFF for line composer + inject"
+
+msgid "Plan, Build, / — @ 搜尋檔案 — File / Img — 拖放或 Ctrl+V 貼上檔案與圖片"
+msgstr "Plan, Build, / — @ search files — File / Img — drag & drop or Ctrl+V to paste files and images"
+
+msgid "選擇指令"
+msgstr "Choose command"
+
+msgid "工作區"
+msgstr "Workspace"
+
+msgid "File"
+msgstr "File"
+
+msgid "Img"
+msgstr "Img"
+
+msgid "設定"
+msgstr "Settings"
+
+msgid "R ON"
+msgstr "R ON"
+
+msgid "R OFF"
+msgstr "R OFF"
