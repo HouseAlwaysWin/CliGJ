@@ -142,7 +142,7 @@ pub struct TabState {
 pub(crate) const TERMINAL_SCROLLBACK_CAP: usize = 1200;
 
 impl TabState {
-    pub fn new(id: u64, tx: mpsc::Sender<TerminalChunk>) -> Self {
+    pub fn new(id: u64, tx: mpsc::Sender<TerminalChunk>, startup_cwd: Option<PathBuf>) -> Self {
         let cmd_type = default_cmd_type().to_string();
         let mut me = Self {
             id,
@@ -195,7 +195,12 @@ impl TabState {
         #[cfg(target_os = "windows")]
         {
             if me.cmd_type == "Command Prompt" || me.cmd_type == "PowerShell" {
-                if let Ok(spawn) = windows_conpty::spawn_conpty(&me.cmd_type, 120, 40) {
+                if let Ok(spawn) = windows_conpty::spawn_conpty(
+                    &me.cmd_type,
+                    120,
+                    40,
+                    startup_cwd.as_ref().map(|p| p.as_path()),
+                ) {
                     let tab_id = me.id;
                     let (control_tx, control_rx) = mpsc::channel();
                     windows_conpty::start_reader_thread(

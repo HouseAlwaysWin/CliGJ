@@ -75,8 +75,13 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             .unwrap_or_else(|| "Command Prompt".to_string())
     };
 
+    let initial_tab_cwd = super::shell_profiles::startup_cwd_from_profiles_list(
+        startup_profile.as_str(),
+        &shell_profiles,
+    );
+
     let state = Rc::new(RefCell::new(GuiState {
-        tabs: vec![TabState::new(1, tx.clone())],
+        tabs: vec![TabState::new(1, tx.clone(), initial_tab_cwd)],
         titles: Rc::clone(&titles),
         current: 0,
         next_id: 2,

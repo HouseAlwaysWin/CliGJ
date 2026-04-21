@@ -1,5 +1,7 @@
 //! Shell profile rows for top-right terminal picker (`name` + startup `command` + optional workspace root).
 
+use std::path::PathBuf;
+
 use slint::{ModelRc, SharedString, VecModel};
 
 use crate::core::config::AppConfig;
@@ -99,6 +101,25 @@ pub(crate) fn resolve_shell_command_line(name: &str, gs: &GuiState) -> Option<St
         .iter()
         .find(|(n, _, _)| n == name)
         .map(|(_, c, _)| c.clone())
+}
+
+/// ConPTY initial directory when the profile has a non-empty `workspace` that exists as a directory.
+pub(crate) fn startup_cwd_from_profiles_list(
+    name: &str,
+    profiles: &[(String, String, String)],
+) -> Option<PathBuf> {
+    profiles.iter().find(|(n, _, _)| n == name).and_then(|(_, _, w)| {
+        let t = w.trim();
+        if t.is_empty() {
+            return None;
+        }
+        let p = PathBuf::from(t);
+        p.is_dir().then_some(p)
+    })
+}
+
+pub(crate) fn startup_cwd_for_shell_profile(name: &str, gs: &GuiState) -> Option<PathBuf> {
+    startup_cwd_from_profiles_list(name, &gs.shell_profiles)
 }
 
 pub(crate) fn default_shell_profile_name(gs: &GuiState) -> String {

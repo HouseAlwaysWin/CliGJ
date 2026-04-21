@@ -1,6 +1,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::ffi::OsStr;
 use std::hash::{Hash, Hasher};
+use std::path::Path;
 use std::io::Read;
 use std::io::Write;
 use std::os::windows::ffi::OsStrExt;
@@ -85,16 +86,23 @@ pub enum ReaderRenderMode {
     InteractiveAi,
 }
 
-pub fn spawn_conpty(shell: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
+pub fn spawn_conpty(shell: &str, cols: i16, rows: i16, current_dir: Option<&Path>) -> Result<ConptySpawn, String> {
     let (_, cmdline) = build_shell_command(shell);
-    spawn_conpty_command_line(cmdline.as_str(), cols, rows)
+    spawn_conpty_command_line(cmdline.as_str(), cols, rows, current_dir)
 }
 
-pub fn spawn_conpty_command_line(command_line: &str, cols: i16, rows: i16) -> Result<ConptySpawn, String> {
+/// `current_dir`: initial working directory for the child process (shell). Must be an existing directory when set.
+pub fn spawn_conpty_command_line(
+    command_line: &str,
+    cols: i16,
+    rows: i16,
+    current_dir: Option<&Path>,
+) -> Result<ConptySpawn, String> {
     let cmdline = command_line.trim();
     if cmdline.is_empty() {
         return Err("empty startup command".to_string());
     }
+    let cwd_wide: Option<Vec<u16>> = current_dir.and_then(|p| p.is_dir().then(|| to_wide_null(p)));
     unsafe {
         let mut in_read = HANDLE::default();
         let mut in_write = HANDLE::default();
@@ -147,6 +155,10 @@ pub fn spawn_conpty_command_line(command_line: &str, cols: i16, rows: i16) -> Re
         let mut cmdline_w = to_wide_null(&cmdline);
 
         let mut pi: PROCESS_INFORMATION = std::mem::zeroed();
+        let cwd_pcw = cwd_wide
+            .as_ref()
+            .map(|w| PCWSTR(w.as_ptr()))
+            .unwrap_or(PCWSTR::null());
         CreateProcessW(
             PCWSTR::null(),
             Some(PWSTR(cmdline_w.as_mut_ptr())),
@@ -155,7 +167,7 @@ pub fn spawn_conpty_command_line(command_line: &str, cols: i16, rows: i16) -> Re
             false,
             EXTENDED_STARTUPINFO_PRESENT,
             None,
-            None,
+            cwd_pcw,
             &siex.StartupInfo,
             &mut pi,
         )

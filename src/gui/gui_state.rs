@@ -9,7 +9,7 @@ use crate::terminal::windows_conpty;
 use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
-use super::shell_profiles::resolve_shell_command_line;
+use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
@@ -57,6 +57,7 @@ impl GuiState {
         }
         let cmd_type = self.tabs[self.current].cmd_type.clone();
         let startup_cmd = resolve_shell_command_line(cmd_type.as_str(), self);
+        let startup_cwd = startup_cwd_for_shell_profile(cmd_type.as_str(), self);
 
         #[cfg(target_os = "windows")]
         {
@@ -90,7 +91,12 @@ impl GuiState {
             use slint::ModelRc;
 
             if let Some(startup_cmd) = startup_cmd {
-                match windows_conpty::spawn_conpty_command_line(startup_cmd.as_str(), 120, 40) {
+                match windows_conpty::spawn_conpty_command_line(
+                    startup_cmd.as_str(),
+                    120,
+                    40,
+                    startup_cwd.as_deref(),
+                ) {
                     Ok(spawn) => {
                         let tab_id = self.tabs[self.current].id;
                         let tx = self.tx.clone();
@@ -217,7 +223,9 @@ impl GuiState {
         self.titles.push(label);
         let id = self.next_id;
         self.next_id += 1;
-        self.tabs.push(super::state::TabState::new(id, self.tx.clone()));
+        let tab_cwd = startup_cwd_for_shell_profile(&startup_profile, self);
+        self.tabs
+            .push(super::state::TabState::new(id, self.tx.clone(), tab_cwd));
 
         let new_index = self.tabs.len() - 1;
         self.current = new_index;
@@ -253,8 +261,14 @@ impl GuiState {
             self.tabs[self.current].interactive_frame_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
+            let startup_cwd = startup_cwd_for_shell_profile(new_cmd_type, self);
             if let Some(startup_cmd) = resolve_shell_command_line(new_cmd_type, self) {
-                if let Ok(spawn) = windows_conpty::spawn_conpty_command_line(startup_cmd.as_str(), 120, 40) {
+                if let Ok(spawn) = windows_conpty::spawn_conpty_command_line(
+                    startup_cmd.as_str(),
+                    120,
+                    40,
+                    startup_cwd.as_deref(),
+                ) {
                     let tab_id = self.tabs[self.current].id;
                     let tx = self.tx.clone();
                     let (control_tx, control_rx) = std::sync::mpsc::channel();
