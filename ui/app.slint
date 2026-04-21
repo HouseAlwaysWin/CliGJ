@@ -6,8 +6,10 @@ import { ComboBox, LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
 import { InteractiveCmdEditorRow, PromptImageChip, TermLine } from "term_types.slint";
 
 export component AppWindow inherits Window {
-    title: "CliGJ - UI Foundation";
+    title: "CliGJ";
     icon: @image-url("../src/asset/logo3.png");
+    no-frame: true;
+    resize-border-width: AppTheme.chrome_resize_border;
     preferred-width: 800px;
     preferred-height: 600px;
     min-width: 520px;
@@ -63,6 +65,8 @@ export component AppWindow inherits Window {
     in-out property <int> ws-at-selected: 0;
     in property <string> ws-workspace-root-label: "";
     in-out property <bool> ws-file-drop-visible: false;
+    /// 無框視窗：與 OS 同步，用於最大化按鈕圖示（□ / 還原）。
+    in-out property <bool> ws-window-maximized: false;
 
     callback tab-changed(int);
     callback tab-close-requested(int);
@@ -111,6 +115,10 @@ export component AppWindow inherits Window {
     callback save-shell-startup-settings;
     callback close-shell-manage;
     callback toggle-shell-manage-row-expanded(int);
+    callback window-chrome-drag();
+    callback window-chrome-minimize();
+    callback window-chrome-maximize();
+    callback window-chrome-close();
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -164,6 +172,156 @@ export component AppWindow inherits Window {
 
         VerticalLayout {
             spacing: 0px;
+
+            Rectangle {
+                height: 34px;
+                background: AppTheme.tab_bar_bg;
+                border-width: 0px;
+
+                // Title strip: [ icon | empty pad same width as controls ] [ centered title ] [ min / max / close ]
+                // Left and right rails are both 138px (3×46px) so "CliGJ" sits on the visual center line.
+                HorizontalLayout {
+                    spacing: 0px;
+                    alignment: stretch;
+
+                    Rectangle {
+                        width: 138px;
+                        height: 34px;
+                        background: #00000000;
+
+                        Image {
+                            x: 10px;
+                            y: (parent.height - self.height) / 2;
+                            width: 22px;
+                            height: 22px;
+                            source: @image-url("../src/asset/logo3.png");
+                        }
+
+                        left-chrome-drag := TouchArea {
+                            y: AppTheme.chrome_resize_border;
+                            width: 100%;
+                            height: parent.height - AppTheme.chrome_resize_border;
+                            pointer-event(e) => {
+                                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                                    root.window-chrome-drag();
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        min-height: 34px;
+                        background: #00000000;
+
+                        Text {
+                            width: 100%;
+                            height: 100%;
+                            text: "CliGJ";
+                            color: AppTheme.text;
+                            font-size: 14px;
+                            font-weight: 700;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                        }
+
+                        center-chrome-drag := TouchArea {
+                            y: AppTheme.chrome_resize_border;
+                            width: 100%;
+                            height: parent.height - AppTheme.chrome_resize_border;
+                            pointer-event(e) => {
+                                if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                                    root.window-chrome-drag();
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalLayout {
+                        spacing: 0px;
+
+                        Rectangle {
+                            width: 46px;
+                            height: 34px;
+                            background: min_ta.has-hover ? #3c3c3c : #00000000;
+
+                            Text {
+                                width: 100%;
+                                height: 100%;
+                                text: "\u{e921}";
+                                color: AppTheme.text_muted;
+                                font-size: 11px;
+                                font-family: AppTheme.chrome_caption_icon_font;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            min_ta := TouchArea {
+                                width: 100%;
+                                height: 100%;
+                                clicked => {
+                                    root.window-chrome-minimize();
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 46px;
+                            height: 34px;
+                            background: max_ta.has-hover ? #3c3c3c : #00000000;
+
+                            Text {
+                                width: 100%;
+                                height: 100%;
+                                text: root.ws-window-maximized ? "\u{e923}" : "\u{e922}";
+                                color: AppTheme.text_muted;
+                                font-size: 11px;
+                                font-family: AppTheme.chrome_caption_icon_font;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            max_ta := TouchArea {
+                                width: 100%;
+                                height: 100%;
+                                clicked => {
+                                    root.window-chrome-maximize();
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            width: 46px;
+                            height: 34px;
+                            background: close_ta.has-hover ? #e81123 : #00000000;
+
+                            Text {
+                                width: 100%;
+                                height: 100%;
+                                text: "\u{e8bb}";
+                                color: close_ta.has-hover ? #ffffff : AppTheme.text_muted;
+                                font-size: 11px;
+                                font-family: AppTheme.chrome_caption_icon_font;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+
+                            close_ta := TouchArea {
+                                width: 100%;
+                                height: 100%;
+                                clicked => {
+                                    root.window-chrome-close();
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: AppTheme.tab_separator;
+            }
 
             GjTerminalTabBar {
                 z: 20;
@@ -1114,6 +1272,79 @@ export component AppWindow inherits Window {
                     }
                 }
             }
+        }
+    }
+
+    // Edge-only layer so resize cursors stay visible (caption TouchAreas otherwise force Default).
+    // Must sit above GjViewer terminal wheel/selection TouchAreas (z≈100–101); below image zoom (450).
+    // Winit still handles border drags before Slint mouse handlers; strips are only ~border px wide.
+    window-resize-edge-cursors := Rectangle {
+        x: 0px;
+        y: 0px;
+        width: 100%;
+        height: 100%;
+        background: transparent;
+        z: 400;
+
+        property <length> b: AppTheme.chrome_resize_border;
+        property <length> title-h: 34px;
+        // Caption controls width (must match title strip 3×46px).
+        property <length> caption-ctrl-w: 138px;
+
+        TouchArea {
+            x: root.width - b;
+            y: 0px;
+            width: b;
+            height: root.height;
+            mouse-cursor: e-resize;
+        }
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: b;
+            height: root.height;
+            mouse-cursor: w-resize;
+        }
+
+        TouchArea {
+            x: 0px;
+            y: root.height - b;
+            width: root.width;
+            height: b;
+            mouse-cursor: s-resize;
+        }
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: root.width - caption-ctrl-w - b;
+            height: b;
+            mouse-cursor: n-resize;
+        }
+
+        TouchArea {
+            x: root.width - b;
+            y: root.height - b;
+            width: b;
+            height: b;
+            mouse-cursor: se-resize;
+        }
+
+        TouchArea {
+            x: 0px;
+            y: root.height - b;
+            width: b;
+            height: b;
+            mouse-cursor: sw-resize;
+        }
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: b;
+            height: b;
+            mouse-cursor: nw-resize;
         }
     }
 

@@ -1,6 +1,6 @@
 //! Application entry: build window, wire timers and callbacks.
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::mpsc;
@@ -112,6 +112,53 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx, ipc_bridge.clone());
     callbacks::connect(&app, Rc::clone(&state), ipc_bridge.clone());
 
+    #[cfg(target_os = "windows")]
+    {
+        let app_weak = app.as_weak();
+        app.on_window_chrome_drag(move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            let _ = ui.window().with_winit_window(|w| {
+                let _ = w.drag_window();
+            });
+        });
+
+        let app_weak = app.as_weak();
+        app.on_window_chrome_minimize(move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            let _ = ui.window().with_winit_window(|w| {
+                w.set_minimized(true);
+            });
+        });
+
+        let app_weak = app.as_weak();
+        app.on_window_chrome_maximize(move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            if let Some(maximized) = ui.window().with_winit_window(|w| {
+                let next = !w.is_maximized();
+                w.set_maximized(next);
+                w.is_maximized()
+            }) {
+                ui.set_ws_window_maximized(maximized);
+            }
+        });
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        app.on_window_chrome_drag(|| {});
+        app.on_window_chrome_minimize(|| {});
+        app.on_window_chrome_maximize(|| {});
+    }
+
+    app.on_window_chrome_close(|| {
+        let _ = slint::quit_event_loop();
+    });
+
     {
         let mut s = state.borrow_mut();
         load_tab_to_ui(&app, &mut s.tabs[0]);
@@ -131,9 +178,67 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 
 #[cfg(target_os = "windows")]
 fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    /// Same as `AppTheme.chrome_resize_border` in `theme.slint` — must stay in sync.
+    const CHROME_RESIZE_BORDER_LOGICAL_PX: f64 = 16.0;
+
     let app_weak = app.as_weak();
-    app.window().on_winit_window_event(move |_window, event| {
+    let last_cursor: Rc<Cell<Option<(f64, f64)>>> = Rc::new(Cell::new(None));
+
+    app.window().on_winit_window_event(move |slint_window, event| {
         match event {
+            winit::event::WindowEvent::CursorMoved { position, .. } => {
+                last_cursor.set(Some((position.x, position.y)));
+                EventResult::Propagate
+            }
+            winit::event::WindowEvent::MouseInput {
+                state,
+                button,
+                ..
+            } => {
+                if *state == winit::event::ElementState::Pressed
+                    && *button == winit::event::MouseButton::Left
+                {
+                    if let Some((x, y)) = last_cursor.get() {
+                        let _ = slint_window.with_winit_window(|w| {
+                            if !w.is_maximized() {
+                                return;
+                            }
+                            let size = w.inner_size();
+                            let width = size.width as f64;
+                            let height = size.height as f64;
+                            let border =
+                                (CHROME_RESIZE_BORDER_LOGICAL_PX * w.scale_factor()).max(1.0);
+                            let in_resize_border = x < border
+                                || x > width - border
+                                || y < border
+                                || y > height - border;
+                            if in_resize_border {
+                                w.set_maximized(false);
+                                if let Some(ui) = app_weak.upgrade() {
+                                    ui.set_ws_window_maximized(false);
+                                }
+                            }
+                        });
+                    }
+                }
+                EventResult::Propagate
+            }
+            winit::event::WindowEvent::Resized(_) => {
+                let _ = slint_window.with_winit_window(|w| {
+                    if let Some(ui) = app_weak.upgrade() {
+                        ui.set_ws_window_maximized(w.is_maximized());
+                    }
+                });
+                EventResult::Propagate
+            }
+            winit::event::WindowEvent::Focused(true) => {
+                let _ = slint_window.with_winit_window(|w| {
+                    if let Some(ui) = app_weak.upgrade() {
+                        ui.set_ws_window_maximized(w.is_maximized());
+                    }
+                });
+                EventResult::Propagate
+            }
             winit::event::WindowEvent::HoveredFile(_) => {
                 if let Some(ui) = app_weak.upgrade() {
                     ui.set_ws_file_drop_visible(true);
