@@ -40,11 +40,6 @@ impl GuiState {
         tab.terminal_scroll_resync_next = true;
         tab.auto_scroll = true;
         tab.interactive_follow_output = true;
-        if let Some(tx) = &tab.conpty_control_tx {
-            let _ = tx.send(windows_conpty::ControlCommand::SetRenderMode(
-                ReaderRenderMode::InteractiveAi,
-            ));
-        }
     }
 
     /// Drop the shell, spawn a fresh ConPTY, and reset the terminal buffer for Interactive AI.
@@ -403,6 +398,16 @@ impl GuiState {
                 }
                 let _ = session.writer.write_all(b"\r");
                 let _ = session.writer.flush();
+                if is_interactive_ai_launch {
+                    if let Some(tx) = &tab.conpty_control_tx {
+                        // Switch the reader after the launch command is fully submitted so
+                        // shell-side prompt redraw/paste echo doesn't get archived as repeated
+                        // interactive frames.
+                        let _ = tx.send(windows_conpty::ControlCommand::SetRenderMode(
+                            ReaderRenderMode::InteractiveAi,
+                        ));
+                    }
+                }
             } else if !full_command.is_empty() {
                 tab.append_terminal(&format!("{full_command}\n"));
             } else {
