@@ -33,6 +33,9 @@ windows = { version = "0.62.0", features = [
 
 [build-dependencies]
 slint-build = "1.15.1"
+ico = "0.5"
+image = { version = "0.25", default-features = false, features = ["png"] }
+winres = "0.1"
 
 [profile.fastdev]
 inherits = "dev"
