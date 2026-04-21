@@ -4,6 +4,9 @@ use super::slint_ui::AppWindow;
 use super::state::GuiState;
 
 pub(crate) fn diff_composer_to_conpty(prev: &str, cur: &str) -> Vec<u8> {
+    // Keep deletion semantics aligned with keyboard Backspace encoding (`0x7f` in key_encoding).
+    // Mixing `0x08` here with `0x7f` from key events can desync line editors in some TTY apps.
+    const PTY_BACKSPACE: u8 = 0x7f;
     if prev == cur {
         return Vec::new();
     }
@@ -15,7 +18,7 @@ pub(crate) fn diff_composer_to_conpty(prev: &str, cur: &str) -> Vec<u8> {
     }
     let mut out = Vec::new();
     for _ in 0..pa.len().saturating_sub(i) {
-        out.push(0x08);
+        out.push(PTY_BACKSPACE);
     }
     for c in ca.iter().skip(i) {
         let mut buf = [0u8; 4];
@@ -69,7 +72,7 @@ mod tests {
 
     #[test]
     fn shrink_one_char() {
-        assert_eq!(diff_composer_to_conpty("ab", "a"), vec![0x08]);
+        assert_eq!(diff_composer_to_conpty("ab", "a"), vec![0x7f]);
     }
 
     #[test]
@@ -82,7 +85,7 @@ mod tests {
     fn clear_all() {
         assert_eq!(
             diff_composer_to_conpty("abc", "").as_slice(),
-            &[0x08, 0x08, 0x08]
+            &[0x7f, 0x7f, 0x7f]
         );
     }
 }
