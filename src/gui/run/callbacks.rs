@@ -1130,6 +1130,29 @@ fn connect_move_inject(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
     });
 
+    let st_ws_folder = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_workspace_folder_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new().pick_folder() else {
+            return;
+        };
+        let path_str = path.to_string_lossy().to_string();
+        let mut s = st_ws_folder.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let ct = s.tabs[s.current].cmd_type.clone();
+        s.workspace_file_cache.clear();
+        s.workspace_file_cache_root = None;
+        ui.set_ws_file_path(SharedString::from(path_str.as_str()));
+        if let Err(e) = s.change_current_cmd_type(ct.as_str(), &ui) {
+            eprintln!("CliGJ: workspace folder + PTY respawn: {e}");
+        }
+    });
+
     let st_img = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_inject_image_requested(move || {

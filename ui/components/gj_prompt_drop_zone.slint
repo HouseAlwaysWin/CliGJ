@@ -23,6 +23,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback raw-input-toggle-requested;
     callback ipc-toggle-requested;
     callback inject-file-requested;
+    callback workspace-folder-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
     callback prompt-images-clear-requested;
@@ -324,6 +325,30 @@ export component GjPromptDropZone inherits Rectangle {
                             TouchArea {
                                 clicked => {
                                     root.manage-interactive-commands-requested();
+                                }
+                            }
+                        }
+
+                        Rectangle {
+                            min-width: 52px;
+                            height: 22px;
+                            horizontal-stretch: 0;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 11px;
+                            background: #00000000;
+
+                            Text {
+                                text: @tr("工作區");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 11px;
+                            }
+
+                            TouchArea {
+                                clicked => {
+                                    root.workspace-folder-requested();
                                 }
                             }
                         }

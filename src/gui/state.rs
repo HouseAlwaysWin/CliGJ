@@ -28,19 +28,41 @@ pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     }
 }
 
-/// Workspace root for `@` picker: optional per-shell profile directory, else [`workspace_root_for_tab`].
+/// Workspace root for `@` picker: explicit tab folder when set and exists; else profile workspace; else [`workspace_root_for_tab`].
 pub(crate) fn workspace_root_for_tab_with_profile(tab: &TabState, gs: &GuiState) -> PathBuf {
+    let t = tab.file_path.trim();
+    if !t.is_empty() {
+        let p = PathBuf::from(t);
+        if p.is_dir() {
+            return p;
+        }
+    }
     let cmd = tab.cmd_type.as_str();
     for (name, _, w) in &gs.shell_profiles {
         if name == cmd {
-            let t = w.trim();
-            if !t.is_empty() {
-                return PathBuf::from(t);
+            let w = w.trim();
+            if !w.is_empty() {
+                let pb = PathBuf::from(w);
+                if pb.is_dir() {
+                    return pb;
+                }
             }
             break;
         }
     }
     workspace_root_for_tab(tab)
+}
+
+/// ConPTY initial directory: tab `file_path` when it is an existing directory; else shell profile workspace (if any).
+pub(crate) fn conpty_startup_cwd(tab: &TabState, gs: &GuiState) -> Option<PathBuf> {
+    let t = tab.file_path.trim();
+    if !t.is_empty() {
+        let p = PathBuf::from(t);
+        if p.is_dir() {
+            return Some(p);
+        }
+    }
+    super::shell_profiles::startup_cwd_for_shell_profile(tab.cmd_type.as_str(), gs)
 }
 
 /// Composer-attached images: absolute path (sent on submit) + thumbnail for UI.

@@ -86,6 +86,7 @@ export component AppWindow inherits Window {
     callback toggle-raw-input-requested;
     callback toggle-ipc-server-requested;
     callback inject-file-requested;
+    callback workspace-folder-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
     callback prompt-images-clear-requested;
@@ -287,6 +288,9 @@ export component AppWindow inherits Window {
                         }
                         inject-file-requested => {
                             root.inject-file-requested();
+                        }
+                        workspace-folder-requested => {
+                            root.workspace-folder-requested();
                         }
                         inject-image-requested => {
                             root.inject-image-requested();

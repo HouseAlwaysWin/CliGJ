@@ -10,6 +10,7 @@ use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
 use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
+use super::state::conpty_startup_cwd;
 use super::slint_ui::AppWindow;
 use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
@@ -57,7 +58,7 @@ impl GuiState {
         }
         let cmd_type = self.tabs[self.current].cmd_type.clone();
         let startup_cmd = resolve_shell_command_line(cmd_type.as_str(), self);
-        let startup_cwd = startup_cwd_for_shell_profile(cmd_type.as_str(), self);
+        let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
 
         #[cfg(target_os = "windows")]
         {
@@ -261,7 +262,7 @@ impl GuiState {
             self.tabs[self.current].interactive_frame_lines.clear();
             self.tabs[self.current].auto_scroll = false;
             self.tabs[self.current].composer_pty_mirror.clear();
-            let startup_cwd = startup_cwd_for_shell_profile(new_cmd_type, self);
+            let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
             if let Some(startup_cmd) = resolve_shell_command_line(new_cmd_type, self) {
                 if let Ok(spawn) = windows_conpty::spawn_conpty_command_line(
                     startup_cmd.as_str(),

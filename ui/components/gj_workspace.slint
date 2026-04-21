@@ -34,6 +34,7 @@ export component GjWorkspace inherits Rectangle {
     callback raw-input-toggle-requested;
     callback ipc-toggle-requested;
     callback inject-file-requested;
+    callback workspace-folder-requested;
     callback inject-image-requested;
     callback prompt-image-remove-requested(int);
     callback prompt-images-clear-requested;
@@ -142,6 +143,9 @@ export component GjWorkspace inherits Rectangle {
             }
             inject-file-requested => {
                 root.inject-file-requested();
+            }
+            workspace-folder-requested => {
+                root.workspace-folder-requested();
             }
             inject-image-requested => {
                 root.inject-image-requested();
