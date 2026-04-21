@@ -194,7 +194,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
 #[cfg(target_os = "windows")]
 fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     /// Same as `AppTheme.chrome_resize_border` in `theme.slint` — must stay in sync.
-    const CHROME_RESIZE_BORDER_LOGICAL_PX: f64 = 16.0;
+    const CHROME_RESIZE_BORDER_LOGICAL_PX: f64 = 8.0;
 
     let app_weak = app.as_weak();
     let last_cursor: Rc<Cell<Option<(f64, f64)>>> = Rc::new(Cell::new(None));

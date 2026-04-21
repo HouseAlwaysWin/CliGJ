@@ -827,12 +827,7 @@ export component AppWindow inherits Window {
                         background: AppTheme.prompt_chrome_border;
                     }
 
-                    for nav in [
-                        @tr("啟動"),
-                        @tr("互動"),
-                        @tr("外觀"),
-                        @tr("命令提示設定")
-                    ]: Rectangle {
+                    for nav in [@tr("啟動"), @tr("命令提示設定")]: Rectangle {
                         height: 30px;
                         border-radius: 6px;
                         background: nav == root.ws-shell-settings-nav ? #2d2d30 : #00000000;
@@ -841,9 +836,8 @@ export component AppWindow inherits Window {
                             text: nav;
                             color: nav == root.ws-shell-settings-nav ? AppTheme.text : AppTheme.text_muted;
                             vertical-alignment: center;
-                            horizontal-alignment: left;
-                            x: 10px;
-                            width: parent.width - 12px;
+                            horizontal-alignment: center;
+                            width: 100%;
                             font-size: 12px;
                             overflow: elide;
                         }
@@ -911,12 +905,20 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 alignment: center;
 
-                                Text {
-                                    text: @tr("預設設定檔");
-                                    color: AppTheme.text_muted;
-                                    font-size: 12px;
-                                    min-width: 120px;
+                                Rectangle {
+                                    width: 140px;
                                     horizontal-stretch: 0;
+                                    height: parent.height;
+
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: @tr("預設設定檔");
+                                        color: AppTheme.text_muted;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
                                 }
 
                                 Rectangle {
@@ -955,12 +957,20 @@ export component AppWindow inherits Window {
                                 spacing: 10px;
                                 alignment: center;
 
-                                Text {
-                                    text: @tr("語言");
-                                    color: AppTheme.text_muted;
-                                    font-size: 12px;
-                                    min-width: 120px;
+                                Rectangle {
+                                    width: 140px;
                                     horizontal-stretch: 0;
+                                    height: parent.height;
+
+                                    Text {
+                                        width: 100%;
+                                        height: 100%;
+                                        text: @tr("語言");
+                                        color: AppTheme.text_muted;
+                                        font-size: 12px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
                                 }
 
                                 Rectangle {
