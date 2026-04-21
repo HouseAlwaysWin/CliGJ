@@ -203,7 +203,7 @@ export function activate(context: vscode.ExtensionContext): void {
       );
       const lineLabel =
         startLine === endLine ? `${startLine + 1}` : `${startLine + 1}-${endLine + 1}`;
-      promptParts.push(`${fileToken}(${lineLabel})`);
+      promptParts.push(`${fileToken} (${lineLabel})`);
     });
 
     const prompt = promptParts.join(" | ");
