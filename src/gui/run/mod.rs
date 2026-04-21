@@ -147,12 +147,27 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
                 ui.set_ws_window_maximized(maximized);
             }
         });
+
+        let app_weak = app.as_weak();
+        app.on_window_chrome_title_double_click(move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            if let Some(maximized) = ui.window().with_winit_window(|w| {
+                let next = !w.is_maximized();
+                w.set_maximized(next);
+                w.is_maximized()
+            }) {
+                ui.set_ws_window_maximized(maximized);
+            }
+        });
     }
     #[cfg(not(target_os = "windows"))]
     {
         app.on_window_chrome_drag(|| {});
         app.on_window_chrome_minimize(|| {});
         app.on_window_chrome_maximize(|| {});
+        app.on_window_chrome_title_double_click(|| {});
     }
 
     app.on_window_chrome_close(|| {

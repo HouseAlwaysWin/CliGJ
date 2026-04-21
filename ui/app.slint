@@ -119,6 +119,8 @@ export component AppWindow inherits Window {
     callback window-chrome-minimize();
     callback window-chrome-maximize();
     callback window-chrome-close();
+    /// 標題列（非最小化/最大化/關閉按鈕區）雙擊：切換最大化，與 Windows 標題列行為一致。
+    callback window-chrome-title-double-click();
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -206,6 +208,9 @@ export component AppWindow inherits Window {
                                     root.window-chrome-drag();
                                 }
                             }
+                            double-clicked => {
+                                root.window-chrome-title-double-click();
+                            }
                         }
                     }
 
@@ -233,6 +238,9 @@ export component AppWindow inherits Window {
                                 if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                                     root.window-chrome-drag();
                                 }
+                            }
+                            double-clicked => {
+                                root.window-chrome-title-double-click();
                             }
                         }
                     }
@@ -1321,6 +1329,21 @@ export component AppWindow inherits Window {
             width: root.width - caption-ctrl-w - b;
             height: b;
             mouse-cursor: n-resize;
+            double-clicked => {
+                root.window-chrome-title-double-click();
+            }
+        }
+
+        // Top edge above min/max/close (fills the strip we previously skipped; abuts the east vertical strip).
+        TouchArea {
+            x: root.width - caption-ctrl-w - b;
+            y: 0px;
+            width: caption-ctrl-w;
+            height: b;
+            mouse-cursor: n-resize;
+            double-clicked => {
+                root.window-chrome-title-double-click();
+            }
         }
 
         TouchArea {
@@ -1345,6 +1368,21 @@ export component AppWindow inherits Window {
             width: b;
             height: b;
             mouse-cursor: nw-resize;
+            double-clicked => {
+                root.window-chrome-title-double-click();
+            }
+        }
+
+        // Top-right corner: sits above the east strip hit target so the diagonal resize cursor shows.
+        TouchArea {
+            x: root.width - b;
+            y: 0px;
+            width: b;
+            height: b;
+            mouse-cursor: ne-resize;
+            double-clicked => {
+                root.window-chrome-title-double-click();
+            }
         }
     }
 
