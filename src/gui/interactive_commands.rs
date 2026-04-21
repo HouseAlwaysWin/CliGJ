@@ -57,6 +57,7 @@ pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState
             line: SharedString::from(c.as_str()),
             key_locked: is_reserved_preset_display_name(n),
             expanded: false,
+            workspace_path: SharedString::new(),
         })
         .collect();
     ui.set_ws_interactive_manage_rows(ModelRc::new(VecModel::from(rows)));

@@ -412,6 +412,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             line: SharedString::new(),
             key_locked: false,
             expanded: false,
+            workspace_path: SharedString::new(),
         });
         set_manage_rows(&ui, rows);
     });
@@ -566,6 +567,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             line: SharedString::new(),
             key_locked: false,
             expanded: true,
+            workspace_path: SharedString::new(),
         });
         set_shell_manage_rows(&ui, rows);
     });
@@ -648,6 +650,44 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         m.set_row_data(i, row);
     });
 
+    let app_weak = app.as_weak();
+    app.on_shell_manage_workspace_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_shell_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.workspace_path = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_shell_manage_workspace_pick_folder(move |idx| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let Some(path) = rfd::FileDialog::new().pick_folder() else {
+            return;
+        };
+        let path_str = path.to_string_lossy().to_string();
+        let m = ui.get_ws_shell_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.workspace_path = SharedString::from(path_str.as_str());
+        m.set_row_data(i, row);
+    });
+
     let st_shell_save = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_save_shell_manage(move || {
@@ -657,11 +697,12 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let rows_m = ui.get_ws_shell_manage_rows();
         let n = rows_m.row_count();
         let mut seen = HashSet::<String>::new();
-        let mut out: Vec<(String, String)> = Vec::new();
+        let mut out: Vec<(String, String, String)> = Vec::new();
         for i in 0..n {
             let row = rows_m.row_data(i).unwrap();
             let name = row.name.to_string();
             let line = row.line.to_string();
+            let workspace = row.workspace_path.to_string();
             let nt = name.trim();
             let (norm_line, normalized) = normalize_shell_profile_command(line.as_str());
             let lt = norm_line.trim();
@@ -684,15 +725,15 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             if normalized {
                 eprintln!("CliGJ: shell profile '{nt}' normalized to an in-app compatible command");
             }
-            out.push((nt, lt.to_string()));
+            out.push((nt, lt.to_string(), workspace.trim().to_string()));
         }
 
         if out.is_empty() {
             eprintln!("CliGJ: need at least one shell profile");
             return;
         }
-        if !out.iter().any(|(n, _)| n == "Command Prompt")
-            || !out.iter().any(|(n, _)| n == "PowerShell")
+        if !out.iter().any(|(n, _, _)| n == "Command Prompt")
+            || !out.iter().any(|(n, _, _)| n == "PowerShell")
         {
             eprintln!("CliGJ: default Command Prompt / PowerShell profiles are required");
             return;
@@ -702,7 +743,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let mut s = st_shell_save.borrow_mut();
             s.shell_profiles = out;
             let fallback = default_shell_profile_name(&*s);
-            let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _)| n.clone()).collect();
+            let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _, _)| n.clone()).collect();
             for tab in &mut s.tabs {
                 if !allowed.contains(&tab.cmd_type) {
                     tab.cmd_type = fallback.clone();
@@ -726,7 +767,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if s.current < s.tabs.len() {
             ui.set_ws_cmd_type(SharedString::from(s.tabs[s.current].cmd_type.as_str()));
         }
-        let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _)| n.clone()).collect();
+        let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _, _)| n.clone()).collect();
         drop(s);
         let configured_default = ui.get_ws_shell_startup_default_profile().to_string();
         if !allowed.contains(&configured_default) {
@@ -734,7 +775,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 .borrow()
                 .shell_profiles
                 .first()
-                .map(|(n, _)| n.clone())
+                .map(|(n, _, _)| n.clone())
                 .unwrap_or_else(|| "Command Prompt".to_string());
             ui.set_ws_shell_startup_default_profile(SharedString::from(fallback.as_str()));
             if let Ok(mut cfg) = AppConfig::load_or_default() {

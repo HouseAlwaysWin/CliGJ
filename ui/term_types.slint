@@ -19,6 +19,8 @@ export struct InteractiveCmdEditorRow {
     /// Built-in preset rows: key label is read-only; name is still carried for display.
     key-locked: bool,
     expanded: bool,
+    /// Shell profile: 自訂工作區根目錄；空白則使用分頁／啟動目錄。
+    workspace-path: string,
 }
 
 export struct TermLine {

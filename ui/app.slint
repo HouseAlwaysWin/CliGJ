@@ -104,6 +104,8 @@ export component AppWindow inherits Window {
     callback remove-shell-manage-row(int);
     callback shell-manage-name-edited(int, string);
     callback shell-manage-line-edited(int, string);
+    callback shell-manage-workspace-edited(int, string);
+    callback shell-manage-workspace-pick-folder(int);
     callback save-shell-manage;
     callback save-shell-startup-settings;
     callback close-shell-manage;
@@ -922,81 +924,145 @@ export component AppWindow inherits Window {
                                             }
                                         }
 
-                                        if row.expanded: HorizontalLayout {
+                                        if row.expanded: VerticalLayout {
                                             padding-left: 8px;
                                             padding-right: 8px;
                                             padding-bottom: 8px;
-                                            spacing: 6px;
-                                            alignment: start;
+                                            spacing: 8px;
 
-                                            if row.key-locked: Rectangle {
-                                                horizontal-stretch: 1;
-                                                min-width: 96px;
-                                                min-height: 26px;
-                                                background: #00000020;
-                                                border-radius: 4px;
+                                            HorizontalLayout {
+                                                spacing: 6px;
+                                                alignment: start;
+
+                                                if row.key-locked: Rectangle {
+                                                    horizontal-stretch: 1;
+                                                    min-width: 96px;
+                                                    min-height: 26px;
+                                                    background: #00000020;
+                                                    border-radius: 4px;
+
+                                                    Text {
+                                                        text: row.name;
+                                                        color: AppTheme.text_muted;
+                                                        font-size: 12px;
+                                                        vertical-alignment: center;
+                                                        horizontal-alignment: left;
+                                                        overflow: elide;
+                                                    }
+                                                }
+
+                                                if !row.key-locked: LineEdit {
+                                                    horizontal-stretch: 1;
+                                                    min-width: 96px;
+                                                    font-size: 12px;
+                                                    text: row.name;
+                                                    edited(new_text) => {
+                                                        root.shell-manage-name-edited(key_idx, new_text);
+                                                    }
+                                                }
 
                                                 Text {
-                                                    text: row.name;
+                                                    text: ">";
                                                     color: AppTheme.text_muted;
                                                     font-size: 12px;
                                                     vertical-alignment: center;
-                                                    horizontal-alignment: left;
-                                                    overflow: elide;
+                                                    horizontal-stretch: 0;
+                                                }
+
+                                                LineEdit {
+                                                    horizontal-stretch: 2;
+                                                    min-width: 180px;
+                                                    font-size: 12px;
+                                                    text: row.line;
+                                                    edited(new_text) => {
+                                                        root.shell-manage-line-edited(key_idx, new_text);
+                                                    }
+                                                }
+
+                                                Rectangle {
+                                                    min-width: 44px;
+                                                    max-width: 52px;
+                                                    height: 24px;
+                                                    horizontal-stretch: 0;
+                                                    border-width: 1px;
+                                                    border-color: #ff4f6d;
+                                                    border-radius: 6px;
+                                                    background: #00000000;
+
+                                                    Text {
+                                                        text: @tr("刪除");
+                                                        color: #ff8ca8;
+                                                        font-size: 11px;
+                                                        horizontal-alignment: center;
+                                                        vertical-alignment: center;
+                                                    }
+
+                                                    TouchArea {
+                                                        enabled: !row.key-locked;
+                                                        clicked => {
+                                                            root.remove-shell-manage-row(key_idx);
+                                                        }
+                                                    }
                                                 }
                                             }
 
-                                            if !row.key-locked: LineEdit {
-                                                horizontal-stretch: 1;
-                                                min-width: 96px;
-                                                font-size: 12px;
-                                                text: row.name;
-                                                edited(new_text) => {
-                                                    root.shell-manage-name-edited(key_idx, new_text);
-                                                }
-                                            }
-
-                                            Text {
-                                                text: ">";
-                                                color: AppTheme.text_muted;
-                                                font-size: 12px;
-                                                vertical-alignment: center;
-                                                horizontal-stretch: 0;
-                                            }
-
-                                            LineEdit {
-                                                horizontal-stretch: 2;
-                                                min-width: 180px;
-                                                font-size: 12px;
-                                                text: row.line;
-                                                edited(new_text) => {
-                                                    root.shell-manage-line-edited(key_idx, new_text);
-                                                }
-                                            }
-
-                                            Rectangle {
-                                                min-width: 44px;
-                                                max-width: 52px;
-                                                height: 24px;
-                                                horizontal-stretch: 0;
-                                                border-width: 1px;
-                                                border-color: #ff4f6d;
-                                                border-radius: 6px;
-                                                background: #00000000;
+                                            VerticalLayout {
+                                                spacing: 4px;
 
                                                 Text {
-                                                    text: @tr("刪除");
-                                                    color: #ff8ca8;
+                                                    text: @tr("工作區設定");
+                                                    color: AppTheme.text_muted;
                                                     font-size: 11px;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
+                                                    horizontal-alignment: left;
+                                                    wrap: word-wrap;
                                                 }
 
-                                                TouchArea {
-                                                    enabled: !row.key-locked;
-                                                    clicked => {
-                                                        root.remove-shell-manage-row(key_idx);
+                                                HorizontalLayout {
+                                                    spacing: 8px;
+                                                    alignment: start;
+
+                                                    LineEdit {
+                                                        horizontal-stretch: 1;
+                                                        min-height: 28px;
+                                                        font-size: 12px;
+                                                        text: row.workspace-path;
+                                                        edited(new_text) => {
+                                                            root.shell-manage-workspace-edited(key_idx, new_text);
+                                                        }
                                                     }
+
+                                                    Rectangle {
+                                                        min-width: 88px;
+                                                        height: 28px;
+                                                        horizontal-stretch: 0;
+                                                        border-width: 1px;
+                                                        border-color: AppTheme.prompt_chrome_border;
+                                                        border-radius: 8px;
+                                                        background: #00000000;
+
+                                                        Text {
+                                                            text: @tr("選擇資料夾");
+                                                            color: AppTheme.text;
+                                                            horizontal-alignment: center;
+                                                            vertical-alignment: center;
+                                                            font-size: 12px;
+                                                            font-weight: 600;
+                                                        }
+
+                                                        TouchArea {
+                                                            clicked => {
+                                                                root.shell-manage-workspace-pick-folder(key_idx);
+                                                            }
+                                                        }
+                                                    }
+                                                }
+
+                                                Text {
+                                                    text: @tr("空白則使用目前工作區（分頁資料夾或啟動目錄）；有填則以該路徑為工作區根目錄。");
+                                                    color: AppTheme.text_muted;
+                                                    font-size: 10px;
+                                                    horizontal-alignment: left;
+                                                    wrap: word-wrap;
                                                 }
                                             }
                                         }

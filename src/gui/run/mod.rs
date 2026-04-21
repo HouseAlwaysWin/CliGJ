@@ -60,16 +60,18 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     let default_shell_profile = cfg.default_shell_profile().unwrap_or_else(|| {
         shell_profiles
             .first()
-            .map(|(n, _)| n.clone())
+            .map(|(n, _, _)| n.clone())
             .unwrap_or_else(|| "Command Prompt".to_string())
     });
-    let profile_ok = shell_profiles.iter().any(|(n, _)| n == &default_shell_profile);
+    let profile_ok = shell_profiles
+        .iter()
+        .any(|(n, _, _)| n == &default_shell_profile);
     let startup_profile = if profile_ok {
         default_shell_profile
     } else {
         shell_profiles
             .first()
-            .map(|(n, _)| n.clone())
+            .map(|(n, _, _)| n.clone())
             .unwrap_or_else(|| "Command Prompt".to_string())
     };
 

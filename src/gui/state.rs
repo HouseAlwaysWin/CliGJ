@@ -28,6 +28,21 @@ pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     }
 }
 
+/// Workspace root for `@` picker: optional per-shell profile directory, else [`workspace_root_for_tab`].
+pub(crate) fn workspace_root_for_tab_with_profile(tab: &TabState, gs: &GuiState) -> PathBuf {
+    let cmd = tab.cmd_type.as_str();
+    for (name, _, w) in &gs.shell_profiles {
+        if name == cmd {
+            let t = w.trim();
+            if !t.is_empty() {
+                return PathBuf::from(t);
+            }
+            break;
+        }
+    }
+    workspace_root_for_tab(tab)
+}
+
 /// Composer-attached images: absolute path (sent on submit) + thumbnail for UI.
 pub(crate) struct PromptImageAttach {
     pub abs_path: String,
@@ -282,8 +297,8 @@ pub struct GuiState {
     pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
     /// From config `[[ui.interactive_commands]]`: (display name, command line).
     pub(crate) interactive_commands: Vec<(String, String)>,
-    /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`.
-    pub(crate) shell_profiles: Vec<(String, String)>,
+    /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`: name, command, optional workspace root.
+    pub(crate) shell_profiles: Vec<(String, String, String)>,
     /// Startup page setting: preferred UI language label (currently persisted only).
     pub(crate) startup_language: String,
     /// Startup page setting: default shell profile for newly created tabs.

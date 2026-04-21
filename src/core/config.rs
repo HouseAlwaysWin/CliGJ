@@ -120,12 +120,12 @@ impl AppConfig {
         ui_table.remove("interactive_custom_commands");
     }
 
-    /// `[[ui.shell_profiles]]` — top-right terminal picker rows (`name` + startup `command`).
-    pub fn shell_profiles(&self) -> Vec<(String, String)> {
-        read_interactive_command_array(self, "shell_profiles")
+    /// `[[ui.shell_profiles]]` — `name`, `command`, optional `workspace` (root for `@` picker etc.).
+    pub fn shell_profiles(&self) -> Vec<(String, String, String)> {
+        read_shell_profiles_array(self)
     }
 
-    pub fn set_shell_profiles(&mut self, pairs: &[(String, String)]) {
+    pub fn set_shell_profiles(&mut self, entries: &[(String, String, String)]) {
         let ui = self
             .data
             .entry("ui".to_string())
@@ -136,13 +136,17 @@ impl AppConfig {
         let Some(ui_table) = ui.as_table_mut() else {
             return;
         };
-        let arr: Vec<toml::Value> = pairs
+        let arr: Vec<toml::Value> = entries
             .iter()
-            .filter(|(n, c)| !n.is_empty() && !c.is_empty())
-            .map(|(n, c)| {
+            .filter(|(n, c, _)| !n.is_empty() && !c.is_empty())
+            .map(|(n, c, w)| {
                 let mut t = toml::Table::new();
                 t.insert("name".to_string(), toml::Value::String(n.clone()));
                 t.insert("command".to_string(), toml::Value::String(c.clone()));
+                let wt = w.trim();
+                if !wt.is_empty() {
+                    t.insert("workspace".to_string(), toml::Value::String(wt.to_string()));
+                }
                 toml::Value::Table(t)
             })
             .collect();
@@ -202,6 +206,43 @@ impl AppConfig {
             toml::Value::String(profile.trim().to_string()),
         );
     }
+}
+
+fn read_shell_profiles_array(cfg: &AppConfig) -> Vec<(String, String, String)> {
+    let Some(ui) = cfg.data.get("ui").and_then(|v| v.as_table()) else {
+        return Vec::new();
+    };
+    let Some(arr) = ui.get("shell_profiles").and_then(|v| v.as_array()) else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in arr {
+        let Some(t) = item.as_table() else {
+            continue;
+        };
+        let name = t
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let command = t
+            .get("command")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let workspace = t
+            .get("workspace")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if !name.is_empty() && !command.is_empty() {
+            out.push((name, command, workspace));
+        }
+    }
+    out
 }
 
 fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String)> {

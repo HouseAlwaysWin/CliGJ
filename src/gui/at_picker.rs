@@ -7,7 +7,7 @@ use crate::workspace_files;
 use super::composer_sync::sync_composer_line_to_conpty;
 use super::slint_ui::AppWindow;
 use super::state::GuiState;
-use super::state::workspace_root_for_tab;
+use super::state::workspace_root_for_tab_with_profile;
 use super::ui_sync::tab_update_from_ui;
 
 pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
@@ -54,7 +54,7 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         return;
     }
     let tab = &s.tabs[s.current];
-    let root = workspace_root_for_tab(tab);
+    let root = workspace_root_for_tab_with_profile(tab, s);
     let root_changed = s.workspace_file_cache_root.as_ref() != Some(&root);
     if root_changed {
         s.workspace_file_cache = workspace_files::scan_workspace_files(&root);
@@ -114,7 +114,7 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
         return;
     };
     let prompt = ui.get_ws_prompt().to_string();
-    let root = workspace_root_for_tab(&s.tabs[s.current]);
+    let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
     let (new_p, abs_path) = workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
     ui.set_ws_prompt(SharedString::from(new_p.as_str()));
     if !s.tabs[s.current].prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
