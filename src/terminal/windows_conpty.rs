@@ -382,6 +382,7 @@ pub fn start_reader_thread(
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
         let mut pending_reset = false;
         let mut render_mode = initial_render_mode;
+        let mut last_alt_screen_active = false;
 
         while let Ok(event) = event_rx.recv() {
             match event {
@@ -420,23 +421,40 @@ pub fn start_reader_thread(
             }
 
             // After processing events, render a snapshot of the recent screen/scrollback tail.
+            let alt_screen_active = term.is_alt_screen_active();
+            if alt_screen_active != last_alt_screen_active {
+                line_cache.clear();
+                last_snapshot_fp = None;
+                pending_reset = true;
+                last_alt_screen_active = alt_screen_active;
+            }
+
             let screen = term.screen();
             let total = screen.scrollback_rows();
             let snapshot_cap = term_rows
                 .saturating_mul(4)
                 .min(CONPTY_SNAPSHOT_MAX_LINES)
                 .max(term_rows);
-            let snapshot_row_count = match render_mode {
-                ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
-                // Interactive AI tabs still need a substantial tail of scrollback; limiting to
-                // only the currently visible frame makes the scrollbar useless because earlier
-                // prompt/command rows disappear as soon as they scroll off-screen.
-                ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
-            };
-            let start = total.saturating_sub(snapshot_row_count);
-            let end = total;
-            let total_for_render = total;
-            let filled = total > term_rows;
+            let (start, end, total_for_render, filled) =
+                if alt_screen_active && render_mode == ReaderRenderMode::InteractiveAi {
+                    // Alternate-screen TUIs redraw in-place and have no scrollback. Keep a
+                    // stable 0-based frame so repeated screen refreshes replace rows instead of
+                    // being appended into the GUI as fake history.
+                    let frame_rows = total.max(1).min(term_rows.max(1));
+                    (0, frame_rows, frame_rows, false)
+                } else {
+                    let snapshot_row_count = match render_mode {
+                        ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
+                        // Interactive AI tabs still need a substantial tail of scrollback when
+                        // not in alt-screen mode, so keep the recent snapshot tail.
+                        ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
+                    };
+                    let start = total.saturating_sub(snapshot_row_count);
+                    let end = total;
+                    let total_for_render = total;
+                    let filled = total > term_rows;
+                    (start, end, total_for_render, filled)
+                };
             let lines = screen.lines_in_phys_range(start..end);
             let line_refs: Vec<&Line> = lines.iter().collect();
             let cursor = term.cursor_pos();
