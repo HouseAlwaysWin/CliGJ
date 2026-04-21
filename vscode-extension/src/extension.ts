@@ -13,9 +13,18 @@ type IpcResponse = {
   error?: string;
 };
 
+type IpcEvent = {
+  type: "event";
+  event: string;
+  data?: unknown;
+};
+
+type IpcMessage = IpcResponse | IpcEvent;
+
 type SelectionPromptData = {
   prompt: string;
   selectionPayloads: string[];
+  filePathPayloads: string[];
 };
 
 type ExplorerPathPromptData = {
@@ -28,10 +37,60 @@ function sendRequest(method: string, params: Record<string, unknown> = {}): Prom
     const socket = net.createConnection(PIPE_PATH);
     const id = Date.now();
     let buffer = "";
+    let settled = false;
     const timer = setTimeout(() => {
+      settled = true;
       socket.destroy();
       reject(new Error("IPC request timeout"));
     }, REQUEST_TIMEOUT_MS);
+
+    const finishWithError = (err: unknown): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      reject(err);
+    };
+
+    const finishWithResponse = (resp: IpcResponse): void => {
+      if (settled) {
+        return;
+      }
+      settled = true;
+      clearTimeout(timer);
+      socket.end();
+      resolve(resp);
+    };
+
+    const tryConsumeBuffer = (): void => {
+      while (true) {
+        const idx = buffer.indexOf("\n");
+        if (idx < 0) {
+          return;
+        }
+        const line = buffer.slice(0, idx).trim();
+        buffer = buffer.slice(idx + 1);
+        if (!line) {
+          continue;
+        }
+        let msg: IpcMessage;
+        try {
+          msg = JSON.parse(line) as IpcMessage;
+        } catch (err) {
+          finishWithError(err);
+          return;
+        }
+        if (msg.type === "event") {
+          continue;
+        }
+        if (msg.id !== undefined && msg.id !== id) {
+          continue;
+        }
+        finishWithResponse(msg);
+        return;
+      }
+    };
 
     socket.on("connect", () => {
       const payload = JSON.stringify({ id, method, params }) + "\n";
@@ -40,27 +99,17 @@ function sendRequest(method: string, params: Record<string, unknown> = {}): Prom
 
     socket.on("data", (chunk) => {
       buffer += chunk.toString("utf8");
-      const idx = buffer.indexOf("\n");
-      if (idx < 0) {
-        return;
-      }
-      const line = buffer.slice(0, idx).trim();
-      clearTimeout(timer);
-      socket.end();
-      if (!line) {
-        reject(new Error("Empty response from CliGJ"));
-        return;
-      }
-      try {
-        resolve(JSON.parse(line) as IpcResponse);
-      } catch (err) {
-        reject(err);
+      tryConsumeBuffer();
+    });
+
+    socket.on("end", () => {
+      if (!settled) {
+        finishWithError(new Error("CliGJ closed IPC connection before sending a response"));
       }
     });
 
     socket.on("error", (err) => {
-      clearTimeout(timer);
-      reject(err);
+      finishWithError(err);
     });
   });
 }
@@ -68,6 +117,12 @@ function sendRequest(method: string, params: Record<string, unknown> = {}): Prom
 export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("CliGJ Bridge");
   context.subscriptions.push(output);
+
+  const fileNameFromPath = (path: string): string => {
+    const normalized = path.replace(/\\/g, "/");
+    const parts = normalized.split("/");
+    return parts[parts.length - 1] || normalized;
+  };
 
   const sendPromptPayload = async (
     prompt: string,
@@ -122,9 +177,11 @@ export function activate(context: vscode.ExtensionContext): void {
     const filePath = workspaceFolder
       ? vscode.workspace.asRelativePath(document.uri, false)
       : document.uri.fsPath;
+    const normalizedFilePath = filePath.replace(/\\/g, "/");
+    const fileToken = `@${fileNameFromPath(normalizedFilePath)}`;
 
     const selectionPayloads: string[] = [];
-    const promptLines: string[] = [`File: ${filePath}`];
+    const promptLines: string[] = [fileToken];
     nonEmptySelections.forEach((selection, index) => {
       const startLine = selection.start.line;
       const endLine =
@@ -137,7 +194,7 @@ export function activate(context: vscode.ExtensionContext): void {
       const range = `L${startLine + 1}-L${endLine + 1}`;
       selectionPayloads.push(
         [
-          `[[selection ${index + 1} file="${filePath}" range="${range}"]]`,
+          `[[selection ${index + 1} file="${normalizedFilePath}" range="${range}"]]`,
           `Range: ${range}`,
           `\`\`\`${language}`,
           safeText,
@@ -175,7 +232,8 @@ export function activate(context: vscode.ExtensionContext): void {
 
     return {
       prompt,
-      selectionPayloads
+      selectionPayloads,
+      filePathPayloads: [normalizedFilePath]
     };
   };
 
@@ -276,7 +334,12 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    await sendPromptPayload(selectionData.prompt, true, selectionData.selectionPayloads);
+    await sendPromptPayload(
+      selectionData.prompt,
+      true,
+      selectionData.selectionPayloads,
+      selectionData.filePathPayloads
+    );
   });
 
   const fillSelectionPrompt = vscode.commands.registerCommand("cligj.fillSelectionPrompt", async () => {
@@ -293,7 +356,12 @@ export function activate(context: vscode.ExtensionContext): void {
       return;
     }
 
-    await sendPromptPayload(selectionData.prompt, false, selectionData.selectionPayloads);
+    await sendPromptPayload(
+      selectionData.prompt,
+      false,
+      selectionData.selectionPayloads,
+      selectionData.filePathPayloads
+    );
   });
 
   const sendExplorerPath = vscode.commands.registerCommand(

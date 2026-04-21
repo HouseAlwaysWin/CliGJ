@@ -42,11 +42,13 @@
       },
       {
         "command": "cligj.sendSelectionPrompt",
-        "title": "CliGJ: Send Selection with Line Numbers (Direct Submit)"
+        "title": "CliGJ: Send Selection with Line Numbers (Direct Submit)",
+        "shortTitle": "Send to CliGJ"
       },
       {
         "command": "cligj.fillSelectionPrompt",
-        "title": "CliGJ: Fill Selection with Line Numbers (Editable)"
+        "title": "CliGJ: Fill Selection with Line Numbers (Editable)",
+        "shortTitle": "Fill to CliGJ"
       },
       {
         "command": "cligj.sendExplorerPath",
@@ -61,13 +63,13 @@
       "editor/context": [
         {
           "command": "cligj.sendSelectionPrompt",
-          "group": "navigation@100",
-          "when": "editorHasSelection"
+          "group": "2_cligj@100",
+          "when": "editorTextFocus && editorHasSelection"
         },
         {
           "command": "cligj.fillSelectionPrompt",
-          "group": "navigation@101",
-          "when": "editorHasSelection"
+          "group": "2_cligj@101",
+          "when": "editorTextFocus && editorHasSelection"
         }
       ],
       "explorer/context": [
