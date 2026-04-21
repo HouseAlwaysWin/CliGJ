@@ -1,0 +1,4 @@
+[alias]
+runf = "run --profile fastdev"
+buildf = "build --profile fastdev"
+testf = "test --profile fastdev"
