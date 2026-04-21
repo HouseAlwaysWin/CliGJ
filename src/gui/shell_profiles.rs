@@ -123,6 +123,7 @@ pub(crate) fn sync_shell_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
             name: SharedString::from(n.as_str()),
             line: SharedString::from(c.as_str()),
             key_locked: is_reserved_shell_profile(n),
+            expanded: false,
         })
         .collect();
     ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));

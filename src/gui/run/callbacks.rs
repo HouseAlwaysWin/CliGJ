@@ -411,6 +411,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             name: SharedString::new(),
             line: SharedString::new(),
             key_locked: false,
+            expanded: false,
         });
         set_manage_rows(&ui, rows);
     });
@@ -557,12 +558,40 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         let mut rows = model_interactive_editor_rows(&ui.get_ws_shell_manage_rows());
+        for r in &mut rows {
+            r.expanded = false;
+        }
         rows.push(InteractiveCmdEditorRow {
             name: SharedString::new(),
             line: SharedString::new(),
             key_locked: false,
+            expanded: true,
         });
         set_shell_manage_rows(&ui, rows);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_toggle_shell_manage_row_expanded(move |idx| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_shell_manage_rows();
+        let n = m.row_count();
+        let Some(cur) = m.row_data(i) else {
+            return;
+        };
+        let opening = !cur.expanded;
+        for j in 0..n {
+            let Some(mut row) = m.row_data(j) else {
+                continue;
+            };
+            row.expanded = opening && j == i;
+            m.set_row_data(j, row);
+        }
     });
 
     let app_weak = app.as_weak();

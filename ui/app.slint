@@ -107,6 +107,7 @@ export component AppWindow inherits Window {
     callback save-shell-manage;
     callback save-shell-startup-settings;
     callback close-shell-manage;
+    callback toggle-shell-manage-row-expanded(int);
 
     public function ws_scroll_terminal_to_bottom() {
         workspace.scroll_terminal_to_bottom();
@@ -830,6 +831,7 @@ export component AppWindow inherits Window {
                             text: @tr("預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。");
                             color: AppTheme.text_muted;
                             font-size: 11px;
+                            horizontal-alignment: left;
                             wrap: word-wrap;
                         }
 
@@ -872,85 +874,129 @@ export component AppWindow inherits Window {
                                 spacing: 6px;
 
                                 for row[key_idx] in root.ws-shell-manage-rows: Rectangle {
-                                    min-height: 32px;
                                     border-width: 1px;
                                     border-color: AppTheme.prompt_chrome_border;
                                     border-radius: 6px;
                                     background: #00000000;
 
-                                    HorizontalLayout {
-                                        padding-left: 6px;
-                                        padding-right: 6px;
-                                        spacing: 6px;
-                                        alignment: center;
-
-                                        if row.key-locked: Rectangle {
-                                            horizontal-stretch: 1;
-                                            min-width: 96px;
-                                            min-height: 26px;
-                                            background: #00000020;
-                                            border-radius: 4px;
-
-                                            Text {
-                                                text: row.name;
-                                                color: AppTheme.text_muted;
-                                                font-size: 12px;
-                                                vertical-alignment: center;
-                                                horizontal-alignment: left;
-                                                overflow: elide;
-                                            }
-                                        }
-
-                                        if !row.key-locked: LineEdit {
-                                            horizontal-stretch: 1;
-                                            min-width: 96px;
-                                            font-size: 12px;
-                                            text: row.name;
-                                            edited(new_text) => {
-                                                root.shell-manage-name-edited(key_idx, new_text);
-                                            }
-                                        }
-
-                                        Text {
-                                            text: ">";
-                                            color: AppTheme.text_muted;
-                                            font-size: 12px;
-                                            vertical-alignment: center;
-                                            horizontal-stretch: 0;
-                                        }
-
-                                        LineEdit {
-                                            horizontal-stretch: 2;
-                                            min-width: 180px;
-                                            font-size: 12px;
-                                            text: row.line;
-                                            edited(new_text) => {
-                                                root.shell-manage-line-edited(key_idx, new_text);
-                                            }
-                                        }
+                                    VerticalLayout {
+                                        padding: 0px;
+                                        spacing: 0px;
 
                                         Rectangle {
-                                            min-width: 44px;
-                                            max-width: 52px;
-                                            height: 24px;
-                                            horizontal-stretch: 0;
-                                            border-width: 1px;
-                                            border-color: #ff4f6d;
-                                            border-radius: 6px;
+                                            min-height: 34px;
                                             background: #00000000;
 
-                                            Text {
-                                                text: @tr("刪除");
-                                                color: #ff8ca8;
-                                                font-size: 11px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
+                                            HorizontalLayout {
+                                                padding-left: 8px;
+                                                padding-right: 8px;
+                                                spacing: 8px;
+                                                alignment: start;
+
+                                                Text {
+                                                    text: row.expanded ? "v" : ">";
+                                                    color: AppTheme.text_muted;
+                                                    font-size: 12px;
+                                                    vertical-alignment: center;
+                                                    horizontal-stretch: 0;
+                                                    width: 14px;
+                                                    horizontal-alignment: left;
+                                                }
+
+                                                Text {
+                                                    text: row.name;
+                                                    color: row.key-locked ? AppTheme.text_muted : AppTheme.text;
+                                                    font-size: 12px;
+                                                    font-weight: 600;
+                                                    vertical-alignment: center;
+                                                    horizontal-stretch: 1;
+                                                    horizontal-alignment: left;
+                                                    overflow: elide;
+                                                }
                                             }
 
                                             TouchArea {
-                                                enabled: !row.key-locked;
                                                 clicked => {
-                                                    root.remove-shell-manage-row(key_idx);
+                                                    root.toggle-shell-manage-row-expanded(key_idx);
+                                                }
+                                            }
+                                        }
+
+                                        if row.expanded: HorizontalLayout {
+                                            padding-left: 8px;
+                                            padding-right: 8px;
+                                            padding-bottom: 8px;
+                                            spacing: 6px;
+                                            alignment: start;
+
+                                            if row.key-locked: Rectangle {
+                                                horizontal-stretch: 1;
+                                                min-width: 96px;
+                                                min-height: 26px;
+                                                background: #00000020;
+                                                border-radius: 4px;
+
+                                                Text {
+                                                    text: row.name;
+                                                    color: AppTheme.text_muted;
+                                                    font-size: 12px;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: left;
+                                                    overflow: elide;
+                                                }
+                                            }
+
+                                            if !row.key-locked: LineEdit {
+                                                horizontal-stretch: 1;
+                                                min-width: 96px;
+                                                font-size: 12px;
+                                                text: row.name;
+                                                edited(new_text) => {
+                                                    root.shell-manage-name-edited(key_idx, new_text);
+                                                }
+                                            }
+
+                                            Text {
+                                                text: ">";
+                                                color: AppTheme.text_muted;
+                                                font-size: 12px;
+                                                vertical-alignment: center;
+                                                horizontal-stretch: 0;
+                                            }
+
+                                            LineEdit {
+                                                horizontal-stretch: 2;
+                                                min-width: 180px;
+                                                font-size: 12px;
+                                                text: row.line;
+                                                edited(new_text) => {
+                                                    root.shell-manage-line-edited(key_idx, new_text);
+                                                }
+                                            }
+
+                                            Rectangle {
+                                                min-width: 44px;
+                                                max-width: 52px;
+                                                height: 24px;
+                                                horizontal-stretch: 0;
+                                                border-width: 1px;
+                                                border-color: #ff4f6d;
+                                                border-radius: 6px;
+                                                background: #00000000;
+
+                                                Text {
+                                                    text: @tr("刪除");
+                                                    color: #ff8ca8;
+                                                    font-size: 11px;
+                                                    horizontal-alignment: center;
+                                                    vertical-alignment: center;
+                                                }
+
+                                                TouchArea {
+                                                    enabled: !row.key-locked;
+                                                    clicked => {
+                                                        root.remove-shell-manage-row(key_idx);
+                                                    }
                                                 }
                                             }
                                         }
