@@ -269,7 +269,7 @@ fn terminal_render_from_lines_cached(
     render_mode: ReaderRenderMode,
     lines: &[&Line],
     start_phys_idx: usize,
-    total_scrollback_rows: usize,
+    _total_scrollback_rows: usize,
     term_screen_rows: usize,
     palette: &ColorPalette,
     cursor_local_row: Option<usize>,
@@ -278,14 +278,19 @@ fn terminal_render_from_lines_cached(
 ) -> TerminalRender {
     let mut changed_indices = Vec::new();
     let num_lines = lines.len();
+    let cache_base_idx = if render_mode == ReaderRenderMode::InteractiveAi {
+        0
+    } else {
+        start_phys_idx
+    };
 
     // 確保 cache 長度足夠
-    if cache.len() < start_phys_idx + num_lines {
-        cache.resize(start_phys_idx + num_lines, (0, ColoredLine::default()));
+    if cache.len() < cache_base_idx + num_lines {
+        cache.resize(cache_base_idx + num_lines, (0, ColoredLine::default()));
     }
 
     for i in 0..num_lines {
-        let global_idx = start_phys_idx + i;
+        let global_idx = cache_base_idx + i;
         let active_cursor_col = if cursor_local_row == Some(i) {
             cursor_col
         } else {
@@ -301,18 +306,28 @@ fn terminal_render_from_lines_cached(
 
     let changed_lines: Vec<ColoredLine> = changed_indices
         .iter()
-        .map(|&i| cache[start_phys_idx + i].1.clone())
+        .map(|&i| cache[cache_base_idx + i].1.clone())
         .collect();
+
+    let render_window_len = num_lines;
+    let render_first_idx = if render_mode == ReaderRenderMode::InteractiveAi {
+        0
+    } else {
+        start_phys_idx
+    };
 
     TerminalRender {
         render_mode,
         text: String::new(),
         lines: changed_lines,
-        full_len: num_lines,
-        first_line_idx: start_phys_idx,
-        cursor_row: cursor_local_row.map(|row| start_phys_idx + row),
+        // Interactive AI UIs often redraw the whole visible tail in primary-screen mode instead of
+        // emitting stable scrollback. Expose the snapshot as a 0-based window so redraw/reflow
+        // replaces the current tail rather than duplicating old physical rows in the GUI.
+        full_len: render_window_len,
+        first_line_idx: render_first_idx,
+        cursor_row: cursor_local_row.map(|row| render_first_idx + row),
         cursor_col,
-        filled: total_scrollback_rows > term_screen_rows,
+        filled: render_window_len > term_screen_rows,
         changed_indices,
         reset_terminal_buffer: false,
     }
@@ -435,26 +450,25 @@ pub fn start_reader_thread(
                 .saturating_mul(4)
                 .min(CONPTY_SNAPSHOT_MAX_LINES)
                 .max(term_rows);
-            let (start, end, total_for_render, filled) =
-                if alt_screen_active && render_mode == ReaderRenderMode::InteractiveAi {
-                    // Alternate-screen TUIs redraw in-place and have no scrollback. Keep a
-                    // stable 0-based frame so repeated screen refreshes replace rows instead of
-                    // being appended into the GUI as fake history.
+            let (start, end, total_for_render, filled) = match render_mode {
+                ReaderRenderMode::InteractiveAi => {
+                    // Gemini/Codex-style CLIs frequently redraw their whole primary-screen layout
+                    // on width changes and intermediate state updates. Treat Interactive AI as a
+                    // live frame viewer instead of preserving primary-screen scrollback; otherwise
+                    // those redraws get misinterpreted as new history and appear duplicated.
                     let frame_rows = total.max(1).min(term_rows.max(1));
-                    (0, frame_rows, frame_rows, false)
-                } else {
-                    let snapshot_row_count = match render_mode {
-                        ReaderRenderMode::Shell => snapshot_cap.min(total.max(1)),
-                        // Interactive AI tabs still need a substantial tail of scrollback when
-                        // not in alt-screen mode, so keep the recent snapshot tail.
-                        ReaderRenderMode::InteractiveAi => snapshot_cap.min(total.max(1)),
-                    };
+                    let start = total.saturating_sub(frame_rows);
+                    (start, total, frame_rows, false)
+                }
+                ReaderRenderMode::Shell => {
+                    let snapshot_row_count = snapshot_cap.min(total.max(1));
                     let start = total.saturating_sub(snapshot_row_count);
                     let end = total;
                     let total_for_render = total;
                     let filled = total > term_rows;
                     (start, end, total_for_render, filled)
-                };
+                }
+            };
             let lines = screen.lines_in_phys_range(start..end);
             let line_refs: Vec<&Line> = lines.iter().collect();
             let cursor = term.cursor_pos();
