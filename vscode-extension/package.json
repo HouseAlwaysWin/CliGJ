@@ -75,12 +75,12 @@
       "explorer/context": [
         {
           "command": "cligj.sendExplorerPath",
-          "group": "navigation@100",
+          "group": "2_cligj@100",
           "when": "resourceScheme == file"
         },
         {
           "command": "cligj.fillExplorerPath",
-          "group": "navigation@101",
+          "group": "2_cligj@101",
           "when": "resourceScheme == file"
         }
       ]
