@@ -49,6 +49,8 @@ jobs:
           cache-on-failure: true
 
       - name: Build release binary
+        env:
+          CLIGJ_APP_VERSION: ${{ steps.tag.outputs.value }}
         run: cargo build --release
 
       - name: Prepare app asset
@@ -178,5 +180,4 @@ jobs:
           tag_name: ${{ steps.tag.outputs.value }}
           files: |
             ${{ steps.bundle.outputs.name }}
-            dist/cligj-vsix/*
           generate_release_notes: true

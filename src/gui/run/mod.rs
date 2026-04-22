@@ -31,7 +31,10 @@ mod timers;
 
 const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
 const APP_AUTHOR: &str = "HouseAlwaysWin";
-const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+const APP_VERSION: &str = match option_env!("CLIGJ_APP_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 pub fn run_gui(inject_file: Option<PathBuf>) {
     register_embedded_ui_fonts();

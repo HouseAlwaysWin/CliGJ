@@ -28,7 +28,11 @@ use super::super::{model_interactive_editor_rows, set_shell_manage_rows};
 const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
 const APP_AUTHOR: &str = "HouseAlwaysWin";
 const RELEASES_API_URL: &str = "https://api.github.com/repos/HouseAlwaysWin/CliGJ/releases?per_page=20";
-const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+const MAX_UPDATE_VERSIONS: usize = 10;
+const APP_VERSION: &str = match option_env!("CLIGJ_APP_VERSION") {
+    Some(v) => v,
+    None => env!("CARGO_PKG_VERSION"),
+};
 
 #[derive(Debug, Clone, Deserialize)]
 struct GithubReleaseAsset {
@@ -125,8 +129,8 @@ fn fetch_release_versions() -> Result<Vec<String>, String> {
     }
     if out.is_empty() {
         out.push(APP_VERSION.to_string());
-    } else if !out.iter().any(|v| v == APP_VERSION) {
-        out.insert(0, APP_VERSION.to_string());
+    } else {
+        out.truncate(MAX_UPDATE_VERSIONS);
     }
     Ok(out)
 }
@@ -143,13 +147,7 @@ fn set_update_versions_to_ui(ui: &AppWindow, versions: &[String], preferred: Opt
         .filter(|s| !s.is_empty())
         .filter(|s| versions.iter().any(|v| v == s))
         .map(ToOwned::to_owned)
-        .or_else(|| {
-            versions
-                .iter()
-                .find(|v| v.as_str() == APP_VERSION)
-                .cloned()
-                .or_else(|| versions.first().cloned())
-        })
+        .or_else(|| versions.first().cloned())
         .unwrap_or_else(|| APP_VERSION.to_string());
     ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
 }
@@ -344,6 +342,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             .ok()
             .and_then(|cfg| cfg.get_value("ui.preferred_app_version").ok().flatten());
         ui.set_ws_update_current_version(SharedString::from(APP_VERSION));
+        ui.set_ws_update_confirm_open(false);
         ui.set_ws_update_open(true);
         refresh_available_versions(app_weak.clone(), preferred);
     });
@@ -362,6 +361,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
+        ui.set_ws_update_confirm_open(false);
         ui.set_ws_update_selected_version(ver.clone());
         ui.set_ws_update_status_text(SharedString::from(
             format!("Selected target version: {}", ver.as_str()).as_str(),
@@ -376,19 +376,6 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let selected = ver.trim().to_string();
         if selected.is_empty() {
             ui.set_ws_update_status_text(SharedString::from("Please select a version first"));
-            return;
-        }
-        let confirm = rfd::MessageDialog::new()
-            .set_title("CliGJ 更新確認")
-            .set_description(
-                format!("是否下載並切換到版本 {selected}？\n\n按下 Yes 後會下載新版本並關閉目前視窗。")
-                    .as_str(),
-            )
-            .set_buttons(rfd::MessageButtons::YesNo)
-            .set_level(rfd::MessageLevel::Info)
-            .show();
-        if !matches!(confirm, rfd::MessageDialogResult::Yes) {
-            ui.set_ws_update_status_text(SharedString::from("Update cancelled"));
             return;
         }
         let rollback_path = std::env::current_exe()
@@ -491,6 +478,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
+        ui.set_ws_update_confirm_open(false);
         ui.set_ws_update_open(false);
     });
 
