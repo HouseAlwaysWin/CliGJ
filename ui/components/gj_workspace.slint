@@ -20,8 +20,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> prompt;
     in-out property <[string]> prompt-path-chips;
     in-out property <bool> raw-input-enabled;
-    in-out property <string> interactive-pin-lines: "0";
-    in-out property <bool> interactive-pin-lines-visible: false;
+    in-out property <string> terminal-pin-lines: "0";
     in property <string> terminal-font-family: "DejaVu Sans Mono";
     in property <bool> ipc-running;
     in property <int> ipc-client-count;
@@ -36,7 +35,7 @@ export component GjWorkspace inherits Rectangle {
     callback history-next-requested;
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
-    callback interactive-pin-lines-edited(string);
+    callback terminal-pin-lines-edited(string);
     callback ipc-toggle-requested;
     callback inject-file-requested;
     callback workspace-folder-requested;
@@ -127,8 +126,7 @@ export component GjWorkspace inherits Rectangle {
             prompt-path-chips: root.prompt-path-chips;
             interactive-command-choices: root.interactive-command-choices;
             raw-input-enabled <=> root.raw-input-enabled;
-            interactive-pin-lines <=> root.interactive-pin-lines;
-            interactive-pin-lines-visible <=> root.interactive-pin-lines-visible;
+            terminal-pin-lines <=> root.terminal-pin-lines;
             ipc-running: root.ipc-running;
             ipc-client-count: root.ipc-client-count;
             ipc-status-text: root.ipc-status-text;
@@ -149,8 +147,8 @@ export component GjWorkspace inherits Rectangle {
             raw-input-toggle-requested => {
                 root.raw-input-toggle-requested();
             }
-            interactive-pin-lines-edited(value) => {
-                root.interactive-pin-lines-edited(value);
+            terminal-pin-lines-edited(value) => {
+                root.terminal-pin-lines-edited(value);
             }
             ipc-toggle-requested => {
                 root.ipc-toggle-requested();

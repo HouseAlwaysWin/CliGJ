@@ -624,10 +624,10 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 if tab.interactive_launcher_program.trim().is_empty() {
                     continue;
                 }
-                if tab.interactive_pinned_footer_override.is_some() {
+                if tab.terminal_pinned_footer_override.is_some() {
                     continue;
                 }
-                tab.interactive_pinned_footer_lines = pinned_footer_lines_for_specs(
+                tab.terminal_pinned_footer_lines = pinned_footer_lines_for_specs(
                     tab.interactive_launcher_program.as_str(),
                     &specs,
                 );
@@ -650,8 +650,8 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let mut s = st_save.borrow_mut();
             if s.current < s.tabs.len() {
                 let current = s.current;
-                ui.set_ws_interactive_pin_lines(SharedString::from(
-                    s.tabs[current].interactive_pinned_footer_lines.to_string().as_str(),
+                ui.set_ws_terminal_pin_lines(SharedString::from(
+                    s.tabs[current].terminal_pinned_footer_lines.to_string().as_str(),
                 ));
                 refresh_terminal_tab_view(&ui, &mut s.tabs[current]);
             }
@@ -1314,7 +1314,7 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
 
     let st_pin = Rc::clone(&state);
     let app_weak = app.as_weak();
-    app.on_interactive_pin_lines_edited(move |new_text| {
+    app.on_terminal_pin_lines_edited(move |new_text| {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
@@ -1326,9 +1326,9 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
                 Err(_) => {
                     let s = st_pin.borrow();
                     if s.current < s.tabs.len() {
-                        ui.set_ws_interactive_pin_lines(SharedString::from(
+                        ui.set_ws_terminal_pin_lines(SharedString::from(
                             s.tabs[s.current]
-                                .interactive_pinned_footer_lines
+                                .terminal_pinned_footer_lines
                                 .to_string()
                                 .as_str(),
                         ));
@@ -1344,9 +1344,9 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
         }
         let current = s.current;
         let tab = &mut s.tabs[current];
-        tab.interactive_pinned_footer_lines = parsed;
-        tab.interactive_pinned_footer_override = Some(parsed);
-        ui.set_ws_interactive_pin_lines(SharedString::from(parsed.to_string().as_str()));
+        tab.terminal_pinned_footer_lines = parsed;
+        tab.terminal_pinned_footer_override = Some(parsed);
+        ui.set_ws_terminal_pin_lines(SharedString::from(parsed.to_string().as_str()));
         refresh_terminal_tab_view(&ui, tab);
     });
 

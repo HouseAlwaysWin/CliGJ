@@ -8,8 +8,7 @@ export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
-    in-out property <string> interactive-pin-lines: "0";
-    in property <bool> interactive-pin-lines-visible: false;
+    in-out property <string> terminal-pin-lines: "0";
     in property <bool> ipc-running: false;
     in property <int> ipc-client-count: 0;
     in property <string> ipc-status-text: "IPC OFF";
@@ -23,7 +22,7 @@ export component GjPromptDropZone inherits Rectangle {
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
-    callback interactive-pin-lines-edited(string);
+    callback terminal-pin-lines-edited(string);
     callback ipc-toggle-requested;
     callback inject-file-requested;
     callback workspace-folder-requested;
@@ -389,10 +388,10 @@ export component GjPromptDropZone inherits Rectangle {
                             LineEdit {
                                 horizontal-stretch: 1;
                                 min-width: 60px;
-                                text <=> root.interactive-pin-lines;
+                                text <=> root.terminal-pin-lines;
                                 font-size: 11px;
                                 edited(new_text) => {
-                                    root.interactive-pin-lines-edited(new_text);
+                                    root.terminal-pin-lines-edited(new_text);
                                 }
                             }
                         }

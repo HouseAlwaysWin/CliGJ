@@ -30,8 +30,8 @@ thread_local! {
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
 /// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
-pub(crate) fn interactive_pinned_footer_start(tab: &TabState) -> Option<usize> {
-    let pinned_rows = tab.interactive_pinned_footer_lines;
+pub(crate) fn terminal_pinned_footer_start(tab: &TabState) -> Option<usize> {
+    let pinned_rows = tab.terminal_pinned_footer_lines;
     if pinned_rows == 0 {
         return None;
     }
@@ -43,7 +43,7 @@ pub(crate) fn interactive_pinned_footer_start(tab: &TabState) -> Option<usize> {
 }
 
 pub(crate) fn scrollable_terminal_line_count(tab: &TabState) -> usize {
-    interactive_pinned_footer_start(tab).unwrap_or(tab.terminal_lines.len())
+    terminal_pinned_footer_start(tab).unwrap_or(tab.terminal_lines.len())
 }
 
 pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {
@@ -405,7 +405,7 @@ pub(crate) fn push_terminal_view_to_ui(
     tab.terminal_scroll_top_px = scroll_top;
     tab.terminal_view_height_px = vh;
 
-    let footer_start = interactive_pinned_footer_start(tab);
+    let footer_start = terminal_pinned_footer_start(tab);
     let body_n = scrollable_terminal_line_count(tab);
     let footer_rows: Vec<TermLine> = footer_start
         .map(|start| {
@@ -575,9 +575,8 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
-    ui.set_ws_interactive_pin_lines_visible(true);
-    ui.set_ws_interactive_pin_lines(SharedString::from(
-        tab.interactive_pinned_footer_lines.to_string().as_str(),
+    ui.set_ws_terminal_pin_lines(SharedString::from(
+        tab.terminal_pinned_footer_lines.to_string().as_str(),
     ));
 
     let n = scrollable_terminal_line_count(tab);
