@@ -1,9 +1,14 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::fs::{self, File};
+use std::io::copy;
+use std::path::PathBuf;
 use std::process::Command;
 use std::rc::Rc;
 use std::thread;
+use std::time::Duration;
 
+use serde::Deserialize;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::core::config::AppConfig;
@@ -24,6 +29,23 @@ const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
 const APP_AUTHOR: &str = "HouseAlwaysWin";
 const RELEASES_API_URL: &str = "https://api.github.com/repos/HouseAlwaysWin/CliGJ/releases?per_page=20";
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[derive(Debug, Clone, Deserialize)]
+struct GithubReleaseAsset {
+    name: String,
+    browser_download_url: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GithubRelease {
+    tag_name: String,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
+    #[serde(default)]
+    assets: Vec<GithubReleaseAsset>,
+}
 
 fn open_url_in_browser(url: &str) -> Result<(), String> {
     #[cfg(target_os = "windows")]
@@ -61,7 +83,13 @@ fn open_url_in_browser(url: &str) -> Result<(), String> {
     }
 }
 
-fn fetch_release_versions() -> Result<Vec<String>, String> {
+#[cfg(target_os = "windows")]
+fn normalize_version_tag(tag: &str) -> String {
+    tag.trim().trim_start_matches('v').to_ascii_lowercase()
+}
+
+#[cfg(target_os = "windows")]
+fn fetch_releases() -> Result<Vec<GithubRelease>, String> {
     let client = reqwest::blocking::Client::builder()
         .build()
         .map_err(|e| format!("http client error: {e}"))?;
@@ -73,23 +101,26 @@ fn fetch_release_versions() -> Result<Vec<String>, String> {
     if !resp.status().is_success() {
         return Err(format!("request failed: HTTP {}", resp.status()));
     }
-    let payload: serde_json::Value = resp
+    let payload: Vec<GithubRelease> = resp
         .json()
         .map_err(|e| format!("parse releases failed: {e}"))?;
+    Ok(payload)
+}
+
+fn fetch_release_versions() -> Result<Vec<String>, String> {
+    let payload = fetch_releases()?;
     let mut out = Vec::<String>::new();
-    if let Some(arr) = payload.as_array() {
-        for item in arr {
-            let Some(tag) = item.get("tag_name").and_then(serde_json::Value::as_str) else {
-                continue;
-            };
-            let tag = tag.trim();
-            if tag.is_empty() {
-                continue;
-            }
-            let tag = tag.to_string();
-            if !out.iter().any(|v| v == &tag) {
-                out.push(tag);
-            }
+    for release in payload {
+        if release.draft || release.prerelease {
+            continue;
+        }
+        let tag = release.tag_name.trim();
+        if tag.is_empty() {
+            continue;
+        }
+        let tag = tag.to_string();
+        if !out.iter().any(|v| v == &tag) {
+            out.push(tag);
         }
     }
     if out.is_empty() {
@@ -146,6 +177,85 @@ fn refresh_available_versions(app_weak: slint::Weak<AppWindow>, preferred: Optio
                     format!("Update check failed: {e}").as_str(),
                 ));
             }
+        });
+    });
+}
+
+#[cfg(target_os = "windows")]
+fn choose_windows_release_asset(release: &GithubRelease) -> Option<&GithubReleaseAsset> {
+    release
+        .assets
+        .iter()
+        .find(|a| a.name.ends_with("-windows-x64.exe"))
+        .or_else(|| release.assets.iter().find(|a| a.name.ends_with(".exe")))
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_selected_release_asset(version: &str) -> Result<GithubReleaseAsset, String> {
+    let target = normalize_version_tag(version);
+    let releases = fetch_releases()?;
+    for release in releases {
+        if release.draft || release.prerelease {
+            continue;
+        }
+        let release_tag_norm = normalize_version_tag(release.tag_name.as_str());
+        if release_tag_norm != target {
+            continue;
+        }
+        if let Some(asset) = choose_windows_release_asset(&release) {
+            return Ok(asset.clone());
+        }
+        return Err(format!(
+            "Version {} has no Windows .exe asset in release",
+            release.tag_name
+        ));
+    }
+    Err(format!("Version {version} not found in GitHub releases"))
+}
+
+#[cfg(target_os = "windows")]
+fn download_release_asset_to_temp(asset: &GithubReleaseAsset, version: &str) -> Result<PathBuf, String> {
+    let tmp_root = std::env::temp_dir().join("cligj-updates");
+    fs::create_dir_all(&tmp_root).map_err(|e| format!("create temp folder failed: {e}"))?;
+    let file_name = if asset.name.trim().is_empty() {
+        format!("CliGJ-{version}-windows-x64.exe")
+    } else {
+        asset.name.clone()
+    };
+    let target_path = tmp_root.join(file_name);
+    let mut resp = reqwest::blocking::Client::builder()
+        .build()
+        .map_err(|e| format!("http client error: {e}"))?
+        .get(asset.browser_download_url.as_str())
+        .header("User-Agent", "CliGJ")
+        .send()
+        .map_err(|e| format!("download request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("download failed: HTTP {}", resp.status()));
+    }
+    let mut out =
+        File::create(&target_path).map_err(|e| format!("create file failed: {e}"))?;
+    copy(&mut resp, &mut out).map_err(|e| format!("write file failed: {e}"))?;
+    Ok(target_path)
+}
+
+#[cfg(target_os = "windows")]
+fn launch_downloaded_installer(path: &std::path::Path) -> Result<(), String> {
+    let target = path.to_string_lossy().to_string();
+    let status = Command::new("cmd")
+        .args(["/C", "start", "", target.as_str()])
+        .status()
+        .map_err(|e| format!("launch update failed: {e}"))?;
+    if !status.success() {
+        return Err(format!("launch update returned status: {status}"));
+    }
+    Ok(())
+}
+
+fn schedule_app_quit(app_weak: slint::Weak<AppWindow>) {
+    let _ = app_weak.upgrade_in_event_loop(move |_ui| {
+        slint::Timer::single_shot(Duration::from_millis(900), move || {
+            let _ = slint::quit_event_loop();
         });
     });
 }
@@ -218,6 +328,27 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             ui.set_ws_update_status_text(SharedString::from("Please select a version first"));
             return;
         }
+        let confirm = rfd::MessageDialog::new()
+            .set_title("CliGJ 更新確認")
+            .set_description(
+                format!("是否下載並切換到版本 {selected}？\n\n按下 Yes 後會下載新版本並關閉目前視窗。")
+                    .as_str(),
+            )
+            .set_buttons(rfd::MessageButtons::YesNo)
+            .set_level(rfd::MessageLevel::Info)
+            .show();
+        if !matches!(confirm, rfd::MessageDialogResult::Yes) {
+            ui.set_ws_update_status_text(SharedString::from("Update cancelled"));
+            return;
+        }
+        let rollback_path = std::env::current_exe()
+            .ok()
+            .map(|p| p.display().to_string())
+            .unwrap_or_else(|| "<current executable path unavailable>".to_string());
+        ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
+        ui.set_ws_update_status_text(SharedString::from(
+            format!("Preparing update for {selected}...").as_str(),
+        ));
         match AppConfig::load_or_default() {
             Ok(mut cfg) => {
                 if let Err(e) = cfg.set_value("ui.preferred_app_version", selected.clone()) {
@@ -232,17 +363,68 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                     ));
                     return;
                 }
-                ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
-                ui.set_ws_update_status_text(SharedString::from(
-                    format!("Switched target version to {selected}").as_str(),
-                ));
             }
             Err(e) => {
                 ui.set_ws_update_status_text(SharedString::from(
                     format!("Load config failed: {e}").as_str(),
                 ));
+                return;
             }
         }
+
+        let app_weak_download = app_weak.clone();
+        thread::spawn(move || {
+            #[cfg(target_os = "windows")]
+            {
+                let _ = app_weak_download.upgrade_in_event_loop(|ui| {
+                    ui.set_ws_update_status_text(SharedString::from("Resolving release asset..."));
+                });
+                let resolved = resolve_selected_release_asset(selected.as_str())
+                    .and_then(|asset| {
+                        let downloading_msg = format!("Downloading {}...", asset.name);
+                        let _ = app_weak_download.upgrade_in_event_loop(move |ui| {
+                            ui.set_ws_update_status_text(SharedString::from(
+                                downloading_msg.as_str(),
+                            ));
+                        });
+                        download_release_asset_to_temp(&asset, selected.as_str())
+                    })
+                    .and_then(|downloaded| {
+                        let launch_msg = format!("Launching update from {}", downloaded.display());
+                        let _ = app_weak_download.upgrade_in_event_loop(move |ui| {
+                            ui.set_ws_update_status_text(SharedString::from(
+                                launch_msg.as_str(),
+                            ));
+                        });
+                        launch_downloaded_installer(downloaded.as_path())
+                    });
+                let app_weak_for_quit = app_weak_download.clone();
+                let _ = app_weak_download.upgrade_in_event_loop(move |ui| match resolved {
+                    Ok(()) => {
+                        ui.set_ws_update_status_text(SharedString::from(
+                            format!(
+                                "Update package launched. Switching to new window now. If needed, rollback by running: {rollback_path}"
+                            )
+                            .as_str(),
+                        ));
+                        schedule_app_quit(app_weak_for_quit.clone());
+                    }
+                    Err(e) => {
+                        ui.set_ws_update_status_text(SharedString::from(
+                            format!("Update failed: {e}").as_str(),
+                        ));
+                    }
+                });
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                let _ = app_weak_download.upgrade_in_event_loop(|ui| {
+                    ui.set_ws_update_status_text(SharedString::from(
+                        "Auto update is currently implemented for Windows builds only.",
+                    ));
+                });
+            }
+        });
     });
 
     let app_weak = app.as_weak();
