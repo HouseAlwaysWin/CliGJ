@@ -122,3 +122,42 @@ msgstr "插入檔案"
 
 msgid "插入圖片"
 msgstr "插入圖片"
+
+msgid "固定底部"
+msgstr "固定底部"
+
+msgid "原生 Ctrl+Shift+R"
+msgstr "原生 Ctrl+Shift+R"
+
+msgid "管理互動指令"
+msgstr "管理互動指令"
+
+msgid "管理指令"
+msgstr "管理指令"
+
+msgid "選擇工作區資料夾"
+msgstr "選擇工作區資料夾"
+
+msgid "終端歷史"
+msgstr "終端歷史"
+
+msgid "IPC"
+msgstr "IPC"
+
+msgid "檔案"
+msgstr "檔案"
+
+msgid "插圖"
+msgstr "插圖"
+
+msgid "送出（Enter）"
+msgstr "送出（Enter）"
+
+msgid "Enter"
+msgstr "Enter"
+
+msgid "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
+msgstr "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
+
+msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
+msgstr "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"

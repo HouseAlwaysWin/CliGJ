@@ -122,3 +122,42 @@ msgstr "Insert file"
 
 msgid "插入圖片"
 msgstr "Insert image"
+
+msgid "固定底部"
+msgstr "Pin footer"
+
+msgid "原生 Ctrl+Shift+R"
+msgstr "Raw Ctrl+Shift+R"
+
+msgid "管理互動指令"
+msgstr "Manage interactive commands"
+
+msgid "管理指令"
+msgstr "Manage"
+
+msgid "選擇工作區資料夾"
+msgstr "Choose workspace folder"
+
+msgid "終端歷史"
+msgstr "History"
+
+msgid "IPC"
+msgstr "IPC"
+
+msgid "檔案"
+msgstr "File"
+
+msgid "插圖"
+msgstr "Image"
+
+msgid "送出（Enter）"
+msgstr "Submit (Enter)"
+
+msgid "Enter"
+msgstr "Enter"
+
+msgid "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
+msgstr "Raw input: keys go to terminal (Ctrl+Shift+R)"
+
+msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
+msgstr "Line composer: turn off raw input for inject/composition (Ctrl+Shift+R)"

@@ -326,9 +326,29 @@ export component GjPromptDropZone inherits Rectangle {
                                 font-weight: 700;
                             }
 
-                            TouchArea {
+                            manage_cmds_ta := TouchArea {
+                                accessible-role: button;
+                                accessible-label: @tr("管理互動指令");
                                 clicked => {
                                     root.manage-interactive-commands-requested();
+                                }
+                            }
+
+                            if manage_cmds_ta.has-hover: Rectangle {
+                                y: -22px;
+                                x: -20px;
+                                width: 72px;
+                                height: 18px;
+                                border-radius: 4px;
+                                background: #20232b;
+                                border-width: 1px;
+                                border-color: AppTheme.prompt_chrome_border;
+                                Text {
+                                    text: @tr("管理指令");
+                                    color: AppTheme.text_muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    font-size: 9px;
                                 }
                             }
                         }
@@ -350,9 +370,29 @@ export component GjPromptDropZone inherits Rectangle {
                                 font-size: 11px;
                             }
 
-                            TouchArea {
+                            workspace_ta := TouchArea {
+                                accessible-role: button;
+                                accessible-label: @tr("選擇工作區資料夾");
                                 clicked => {
                                     root.workspace-folder-requested();
+                                }
+                            }
+
+                            if workspace_ta.has-hover: Rectangle {
+                                y: -22px;
+                                x: -12px;
+                                width: 76px;
+                                height: 18px;
+                                border-radius: 4px;
+                                background: #20232b;
+                                border-width: 1px;
+                                border-color: AppTheme.prompt_chrome_border;
+                                Text {
+                                    text: @tr("工作區");
+                                    color: AppTheme.text_muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    font-size: 9px;
                                 }
                             }
                         }
@@ -377,12 +417,43 @@ export component GjPromptDropZone inherits Rectangle {
                             padding-right: 6px;
                             spacing: 6px;
 
-                            Text {
-                                text: "Pin";
-                                color: AppTheme.text_muted;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                font-size: 11px;
+                            Rectangle {
+                                width: 24px;
+                                height: parent.height;
+                                background: #00000000;
+
+                                Text {
+                                    text: "Pin";
+                                    color: AppTheme.text_muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    font-size: 11px;
+                                    width: 100%;
+                                    height: 100%;
+                                }
+
+                                pin_tip_ta := TouchArea {
+                                    width: parent.width;
+                                    height: parent.height;
+                                }
+
+                                if pin_tip_ta.has-hover: Rectangle {
+                                    y: -22px;
+                                    x: -16px;
+                                    width: 72px;
+                                    height: 18px;
+                                    border-radius: 4px;
+                                    background: #20232b;
+                                    border-width: 1px;
+                                    border-color: AppTheme.prompt_chrome_border;
+                                    Text {
+                                        text: @tr("固定底部");
+                                        color: AppTheme.text_muted;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                        font-size: 9px;
+                                    }
+                                }
                             }
 
                             LineEdit {
@@ -415,9 +486,29 @@ export component GjPromptDropZone inherits Rectangle {
                             font-size: 11px;
                         }
 
-                        TouchArea {
+                        history_ta := TouchArea {
+                            accessible-role: button;
+                            accessible-label: @tr("終端歷史");
                             clicked => {
                                 root.terminal-history-requested();
+                            }
+                        }
+
+                        if history_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -12px;
+                            width: 60px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("終端歷史");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
                             }
                         }
                     }
@@ -442,17 +533,35 @@ export component GjPromptDropZone inherits Rectangle {
                             colorize: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
                         }
 
-                        TouchArea {
+                        raw_toggle_ta := TouchArea {
                             width: parent.width;
                             height: parent.height;
                             accessible-role: button;
                             accessible-label: root.raw-input-enabled
-                                ? @tr("原始輸入：按鍵送往終端")
-                                : @tr("行內編輯：關閉原始輸入以使用插入與組字");
+                                ? @tr("原始輸入：按鍵送往終端（Ctrl+Shift+R）")
+                                : @tr("行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）");
                             accessible-checkable: true;
                             accessible-checked: root.raw-input-enabled;
                             clicked => {
                                 root.raw-input-toggle-requested();
+                            }
+                        }
+
+                        if raw_toggle_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -18px;
+                            width: 95px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("原生 Ctrl+Shift+R");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
                             }
                         }
                     }
@@ -494,6 +603,24 @@ export component GjPromptDropZone inherits Rectangle {
                                 root.ipc-toggle-requested();
                             }
                         }
+
+                        if ipc_toggle_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -14px;
+                            width: 58px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("IPC");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -523,6 +650,24 @@ export component GjPromptDropZone inherits Rectangle {
                                 root.inject-file-requested();
                             }
                         }
+
+                        if inject_file_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -16px;
+                            width: 64px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("檔案");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
+                            }
+                        }
                     }
 
                     Rectangle {
@@ -546,13 +691,31 @@ export component GjPromptDropZone inherits Rectangle {
                             font-family: AppTheme.chrome_caption_icon_font;
                         }
 
-                        TouchArea {
+                        image_ta := TouchArea {
                             width: parent.width;
                             height: parent.height;
                             accessible-role: button;
                             accessible-label: @tr("插入圖片");
                             clicked => {
                                 root.inject-image-requested();
+                            }
+                        }
+
+                        if image_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -16px;
+                            width: 64px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("插圖");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
                             }
                         }
                     }
@@ -580,8 +743,28 @@ export component GjPromptDropZone inherits Rectangle {
                         submit_ta := TouchArea {
                             width: parent.width;
                             height: parent.height;
+                            accessible-role: button;
+                            accessible-label: @tr("送出（Enter）");
                             clicked => {
                                 root.submit-requested();
+                            }
+                        }
+
+                        if submit_ta.has-hover: Rectangle {
+                            y: -22px;
+                            x: -12px;
+                            width: 60px;
+                            height: 18px;
+                            border-radius: 4px;
+                            background: #20232b;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            Text {
+                                text: @tr("Enter");
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 9px;
                             }
                         }
                     }

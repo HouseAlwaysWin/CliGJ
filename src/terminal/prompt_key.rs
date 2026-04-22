@@ -1,6 +1,6 @@
 //! Composer / TTY prompt key routing (formerly `gj_prompt_drop_zone` `key-pressed` rules).
 
-use super::key_encoding::{normalize_tty_key_token, MOD_ALT, MOD_CTRL};
+use super::key_encoding::{normalize_tty_key_token, MOD_ALT, MOD_CTRL, MOD_SHIFT};
 
 /// What to do for one `TextEdit` `key-pressed` event (`accept` vs `reject` decided in Slint).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,7 +20,7 @@ pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -
     let key = normalize_tty_key_token(key);
     
     // 1. 特殊功能鍵優先
-    if mod_mask & MOD_CTRL != 0 && matches!(key, "r" | "R") {
+    if (mod_mask & (MOD_CTRL | MOD_SHIFT)) == (MOD_CTRL | MOD_SHIFT) && matches!(key, "r" | "R") {
         return PromptKeyAction::ToggleRawInput;
     }
 
@@ -93,10 +93,14 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_r_toggles_raw() {
+    fn ctrl_shift_r_toggles_raw() {
+        assert_eq!(
+            route_prompt_key(false, m(true, true, false, false), "r", true),
+            PromptKeyAction::ToggleRawInput
+        );
         assert_eq!(
             route_prompt_key(false, m(true, false, false, false), "r", false),
-            PromptKeyAction::ToggleRawInput
+            PromptKeyAction::Reject
         );
     }
 
