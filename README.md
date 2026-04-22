@@ -2,7 +2,7 @@
 
 CliGJ 是一個以 Rust + Slint 開發的桌面工具，目標是把「本機終端機工作流」與「AI 指令互動」整合在同一個介面中，並透過 IPC 與 VS Code 擴充功能互通，讓你在編輯器與終端間快速來回。
 
-English version: `README.en.md`
+English version: [README.en.md](README.en.md)
 
 ## 主要功能
 

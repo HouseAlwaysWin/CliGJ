@@ -2,7 +2,7 @@
 
 CliGJ is a desktop tool built with Rust + Slint. It is designed to unify local terminal workflows and AI-assisted command interactions in one interface, with IPC integration for VS Code so you can move quickly between editor context and terminal execution.
 
-中文版本: `README.md`
+中文版本: [README.md](README.md)
 
 ## Core Features
 
