@@ -157,12 +157,6 @@ fn apply_pending_updates(
             let phys_end = chunk_first_idx + full_len_in_chunk;
             replaced_with_vt_lines = true;
 
-            if tab.terminal_mode == TerminalMode::InteractiveAi {
-                tab.interactive_history_lines.clear();
-                tab.interactive_frame_lines.clear();
-                tab.interactive_last_archived_signature.clear();
-            }
-
             if update.reset_terminal_buffer {
                 tab.terminal_lines.clear();
                 tab.terminal_model_rows.clear();
@@ -172,6 +166,9 @@ fn apply_pending_updates(
                 tab.last_window_first = usize::MAX;
                 tab.last_window_last = usize::MAX;
                 tab.last_window_total = usize::MAX;
+                tab.interactive_history_lines.clear();
+                tab.interactive_frame_lines.clear();
+                tab.interactive_last_archived_signature.clear();
             }
 
             let origin = tab.terminal_physical_origin;

@@ -278,11 +278,7 @@ fn terminal_render_from_lines_cached(
 ) -> TerminalRender {
     let mut changed_indices = Vec::new();
     let num_lines = lines.len();
-    let cache_base_idx = if render_mode == ReaderRenderMode::InteractiveAi {
-        0
-    } else {
-        start_phys_idx
-    };
+    let cache_base_idx = start_phys_idx;
 
     // 確保 cache 長度足夠
     if cache.len() < cache_base_idx + num_lines {
@@ -310,20 +306,13 @@ fn terminal_render_from_lines_cached(
         .collect();
 
     let render_window_len = num_lines;
-    let render_first_idx = if render_mode == ReaderRenderMode::InteractiveAi {
-        0
-    } else {
-        start_phys_idx
-    };
+    let render_first_idx = start_phys_idx;
 
     TerminalRender {
         render_mode,
         text: String::new(),
         lines: changed_lines,
-        // Interactive AI UIs often redraw the whole visible tail in primary-screen mode instead of
-        // emitting stable scrollback. Expose the snapshot as a 0-based window so redraw/reflow
-        // replaces the current tail rather than duplicating old physical rows in the GUI.
-        full_len: render_window_len,
+        full_len: _total_scrollback_rows,
         first_line_idx: render_first_idx,
         cursor_row: cursor_local_row.map(|row| render_first_idx + row),
         cursor_col,
@@ -452,13 +441,12 @@ pub fn start_reader_thread(
                 .max(term_rows);
             let (start, end, total_for_render, filled) = match render_mode {
                 ReaderRenderMode::InteractiveAi => {
-                    // Gemini/Codex-style CLIs frequently redraw their whole primary-screen layout
-                    // on width changes and intermediate state updates. Treat Interactive AI as a
-                    // live frame viewer instead of preserving primary-screen scrollback; otherwise
-                    // those redraws get misinterpreted as new history and appear duplicated.
-                    let frame_rows = total.max(1).min(term_rows.max(1));
-                    let start = total.saturating_sub(frame_rows);
-                    (start, total, frame_rows, false)
+                    let snapshot_row_count = snapshot_cap.min(total.max(1));
+                    let start = total.saturating_sub(snapshot_row_count);
+                    let end = total;
+                    let total_for_render = total;
+                    let filled = total > term_rows;
+                    (start, end, total_for_render, filled)
                 }
                 ReaderRenderMode::Shell => {
                     let snapshot_row_count = snapshot_cap.min(total.max(1));

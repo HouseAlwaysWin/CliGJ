@@ -120,16 +120,20 @@ fn connect_tabs(
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
-        let mut s = st_tab.borrow_mut();
-        s.timer_prompt_snapshot = None;
-        if let Err(e) = s.switch_tab(new_index as usize, &ui) {
-            eprintln!("CliGJ: tab switch: {e}");
-        } else {
-            publish_current_tab_changed(&ipc_tab, &s);
-            if history_visible_tab.get() {
-                if let Some(refresh) = history_refresh_tab.borrow().as_ref() {
-                    refresh();
-                }
+        let switch_ok = {
+            let mut s = st_tab.borrow_mut();
+            s.timer_prompt_snapshot = None;
+            if let Err(e) = s.switch_tab(new_index as usize, &ui) {
+                eprintln!("CliGJ: tab switch: {e}");
+                false
+            } else {
+                publish_current_tab_changed(&ipc_tab, &s);
+                true
+            }
+        };
+        if switch_ok && history_visible_tab.get() {
+            if let Some(refresh) = history_refresh_tab.borrow().as_ref() {
+                refresh();
             }
         }
     });
@@ -1122,38 +1126,57 @@ fn connect_terminal_wheel(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let Some(ui) = app_weak.upgrade() else {
             return false;
         };
+        let (handled, next_scroll) = {
+            let mut s = st_wheel.borrow_mut();
+            if s.current >= s.tabs.len() {
+                return false;
+            }
+            if s.tabs[s.current].terminal_mode != crate::gui::state::TerminalMode::InteractiveAi {
+                return false;
+            }
+            let current = s.current;
+            let tab = &mut s.tabs[current];
+            let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+            let max_scroll =
+                ((tab.terminal_lines.len() as f32) * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
+            let current = if tab.interactive_follow_output {
+                terminal_scroll_top_for_tab(tab, vh)
+            } else {
+                clamp_saved_scroll_top(tab, vh)
+            };
+            let steps = ((delta.abs() as f32) / 120.0).max(1.0).min(4.0);
+            let amount = TERMINAL_ROW_HEIGHT_PX * 3.0 * steps;
+            let mut next = if delta > 0 {
+                (current - amount).max(0.0)
+            } else if delta < 0 {
+                (current + amount).min(max_scroll)
+            } else {
+                current
+            };
+            if max_scroll <= 0.5 {
+                next = 0.0;
+            }
+            tab.interactive_follow_output = next >= (max_scroll - 1.0);
+            tab.terminal_saved_scroll_top_px = next;
+            (true, next)
+        };
+        if !handled {
+            return false;
+        }
+        ui.invoke_ws_apply_terminal_scroll_top_px(next_scroll);
         let mut s = st_wheel.borrow_mut();
         if s.current >= s.tabs.len() {
             return false;
         }
-        if s.tabs[s.current].terminal_mode != crate::gui::state::TerminalMode::InteractiveAi {
-            return false;
-        }
         let current = s.current;
         let tab = &mut s.tabs[current];
-        let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
-        let max_scroll = ((tab.terminal_lines.len() as f32) * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
-        let current = if tab.interactive_follow_output {
-            terminal_scroll_top_for_tab(tab, vh)
-        } else {
-            clamp_saved_scroll_top(tab, vh)
-        };
-        let steps = ((delta.abs() as f32) / 120.0).max(1.0).min(4.0);
-        let amount = TERMINAL_ROW_HEIGHT_PX * 3.0 * steps;
-        let mut next = if delta > 0 {
-            (current - amount).max(0.0)
-        } else if delta < 0 {
-            (current + amount).min(max_scroll)
-        } else {
-            current
-        };
-        if max_scroll <= 0.5 {
-            next = 0.0;
+        if tab.terminal_mode != crate::gui::state::TerminalMode::InteractiveAi {
+            return false;
         }
-        tab.interactive_follow_output = next >= (max_scroll - 1.0);
-        tab.terminal_saved_scroll_top_px = next;
-        ui.invoke_ws_apply_terminal_scroll_top_px(next);
-        push_terminal_view_to_ui(&ui, tab, Some(next));
+        if (tab.terminal_saved_scroll_top_px - next_scroll).abs() > 0.5 {
+            return true;
+        }
+        push_terminal_view_to_ui(&ui, tab, Some(next_scroll));
         true
     });
 }
