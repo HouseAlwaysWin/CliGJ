@@ -6,6 +6,9 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RepoRoot = (Resolve-Path (Join-Path $ScriptDir "..")).Path
+$ExtensionDir = Join-Path $RepoRoot "vscode-extension"
 
 if (-not ($Version -match '^v\d+\.\d+\.\d+([\-+][0-9A-Za-z\.-]+)?$')) {
     throw "Version must look like vMAJOR.MINOR.PATCH (example: v0.1.0). Got: $Version"
@@ -27,7 +30,11 @@ if (-not $SkipBuildValidation) {
     Write-Host "Running release prechecks (UI + VS Code extension)..." -ForegroundColor Cyan
     cargo check
 
-    Push-Location "vscode-extension"
+    if (-not (Test-Path $ExtensionDir)) {
+        throw "VS Code extension directory not found: $ExtensionDir"
+    }
+
+    Push-Location $ExtensionDir
     try {
         npm ci
         npm run compile
