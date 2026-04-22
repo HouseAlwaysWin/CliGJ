@@ -9,7 +9,7 @@ use crate::terminal::windows_conpty;
 use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
-use super::interactive_commands::pinned_footer_lines_for_program;
+use super::interactive_commands::{normalized_program_name, pinned_footer_lines_for_program};
 use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
 use super::state::conpty_startup_cwd;
 use super::slint_ui::AppWindow;
@@ -42,6 +42,7 @@ impl GuiState {
         tab.auto_scroll = true;
         tab.interactive_follow_output = true;
         tab.interactive_pinned_footer_lines = pinned_footer_lines;
+        tab.interactive_launcher_program.clear();
     }
 
     /// Drop the shell, spawn a fresh ConPTY, and reset the terminal buffer for Interactive AI.
@@ -261,6 +262,7 @@ impl GuiState {
         self.tabs[self.current].cmd_type = new_cmd_type.to_string();
         self.tabs[self.current].terminal_mode = TerminalMode::Shell;
         self.tabs[self.current].interactive_pinned_footer_lines = 0;
+        self.tabs[self.current].interactive_launcher_program.clear();
 
         #[cfg(target_os = "windows")]
         {
@@ -360,6 +362,11 @@ impl GuiState {
             full_command.split_whitespace().next(),
             Some("gemini" | "codex" | "claude" | "copilot")
         );
+        let interactive_launcher_program = full_command
+            .split_whitespace()
+            .next()
+            .map(normalized_program_name)
+            .unwrap_or_default();
         let interactive_pinned_footer_lines = full_command
             .split_whitespace()
             .next()
@@ -449,8 +456,11 @@ impl GuiState {
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
         tab.prompt_picked_images.clear();
-            tab.prompt_picked_selections.clear();
+        tab.prompt_picked_selections.clear();
         tab.composer_pty_mirror.clear();
+        if is_interactive_ai_launch {
+            tab.interactive_launcher_program = interactive_launcher_program;
+        }
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
         self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();

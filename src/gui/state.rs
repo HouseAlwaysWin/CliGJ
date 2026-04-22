@@ -152,6 +152,8 @@ pub struct TabState {
     pub(crate) interactive_follow_output: bool,
     /// Manually configured count of terminal rows to keep fixed at the bottom for Interactive AI.
     pub(crate) interactive_pinned_footer_lines: usize,
+    /// Normalized launcher program name for the current interactive tab, used for live config updates.
+    pub(crate) interactive_launcher_program: String,
     /// Last PTY grid size actually sent to this tab. Avoid same-size resize on tab switch because
     /// many CLIs/TUIs treat it as a redraw and pollute scrollback with duplicate frames.
     pub(crate) last_pty_cols: u16,
@@ -210,6 +212,7 @@ impl TabState {
             terminal_saved_scroll_top_px: 0.0,
             interactive_follow_output: true,
             interactive_pinned_footer_lines: 0,
+            interactive_launcher_program: String::new(),
             last_pty_cols: 120,
             last_pty_rows: 40,
             #[cfg(target_os = "windows")]

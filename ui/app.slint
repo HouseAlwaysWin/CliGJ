@@ -54,6 +54,8 @@ export component AppWindow inherits Window {
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <[string]> ws-cmd-type-choices: ["Command Prompt", "PowerShell"];
     in-out property <bool> ws-raw-input: false;
+    in-out property <string> ws-interactive-pin-lines: "0";
+    in-out property <bool> ws-interactive-pin-lines-visible: false;
     in-out property <bool> ws-ipc-running: false;
     in-out property <int> ws-ipc-client-count: 0;
     in-out property <string> ws-ipc-status-text: "IPC OFF";
@@ -94,6 +96,7 @@ export component AppWindow inherits Window {
     /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback toggle-raw-input-requested;
+    callback interactive-pin-lines-edited(string);
     callback toggle-ipc-server-requested;
     callback inject-file-requested;
     callback workspace-folder-requested;
@@ -278,6 +281,8 @@ export component AppWindow inherits Window {
                         prompt <=> root.ws-prompt;
                         prompt-path-chips <=> root.ws-prompt-path-chips;
                         raw-input-enabled <=> root.ws-raw-input;
+                        interactive-pin-lines <=> root.ws-interactive-pin-lines;
+                        interactive-pin-lines-visible <=> root.ws-interactive-pin-lines-visible;
                         terminal-font-family: root.ws-terminal-font-family;
                         ipc-running: root.ws-ipc-running;
                         ipc-client-count: root.ws-ipc-client-count;
@@ -301,6 +306,9 @@ export component AppWindow inherits Window {
                         }
                         raw-input-toggle-requested => {
                             root.toggle-raw-input-requested();
+                        }
+                        interactive-pin-lines-edited(value) => {
+                            root.interactive-pin-lines-edited(value);
                         }
                         ipc-toggle-requested => {
                             root.toggle-ipc-server-requested();

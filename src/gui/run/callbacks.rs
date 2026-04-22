@@ -18,7 +18,8 @@ use crate::gui::fonts::{
 };
 use crate::gui::ipc::IpcBridge;
 use crate::gui::interactive_commands::{
-    self, pinned_footer_lines_for_label, sync_interactive_command_choices_to_ui,
+    self, launcher_program_for_label, pinned_footer_lines_for_label,
+    pinned_footer_lines_for_specs, sync_interactive_command_choices_to_ui,
     sync_interactive_manage_editor_to_ui,
 };
 use crate::gui::i18n::apply_slint_language_from_shell_setting;
@@ -27,7 +28,7 @@ use crate::gui::shell_profiles::{
     sync_shell_profile_choices_to_ui,
 };
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow, TerminalHistoryWindow};
-use crate::gui::state::GuiState;
+use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::ui_sync::{
     clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui,
     scrollable_terminal_line_count, tab_update_from_ui, terminal_scroll_top_for_tab,
@@ -57,6 +58,19 @@ fn set_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
 
 fn set_shell_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
     ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));
+}
+
+fn refresh_interactive_tab_view(ui: &AppWindow, tab: &mut crate::gui::state::TabState) {
+    let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+    let saved = clamp_saved_scroll_top(tab, vh);
+    tab.terminal_saved_scroll_top_px = saved;
+    let scroll = if tab.interactive_follow_output {
+        terminal_scroll_top_for_tab(tab, vh)
+    } else {
+        saved
+    };
+    ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
+    push_terminal_view_to_ui(ui, tab, Some(scroll));
 }
 
 fn publish_current_tab_changed(ipc: &IpcBridge, s: &GuiState) {
@@ -415,6 +429,10 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let s = st_ai.borrow();
             pinned_footer_lines_for_label(line_label.as_str(), &*s)
         };
+        let launcher_program = {
+            let s = st_ai.borrow();
+            launcher_program_for_label(line_label.as_str(), &*s).unwrap_or_default()
+        };
 
         let mut s = st_ai.borrow_mut();
         if s.current >= s.tabs.len() {
@@ -424,6 +442,8 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             eprintln!("CliGJ: interactive command PTY restart: {e}");
             return;
         }
+        let current = s.current;
+        s.tabs[current].interactive_launcher_program = launcher_program;
         drop(s);
 
         let app_weak_inner = ui.as_weak();
@@ -589,10 +609,25 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             eprintln!("CliGJ: need at least one interactive command");
             return;
         }
-        {
+        let specs = out.clone();
+        let refresh_current_interactive = {
             let mut s = st_save.borrow_mut();
             s.interactive_commands = out;
-        }
+            let current = s.current;
+            for tab in &mut s.tabs {
+                if tab.terminal_mode != TerminalMode::InteractiveAi {
+                    continue;
+                }
+                if tab.interactive_launcher_program.trim().is_empty() {
+                    continue;
+                }
+                tab.interactive_pinned_footer_lines = pinned_footer_lines_for_specs(
+                    tab.interactive_launcher_program.as_str(),
+                    &specs,
+                );
+            }
+            current < s.tabs.len() && s.tabs[current].terminal_mode == TerminalMode::InteractiveAi
+        };
         let snapshot = st_save.borrow().interactive_commands.clone();
         match AppConfig::load_or_default() {
             Ok(mut cfg) => {
@@ -605,6 +640,16 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         sync_interactive_command_choices_to_ui(&ui, &st_save.borrow());
         ui.set_ws_interactive_manage_open(false);
+        if refresh_current_interactive {
+            let mut s = st_save.borrow_mut();
+            if s.current < s.tabs.len() {
+                let current = s.current;
+                ui.set_ws_interactive_pin_lines(SharedString::from(
+                    s.tabs[current].interactive_pinned_footer_lines.to_string().as_str(),
+                ));
+                refresh_interactive_tab_view(&ui, &mut s.tabs[current]);
+            }
+        }
     });
 
     let app_weak = app.as_weak();
@@ -1259,6 +1304,46 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
         if let Err(e) = s.toggle_raw_input_current(&ui) {
             eprintln!("CliGJ: raw input toggle: {e}");
         }
+    });
+
+    let st_pin = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_interactive_pin_lines_edited(move |new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let parsed = if new_text.trim().is_empty() {
+            0
+        } else {
+            match new_text.trim().parse::<usize>() {
+                Ok(v) => v,
+                Err(_) => {
+                    let s = st_pin.borrow();
+                    if s.current < s.tabs.len() {
+                        ui.set_ws_interactive_pin_lines(SharedString::from(
+                            s.tabs[s.current]
+                                .interactive_pinned_footer_lines
+                                .to_string()
+                                .as_str(),
+                        ));
+                    }
+                    return;
+                }
+            }
+        };
+
+        let mut s = st_pin.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let tab = &mut s.tabs[current];
+        if tab.terminal_mode != TerminalMode::InteractiveAi {
+            return;
+        }
+        tab.interactive_pinned_footer_lines = parsed;
+        ui.set_ws_interactive_pin_lines(SharedString::from(parsed.to_string().as_str()));
+        refresh_interactive_tab_view(&ui, tab);
     });
 
     let app_weak = app.as_weak();

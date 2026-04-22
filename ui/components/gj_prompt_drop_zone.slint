@@ -1,4 +1,4 @@
-import { TextEdit, ComboBox } from "std-widgets.slint";
+import { TextEdit, ComboBox, LineEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 import { LogicalKey } from "../key_labels.slint";
 import { PromptImageChip } from "../term_types.slint";
@@ -8,6 +8,8 @@ export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
     in property <bool> raw-input-enabled: false;
+    in-out property <string> interactive-pin-lines: "0";
+    in property <bool> interactive-pin-lines-visible: false;
     in property <bool> ipc-running: false;
     in property <int> ipc-client-count: 0;
     in property <string> ipc-status-text: "IPC OFF";
@@ -21,6 +23,7 @@ export component GjPromptDropZone inherits Rectangle {
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
     callback prompt-key-route(bool, int, string, bool) -> bool;
     callback raw-input-toggle-requested;
+    callback interactive-pin-lines-edited(string);
     callback ipc-toggle-requested;
     callback inject-file-requested;
     callback workspace-folder-requested;
@@ -359,6 +362,40 @@ export component GjPromptDropZone inherits Rectangle {
                     Rectangle {
                         horizontal-stretch: 1;
                         background: #00000000;
+                    }
+
+                    if root.interactive-pin-lines-visible: Rectangle {
+                        min-width: 86px;
+                        height: 22px;
+                        horizontal-stretch: 0;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 11px;
+                        background: #00000000;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 6px;
+                            spacing: 6px;
+
+                            Text {
+                                text: "Pin";
+                                color: AppTheme.text_muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                font-size: 11px;
+                            }
+
+                            LineEdit {
+                                horizontal-stretch: 1;
+                                min-width: 40px;
+                                text <=> root.interactive-pin-lines;
+                                font-size: 11px;
+                                edited(new_text) => {
+                                    root.interactive-pin-lines-edited(new_text);
+                                }
+                            }
+                        }
                     }
 
                     // Raw: SVG — 固定寬度，避免 min-width + stretch 被拉成寬膠囊

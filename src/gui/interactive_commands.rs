@@ -92,11 +92,18 @@ pub(crate) fn pinned_footer_lines_for_label(line_label: &str, gs: &GuiState) -> 
 }
 
 pub(crate) fn pinned_footer_lines_for_program(program: &str, gs: &GuiState) -> usize {
+    pinned_footer_lines_for_specs(program, &gs.interactive_commands)
+}
+
+pub(crate) fn pinned_footer_lines_for_specs(
+    program: &str,
+    specs: &[InteractiveCommandSpec],
+) -> usize {
     let needle = normalized_program_name(program);
     if needle.is_empty() {
         return 0;
     }
-    gs.interactive_commands
+    specs
         .iter()
         .find(|(name, command, _)| {
             normalized_program_name(name) == needle
@@ -110,6 +117,15 @@ pub(crate) fn pinned_footer_lines_for_program(program: &str, gs: &GuiState) -> u
         .unwrap_or(0)
 }
 
+pub(crate) fn launcher_program_for_label(line_label: &str, gs: &GuiState) -> Option<String> {
+    gs.interactive_commands
+        .iter()
+        .find(|(name, _, _)| name == line_label)
+        .and_then(|(_, command, _)| command.split_whitespace().next())
+        .map(normalized_program_name)
+        .filter(|value| !value.is_empty())
+}
+
 /// Built-in entries from seed config (same display `name` as in default_interactive_command_pairs).
 pub(crate) fn is_reserved_preset_display_name(name: &str) -> bool {
     default_interactive_command_pairs()
@@ -117,7 +133,7 @@ pub(crate) fn is_reserved_preset_display_name(name: &str) -> bool {
         .any(|(n, _, _)| n == name)
 }
 
-fn normalized_program_name(text: &str) -> String {
+pub(crate) fn normalized_program_name(text: &str) -> String {
     let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
     let leaf = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed);
     leaf.strip_suffix(".exe").unwrap_or(leaf).to_ascii_lowercase()
