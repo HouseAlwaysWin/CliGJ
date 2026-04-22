@@ -621,6 +621,9 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 if tab.interactive_launcher_program.trim().is_empty() {
                     continue;
                 }
+                if tab.interactive_pinned_footer_override.is_some() {
+                    continue;
+                }
                 tab.interactive_pinned_footer_lines = pinned_footer_lines_for_specs(
                     tab.interactive_launcher_program.as_str(),
                     &specs,
@@ -1338,12 +1341,12 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
         }
         let current = s.current;
         let tab = &mut s.tabs[current];
-        if tab.terminal_mode != TerminalMode::InteractiveAi {
-            return;
-        }
         tab.interactive_pinned_footer_lines = parsed;
+        tab.interactive_pinned_footer_override = Some(parsed);
         ui.set_ws_interactive_pin_lines(SharedString::from(parsed.to_string().as_str()));
-        refresh_interactive_tab_view(&ui, tab);
+        if tab.terminal_mode == TerminalMode::InteractiveAi {
+            refresh_interactive_tab_view(&ui, tab);
+        }
     });
 
     let app_weak = app.as_weak();

@@ -364,7 +364,7 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
                     }
 
-                    if root.interactive-pin-lines-visible: Rectangle {
+                    Rectangle {
                         min-width: 86px;
                         height: 22px;
                         horizontal-stretch: 0;
@@ -388,7 +388,7 @@ export component GjPromptDropZone inherits Rectangle {
 
                             LineEdit {
                                 horizontal-stretch: 1;
-                                min-width: 40px;
+                                min-width: 60px;
                                 text <=> root.interactive-pin-lines;
                                 font-size: 11px;
                                 edited(new_text) => {

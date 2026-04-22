@@ -22,6 +22,9 @@ impl GuiState {
             return;
         }
         let tab = &mut self.tabs[self.current];
+        let effective_pinned_footer_lines = tab
+            .interactive_pinned_footer_override
+            .unwrap_or(pinned_footer_lines);
         tab.terminal_mode = TerminalMode::InteractiveAi;
         tab.interactive_history_lines.clear();
         tab.interactive_frame_lines.clear();
@@ -41,7 +44,7 @@ impl GuiState {
         tab.terminal_scroll_resync_next = true;
         tab.auto_scroll = true;
         tab.interactive_follow_output = true;
-        tab.interactive_pinned_footer_lines = pinned_footer_lines;
+        tab.interactive_pinned_footer_lines = effective_pinned_footer_lines;
         tab.interactive_launcher_program.clear();
     }
 
