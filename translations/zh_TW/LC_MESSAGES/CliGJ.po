@@ -167,3 +167,27 @@ msgstr "重新整理"
 
 msgid "複製全部"
 msgstr "複製全部"
+
+msgid "檢查更新"
+msgstr "檢查更新"
+
+msgid "關於"
+msgstr "關於"
+
+msgid "目前版本："
+msgstr "目前版本："
+
+msgid "可用版本"
+msgstr "可用版本"
+
+msgid "切換版本"
+msgstr "切換版本"
+
+msgid "版本："
+msgstr "版本："
+
+msgid "GitHub"
+msgstr "GitHub"
+
+msgid "作者："
+msgstr "作者："

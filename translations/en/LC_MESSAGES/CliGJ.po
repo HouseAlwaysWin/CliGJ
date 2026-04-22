@@ -167,3 +167,27 @@ msgstr "Refresh"
 
 msgid "複製全部"
 msgstr "Copy all"
+
+msgid "檢查更新"
+msgstr "Check for updates"
+
+msgid "關於"
+msgstr "About"
+
+msgid "目前版本："
+msgstr "Current version:"
+
+msgid "可用版本"
+msgstr "Available versions"
+
+msgid "切換版本"
+msgstr "Switch version"
+
+msgid "版本："
+msgstr "Version:"
+
+msgid "GitHub"
+msgstr "GitHub"
+
+msgid "作者："
+msgstr "Author:"

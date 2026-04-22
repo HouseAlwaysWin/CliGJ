@@ -1,6 +1,6 @@
 import { AppTheme } from "theme.slint";
 import { LogicalKey } from "key_labels.slint";
-import { TextEdit } from "std-widgets.slint";
+import { ScrollView, TextEdit } from "std-widgets.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { GjWindowChrome } from "components/gj_window_chrome.slint";
@@ -75,6 +75,15 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-shell-startup-terminal-cjk-fallback-font-choices: ["MingLiU", "Microsoft JhengHei", "Noto Sans TC", "PMingLiU"];
     in-out property <string> ws-terminal-font-family: "DejaVu Sans Mono";
     in-out property <string> ws-terminal-cjk-fallback-font-family: "MingLiU";
+    in-out property <bool> ws-update-open: false;
+    in-out property <[string]> ws-update-versions: [];
+    in-out property <string> ws-update-current-version: "";
+    in-out property <string> ws-update-selected-version: "";
+    in-out property <string> ws-update-status-text: "";
+    in-out property <bool> ws-about-open: false;
+    in-out property <string> ws-about-version: "";
+    in-out property <string> ws-about-author: "";
+    in-out property <string> ws-about-github-url: "";
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -117,6 +126,14 @@ export component AppWindow inherits Window {
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
     callback manage-cmd-types-requested;
+    callback check-updates-requested;
+    callback about-requested;
+    callback close-update-dialog;
+    callback refresh-available-versions-requested;
+    callback update-version-selected(string);
+    callback apply-update-version-requested(string);
+    callback close-about-dialog;
+    callback open-about-github-requested(string);
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
     callback manage-add-interactive-row;
@@ -247,6 +264,12 @@ export component AppWindow inherits Window {
                 }
                 manage-cmd-types-requested => {
                     root.manage-cmd-types-requested();
+                }
+                check-updates-requested => {
+                    root.check-updates-requested();
+                }
+                about-requested => {
+                    root.about-requested();
                 }
                 rename-tab(index) => {
                     root.rename-tab-requested(index);
@@ -449,6 +472,309 @@ export component AppWindow inherits Window {
         }
         toggle-row-expanded(idx) => {
             root.toggle-shell-manage-row-expanded(idx);
+        }
+    }
+
+    if root.ws-update-open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        z: 40;
+        background: #00000099;
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            clicked => {
+                root.close-update-dialog();
+            }
+        }
+
+        Rectangle {
+            width: min(parent.width - 32px, 430px);
+            height: min(parent.height - 32px, 420px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: AppTheme.panel_alt;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 12px;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 10px;
+
+                Text {
+                    text: @tr("檢查更新");
+                    color: AppTheme.text;
+                    font-size: 18px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: @tr("目前版本：") + root.ws-update-current-version;
+                    color: AppTheme.text_muted;
+                    font-size: 12px;
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: AppTheme.prompt_chrome_border;
+                }
+
+                Text {
+                    text: @tr("可用版本");
+                    color: AppTheme.text;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+
+                ScrollView {
+                    vertical-stretch: 1;
+                    horizontal-scrollbar-policy: always-off;
+                    vertical-scrollbar-policy: as-needed;
+
+                    VerticalLayout {
+                        spacing: 4px;
+                        alignment: start;
+
+                        for ver in root.ws-update-versions: Rectangle {
+                            height: 28px;
+                            border-radius: 6px;
+                            border-width: 1px;
+                            border-color: root.ws-update-selected-version == ver ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                            background: (root.ws-update-selected-version == ver || ver_ta.has-hover) ? #2d2d30 : #00000000;
+
+                            Text {
+                                text: ver;
+                                color: AppTheme.text;
+                                vertical-alignment: center;
+                                horizontal-alignment: left;
+                                x: 10px;
+                                width: parent.width - 16px;
+                                font-size: 12px;
+                            }
+
+                            ver_ta := TouchArea {
+                                clicked => {
+                                    root.ws-update-selected-version = ver;
+                                    root.update-version-selected(ver);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Text {
+                    text: root.ws-update-status-text;
+                    color: AppTheme.text_muted;
+                    font-size: 12px;
+                    wrap: word-wrap;
+                    min-height: 24px;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+
+                    Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                    Rectangle {
+                        min-width: 84px;
+                        height: 30px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 15px;
+                        background: refresh_ta.has-hover ? #2b2d33 : #00000000;
+                        Text {
+                            text: @tr("重新整理");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                        refresh_ta := TouchArea {
+                            clicked => {
+                                root.refresh-available-versions-requested();
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 84px;
+                        height: 30px;
+                        border-width: 1px;
+                        border-color: AppTheme.accent;
+                        border-radius: 15px;
+                        background: apply_ta.has-hover ? #35548a : #234171;
+                        Text {
+                            text: @tr("切換版本");
+                            color: #ffffff;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                        apply_ta := TouchArea {
+                            clicked => {
+                                root.apply-update-version-requested(root.ws-update-selected-version);
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        min-width: 68px;
+                        height: 30px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 15px;
+                        background: close_update_ta.has-hover ? #2b2d33 : #00000000;
+                        Text {
+                            text: @tr("關閉");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                        close_update_ta := TouchArea {
+                            clicked => {
+                                root.close-update-dialog();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.ws-about-open : Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        z: 40;
+        background: #00000099;
+
+        TouchArea {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            clicked => {
+                root.close-about-dialog();
+            }
+        }
+
+        Rectangle {
+            width: min(parent.width - 32px, 430px);
+            height: min(parent.height - 32px, 210px);
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            background: AppTheme.panel_alt;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 12px;
+
+            VerticalLayout {
+                padding: 16px;
+                spacing: 10px;
+
+                HorizontalLayout {
+                    spacing: 10px;
+                    alignment: start;
+
+                    Image {
+                        source: @image-url("../src/asset/logo3.png");
+                        width: 44px;
+                        height: 44px;
+                    }
+
+                    VerticalLayout {
+                        spacing: 2px;
+                        Text {
+                            text: "CliGJ";
+                            color: AppTheme.text;
+                            font-size: 18px;
+                            font-weight: 700;
+                        }
+                        Text {
+                            text: @tr("版本：") + root.ws-about-version + "  |  " + @tr("作者：") + root.ws-about-author;
+                            color: AppTheme.text_muted;
+                            font-size: 12px;
+                        }
+                    }
+                }
+
+                Rectangle {
+                    height: 1px;
+                    background: AppTheme.prompt_chrome_border;
+                }
+
+                Text {
+                    text: @tr("GitHub");
+                    color: AppTheme.text;
+                    font-size: 13px;
+                    font-weight: 600;
+                }
+
+                Rectangle {
+                    min-height: 32px;
+                    background: #00000000;
+
+                    Text {
+                        text: root.ws-about-github-url;
+                        color: AppTheme.accent;
+                        horizontal-alignment: left;
+                        vertical-alignment: center;
+                        x: 0px;
+                        width: parent.width;
+                        font-size: 12px;
+                        overflow: elide;
+                    }
+
+                    github_ta := TouchArea {
+                        clicked => {
+                            root.open-about-github-requested(root.ws-about-github-url);
+                        }
+                    }
+                }
+
+                HorizontalLayout {
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        background: #00000000;
+                    }
+                    Rectangle {
+                        min-width: 72px;
+                        height: 30px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 15px;
+                        background: close_about_ta.has-hover ? #2b2d33 : #00000000;
+                        Text {
+                            text: @tr("關閉");
+                            color: AppTheme.text_muted;
+                            horizontal-alignment: center;
+                            vertical-alignment: center;
+                            font-size: 12px;
+                            width: parent.width;
+                            height: parent.height;
+                        }
+                        close_about_ta := TouchArea {
+                            clicked => {
+                                root.close-about-dialog();
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 

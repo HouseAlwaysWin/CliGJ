@@ -29,6 +29,10 @@ mod callbacks;
 mod helpers;
 mod timers;
 
+const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
+const APP_AUTHOR: &str = "HouseAlwaysWin";
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub fn run_gui(inject_file: Option<PathBuf>) {
     register_embedded_ui_fonts();
 
@@ -145,6 +149,19 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     app.set_ws_shell_startup_terminal_cjk_fallback_font_family(SharedString::from(
         terminal_cjk_fallback_font_family.as_str(),
     ));
+    app.set_ws_update_current_version(SharedString::from(APP_VERSION));
+    let preferred_app_version = cfg
+        .get_value("ui.preferred_app_version")
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| APP_VERSION.to_string());
+    app.set_ws_update_selected_version(SharedString::from(preferred_app_version.as_str()));
+    app.set_ws_update_versions(ModelRc::new(VecModel::from(vec![SharedString::from(
+        APP_VERSION,
+    )])));
+    app.set_ws_about_version(SharedString::from(APP_VERSION));
+    app.set_ws_about_author(SharedString::from(APP_AUTHOR));
+    app.set_ws_about_github_url(SharedString::from(APP_GITHUB_URL));
     app.set_ws_shell_startup_terminal_font_choices(ModelRc::new(VecModel::from(
         terminal_font_choices()
             .iter()

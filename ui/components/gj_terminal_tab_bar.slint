@@ -13,6 +13,8 @@ export component GjTerminalTabBar inherits Rectangle {
     callback new-tab-requested;
     callback cmd-type-selected(string);
     callback manage-cmd-types-requested;
+    callback check-updates-requested;
+    callback about-requested;
     callback rename-tab(int);
     callback move-tab(int, int);
 
@@ -193,7 +195,7 @@ export component GjTerminalTabBar inherits Rectangle {
         x: max(root.left-pad, root.cmd-picker-x - 170px);
         y: root.bar-h + 2px;
         width: 198px;
-        height: min(230px, 14px + root.cmd-type-choices.length * 28px + 34px);
+        height: min(280px, 14px + root.cmd-type-choices.length * 28px + 96px);
         background: AppTheme.panel_alt;
         border-width: 1px;
         border-color: AppTheme.prompt_chrome_border;
@@ -261,6 +263,53 @@ export component GjTerminalTabBar inherits Rectangle {
                     clicked => {
                         root.cmd-menu-open = false;
                         root.manage-cmd-types-requested();
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 1px;
+                background: AppTheme.prompt_chrome_border;
+            }
+
+            Rectangle {
+                height: 24px;
+                border-radius: 6px;
+                background: update_ta.has-hover ? #2d2d30 : #00000000;
+                Text {
+                    text: @tr("檢查更新");
+                    color: AppTheme.text;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    x: 8px;
+                    width: parent.width - 12px;
+                    font-size: 12px;
+                }
+                update_ta := TouchArea {
+                    clicked => {
+                        root.cmd-menu-open = false;
+                        root.check-updates-requested();
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 24px;
+                border-radius: 6px;
+                background: about_ta.has-hover ? #2d2d30 : #00000000;
+                Text {
+                    text: @tr("關於");
+                    color: AppTheme.text;
+                    vertical-alignment: center;
+                    horizontal-alignment: left;
+                    x: 8px;
+                    width: parent.width - 12px;
+                    font-size: 12px;
+                }
+                about_ta := TouchArea {
+                    clicked => {
+                        root.cmd-menu-open = false;
+                        root.about-requested();
                     }
                 }
             }

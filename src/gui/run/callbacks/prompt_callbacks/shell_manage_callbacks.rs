@@ -1,8 +1,10 @@
 use std::cell::RefCell;
 use std::collections::HashSet;
+use std::process::Command;
 use std::rc::Rc;
+use std::thread;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
 use crate::core::config::AppConfig;
 use crate::gui::fonts::{
@@ -17,6 +19,136 @@ use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
 
 use super::super::{model_interactive_editor_rows, set_shell_manage_rows};
+
+const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
+const APP_AUTHOR: &str = "HouseAlwaysWin";
+const RELEASES_API_URL: &str = "https://api.github.com/repos/HouseAlwaysWin/CliGJ/releases?per_page=20";
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+fn open_url_in_browser(url: &str) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        let status = Command::new("cmd")
+            .args(["/C", "start", "", url])
+            .status()
+            .map_err(|e| format!("open browser failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("open browser returned status: {status}"));
+        }
+        Ok(())
+    }
+    #[cfg(target_os = "macos")]
+    {
+        let status = Command::new("open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("open browser failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("open browser returned status: {status}"));
+        }
+        Ok(())
+    }
+    #[cfg(all(not(target_os = "windows"), not(target_os = "macos")))]
+    {
+        let status = Command::new("xdg-open")
+            .arg(url)
+            .status()
+            .map_err(|e| format!("open browser failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("open browser returned status: {status}"));
+        }
+        Ok(())
+    }
+}
+
+fn fetch_release_versions() -> Result<Vec<String>, String> {
+    let client = reqwest::blocking::Client::builder()
+        .build()
+        .map_err(|e| format!("http client error: {e}"))?;
+    let resp = client
+        .get(RELEASES_API_URL)
+        .header("User-Agent", "CliGJ")
+        .send()
+        .map_err(|e| format!("request failed: {e}"))?;
+    if !resp.status().is_success() {
+        return Err(format!("request failed: HTTP {}", resp.status()));
+    }
+    let payload: serde_json::Value = resp
+        .json()
+        .map_err(|e| format!("parse releases failed: {e}"))?;
+    let mut out = Vec::<String>::new();
+    if let Some(arr) = payload.as_array() {
+        for item in arr {
+            let Some(tag) = item.get("tag_name").and_then(serde_json::Value::as_str) else {
+                continue;
+            };
+            let tag = tag.trim();
+            if tag.is_empty() {
+                continue;
+            }
+            let tag = tag.to_string();
+            if !out.iter().any(|v| v == &tag) {
+                out.push(tag);
+            }
+        }
+    }
+    if out.is_empty() {
+        out.push(APP_VERSION.to_string());
+    } else if !out.iter().any(|v| v == APP_VERSION) {
+        out.insert(0, APP_VERSION.to_string());
+    }
+    Ok(out)
+}
+
+fn set_update_versions_to_ui(ui: &AppWindow, versions: &[String], preferred: Option<&str>) {
+    ui.set_ws_update_versions(ModelRc::new(VecModel::from(
+        versions
+            .iter()
+            .map(|v| SharedString::from(v.as_str()))
+            .collect::<Vec<_>>(),
+    )));
+    let selected = preferred
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .filter(|s| versions.iter().any(|v| v == s))
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            versions
+                .iter()
+                .find(|v| v.as_str() == APP_VERSION)
+                .cloned()
+                .or_else(|| versions.first().cloned())
+        })
+        .unwrap_or_else(|| APP_VERSION.to_string());
+    ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
+}
+
+fn refresh_available_versions(app_weak: slint::Weak<AppWindow>, preferred: Option<String>) {
+    let preferred_outer = preferred.clone();
+    let _ = app_weak.upgrade_in_event_loop(move |ui| {
+        ui.set_ws_update_status_text(SharedString::from("Checking updates..."));
+        if let Some(p) = preferred_outer.as_deref() {
+            ui.set_ws_update_selected_version(SharedString::from(p));
+        }
+    });
+    thread::spawn(move || {
+        let fetched = fetch_release_versions();
+        let _ = app_weak.upgrade_in_event_loop(move |ui| match fetched {
+            Ok(versions) => {
+                set_update_versions_to_ui(&ui, &versions, preferred.as_deref());
+                ui.set_ws_update_status_text(SharedString::from(
+                    format!("Found {} available versions", versions.len()).as_str(),
+                ));
+            }
+            Err(e) => {
+                set_update_versions_to_ui(&ui, &[APP_VERSION.to_string()], preferred.as_deref());
+                ui.set_ws_update_status_text(SharedString::from(
+                    format!("Update check failed: {e}").as_str(),
+                ));
+            }
+        });
+    });
+}
 
 pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_shell_manage = Rc::clone(&state);
@@ -41,6 +173,119 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         ui.set_ws_shell_settings_nav(SharedString::from("startup"));
         ui.set_ws_shell_manage_saved_hint(false);
         ui.set_ws_shell_manage_open(true);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_check_updates_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let preferred = AppConfig::load_or_default()
+            .ok()
+            .and_then(|cfg| cfg.get_value("ui.preferred_app_version").ok().flatten());
+        ui.set_ws_update_current_version(SharedString::from(APP_VERSION));
+        ui.set_ws_update_open(true);
+        refresh_available_versions(app_weak.clone(), preferred);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_refresh_available_versions_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let preferred = ui.get_ws_update_selected_version().to_string();
+        refresh_available_versions(app_weak.clone(), Some(preferred));
+    });
+
+    let app_weak = app.as_weak();
+    app.on_update_version_selected(move |ver| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_update_selected_version(ver.clone());
+        ui.set_ws_update_status_text(SharedString::from(
+            format!("Selected target version: {}", ver.as_str()).as_str(),
+        ));
+    });
+
+    let app_weak = app.as_weak();
+    app.on_apply_update_version_requested(move |ver| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let selected = ver.trim().to_string();
+        if selected.is_empty() {
+            ui.set_ws_update_status_text(SharedString::from("Please select a version first"));
+            return;
+        }
+        match AppConfig::load_or_default() {
+            Ok(mut cfg) => {
+                if let Err(e) = cfg.set_value("ui.preferred_app_version", selected.clone()) {
+                    ui.set_ws_update_status_text(SharedString::from(
+                        format!("Save target version failed: {e}").as_str(),
+                    ));
+                    return;
+                }
+                if let Err(e) = cfg.save() {
+                    ui.set_ws_update_status_text(SharedString::from(
+                        format!("Save config failed: {e}").as_str(),
+                    ));
+                    return;
+                }
+                ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
+                ui.set_ws_update_status_text(SharedString::from(
+                    format!("Switched target version to {selected}").as_str(),
+                ));
+            }
+            Err(e) => {
+                ui.set_ws_update_status_text(SharedString::from(
+                    format!("Load config failed: {e}").as_str(),
+                ));
+            }
+        }
+    });
+
+    let app_weak = app.as_weak();
+    app.on_close_update_dialog(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_update_open(false);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_about_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_about_version(SharedString::from(APP_VERSION));
+        ui.set_ws_about_author(SharedString::from(APP_AUTHOR));
+        ui.set_ws_about_github_url(SharedString::from(APP_GITHUB_URL));
+        ui.set_ws_about_open(true);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_close_about_dialog(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        ui.set_ws_about_open(false);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_open_about_github_requested(move |url| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let target = url.trim();
+        if target.is_empty() {
+            return;
+        }
+        if let Err(e) = open_url_in_browser(target) {
+            ui.set_ws_update_status_text(SharedString::from(
+                format!("Open link failed: {e}").as_str(),
+            ));
+        }
     });
 
     let app_weak = app.as_weak();
