@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashSet;
 use std::fs::{self, File};
 use std::io::copy;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::rc::Rc;
 use std::thread;
@@ -186,8 +186,8 @@ fn choose_windows_release_asset(release: &GithubRelease) -> Option<&GithubReleas
     release
         .assets
         .iter()
-        .find(|a| a.name.ends_with("-windows-x64.exe"))
-        .or_else(|| release.assets.iter().find(|a| a.name.ends_with(".exe")))
+        .find(|a| a.name.ends_with("-windows-x64.zip"))
+        .or_else(|| release.assets.iter().find(|a| a.name.ends_with(".zip")))
 }
 
 #[cfg(target_os = "windows")]
@@ -206,7 +206,7 @@ fn resolve_selected_release_asset(version: &str) -> Result<GithubReleaseAsset, S
             return Ok(asset.clone());
         }
         return Err(format!(
-            "Version {} has no Windows .exe asset in release",
+            "Version {} has no Windows .zip asset in release",
             release.tag_name
         ));
     }
@@ -214,11 +214,14 @@ fn resolve_selected_release_asset(version: &str) -> Result<GithubReleaseAsset, S
 }
 
 #[cfg(target_os = "windows")]
-fn download_release_asset_to_temp(asset: &GithubReleaseAsset, version: &str) -> Result<PathBuf, String> {
+fn download_release_asset_to_temp(
+    asset: &GithubReleaseAsset,
+    version: &str,
+) -> Result<PathBuf, String> {
     let tmp_root = std::env::temp_dir().join("cligj-updates");
     fs::create_dir_all(&tmp_root).map_err(|e| format!("create temp folder failed: {e}"))?;
     let file_name = if asset.name.trim().is_empty() {
-        format!("CliGJ-{version}-windows-x64.exe")
+        format!("CliGJ-{version}-windows-x64.zip")
     } else {
         asset.name.clone()
     };
@@ -240,7 +243,54 @@ fn download_release_asset_to_temp(asset: &GithubReleaseAsset, version: &str) -> 
 }
 
 #[cfg(target_os = "windows")]
-fn launch_downloaded_installer(path: &std::path::Path) -> Result<(), String> {
+fn find_first_exe(dir: &Path) -> Option<PathBuf> {
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_first_exe(path.as_path()) {
+                return Some(found);
+            }
+            continue;
+        }
+        if path
+            .extension()
+            .and_then(|s| s.to_str())
+            .map(|s| s.eq_ignore_ascii_case("exe"))
+            .unwrap_or(false)
+        {
+            return Some(path);
+        }
+    }
+    None
+}
+
+#[cfg(target_os = "windows")]
+fn extract_release_zip_to_temp(zip_path: &Path, version: &str) -> Result<PathBuf, String> {
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock error: {e}"))?
+        .as_millis();
+    let output_dir = std::env::temp_dir()
+        .join("cligj-updates")
+        .join(format!("extract-{version}-{stamp}"));
+    fs::create_dir_all(&output_dir).map_err(|e| format!("create extract folder failed: {e}"))?;
+    let status = Command::new("tar")
+        .arg("-xf")
+        .arg(zip_path)
+        .arg("-C")
+        .arg(&output_dir)
+        .status()
+        .map_err(|e| format!("extract zip failed: {e}"))?;
+    if !status.success() {
+        return Err(format!("extract zip returned status: {status}"));
+    }
+    find_first_exe(output_dir.as_path())
+        .ok_or_else(|| format!("no .exe found after extracting {}", zip_path.display()))
+}
+
+#[cfg(target_os = "windows")]
+fn launch_downloaded_installer(path: &Path) -> Result<(), String> {
     let target = path.to_string_lossy().to_string();
     let status = Command::new("cmd")
         .args(["/C", "start", "", target.as_str()])
@@ -389,14 +439,23 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         });
                         download_release_asset_to_temp(&asset, selected.as_str())
                     })
-                    .and_then(|downloaded| {
-                        let launch_msg = format!("Launching update from {}", downloaded.display());
+                    .and_then(|downloaded_zip| {
+                        let extract_msg =
+                            format!("Extracting update package from {}", downloaded_zip.display());
+                        let _ = app_weak_download.upgrade_in_event_loop(move |ui| {
+                            ui.set_ws_update_status_text(SharedString::from(
+                                extract_msg.as_str(),
+                            ));
+                        });
+                        let extracted_exe =
+                            extract_release_zip_to_temp(downloaded_zip.as_path(), selected.as_str())?;
+                        let launch_msg = format!("Launching update from {}", extracted_exe.display());
                         let _ = app_weak_download.upgrade_in_event_loop(move |ui| {
                             ui.set_ws_update_status_text(SharedString::from(
                                 launch_msg.as_str(),
                             ));
                         });
-                        launch_downloaded_installer(downloaded.as_path())
+                        launch_downloaded_installer(extracted_exe.as_path())
                     });
                 let app_weak_for_quit = app_weak_download.clone();
                 let _ = app_weak_download.upgrade_in_event_loop(move |ui| match resolved {

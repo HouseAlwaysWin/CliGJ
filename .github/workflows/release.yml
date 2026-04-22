@@ -61,9 +61,18 @@ jobs:
         shell: pwsh
         run: |
           $tag = "${{ steps.tag.outputs.value }}"
-          $exeAssetName = "CliGJ-$tag-windows-x64.exe"
-          Copy-Item "target/release/CliGJ.exe" $exeAssetName -Force
-          "name=$exeAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+          $zipAssetName = "CliGJ-$tag-windows-x64.zip"
+          $staging = Join-Path $env:RUNNER_TEMP "cligj-release-$tag"
+          if (Test-Path $staging) {
+            Remove-Item $staging -Recurse -Force
+          }
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item "target/release/CliGJ.exe" (Join-Path $staging "CliGJ.exe") -Force
+          if (Test-Path $zipAssetName) {
+            Remove-Item $zipAssetName -Force
+          }
+          Compress-Archive -Path (Join-Path $staging "*") -DestinationPath $zipAssetName -Force
+          "name=$zipAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
 
       - name: Upload app artifact
         uses: actions/upload-artifact@v4
