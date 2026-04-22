@@ -118,6 +118,31 @@ export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("CliGJ Bridge");
   context.subscriptions.push(output);
 
+  const hasNonEmptySelection = (editor: vscode.TextEditor | undefined): boolean =>
+    !!editor && editor.selections.some((selection) => !selection.isEmpty);
+
+  const sendSelectionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 110);
+  sendSelectionStatus.name = "CliGJ Send Selection";
+  sendSelectionStatus.command = "cligj.sendSelectionPrompt";
+  sendSelectionStatus.text = "$(send) CliGJ Send";
+  sendSelectionStatus.tooltip = "Send selection to CliGJ (Direct Submit) — Ctrl+Alt+S";
+
+  const fillSelectionStatus = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 109);
+  fillSelectionStatus.name = "CliGJ Fill Selection";
+  fillSelectionStatus.command = "cligj.fillSelectionPrompt";
+  fillSelectionStatus.text = "$(edit) CliGJ Fill";
+  fillSelectionStatus.tooltip = "Fill selection to CliGJ input (Editable) — Ctrl+Alt+F";
+
+  const updateSelectionStatusBar = (): void => {
+    if (hasNonEmptySelection(vscode.window.activeTextEditor)) {
+      sendSelectionStatus.show();
+      fillSelectionStatus.show();
+      return;
+    }
+    sendSelectionStatus.hide();
+    fillSelectionStatus.hide();
+  };
+
   const fileNameFromPath = (path: string): string => {
     const normalized = path.replace(/\\/g, "/");
     const parts = normalized.split("/");
@@ -400,8 +425,18 @@ export function activate(context: vscode.ExtensionContext): void {
     sendSelectionPrompt,
     fillSelectionPrompt,
     sendExplorerPath,
-    fillExplorerPath
+    fillExplorerPath,
+    sendSelectionStatus,
+    fillSelectionStatus,
+    vscode.window.onDidChangeActiveTextEditor(() => updateSelectionStatusBar()),
+    vscode.window.onDidChangeTextEditorSelection((event) => {
+      if (event.textEditor === vscode.window.activeTextEditor) {
+        updateSelectionStatusBar();
+      }
+    })
   );
+
+  updateSelectionStatusBar();
 }
 
 export function deactivate(): void {}

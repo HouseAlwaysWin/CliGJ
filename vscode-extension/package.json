@@ -84,7 +84,19 @@
           "when": "resourceScheme == file"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "cligj.sendSelectionPrompt",
+        "key": "ctrl+alt+s",
+        "when": "editorTextFocus && editorHasSelection"
+      },
+      {
+        "command": "cligj.fillSelectionPrompt",
+        "key": "ctrl+alt+f",
+        "when": "editorTextFocus && editorHasSelection"
+      }
+    ]
   },
   "scripts": {
     "compile": "tsc -p .",

@@ -576,11 +576,36 @@ fn handle_ipc_gui_command(
                 });
                 return;
             }
-            ui.set_ws_prompt(SharedString::from(prompt.as_str()));
             let cur = s.current;
-            s.tabs[cur].prompt = SharedString::from(prompt.as_str());
-            s.tabs[cur].prompt_picked_selections = selection_payloads;
-            s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+            if submit {
+                ui.set_ws_prompt(SharedString::from(prompt.as_str()));
+                s.tabs[cur].prompt = SharedString::from(prompt.as_str());
+                s.tabs[cur].prompt_picked_selections = selection_payloads;
+                s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+            } else {
+                let current_prompt = s.tabs[cur].prompt.to_string();
+                let merged_prompt = if prompt.trim().is_empty() {
+                    current_prompt
+                } else {
+                    crate::workspace_files::append_attachment_token(
+                        current_prompt.as_str(),
+                        prompt.as_str(),
+                    )
+                };
+                ui.set_ws_prompt(SharedString::from(merged_prompt.as_str()));
+                s.tabs[cur].prompt = SharedString::from(merged_prompt.as_str());
+
+                for payload in selection_payloads {
+                    if !s.tabs[cur].prompt_picked_selections.iter().any(|p| p == &payload) {
+                        s.tabs[cur].prompt_picked_selections.push(payload);
+                    }
+                }
+                for path in file_path_payloads {
+                    if !s.tabs[cur].prompt_picked_files_abs.iter().any(|p| p == &path) {
+                        s.tabs[cur].prompt_picked_files_abs.push(path);
+                    }
+                }
+            }
             if submit {
                 if let Err(e) = s.submit_current_prompt(ui) {
                     let _ = response_tx.send(IpcGuiResponse {

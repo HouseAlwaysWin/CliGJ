@@ -33,6 +33,28 @@ Minimal VS Code extension scaffold for CliGJ IPC integration.
 When text is selected in an editor, right-click to access selection commands directly from the editor context menu.
 When files are selected in Explorer, right-click to send or fill file paths directly.
 
+## Selection Shortcuts
+
+- `Ctrl+Alt+S`: Send Selection with Line Numbers (Direct Submit)
+- `Ctrl+Alt+F`: Fill Selection with Line Numbers (Editable)
+
+If these shortcuts conflict with your environment, override them in VS Code keyboard shortcuts (`keybindings.json`):
+
+```json
+[
+  {
+    "key": "ctrl+alt+s",
+    "command": "cligj.sendSelectionPrompt",
+    "when": "editorTextFocus && editorHasSelection"
+  },
+  {
+    "key": "ctrl+alt+f",
+    "command": "cligj.fillSelectionPrompt",
+    "when": "editorTextFocus && editorHasSelection"
+  }
+]
+```
+
 ## Troubleshooting
 
 If you see `command 'cligj.sendPrompt' not found`, the extension usually failed to activate because the compiled entry file does not exist yet.
