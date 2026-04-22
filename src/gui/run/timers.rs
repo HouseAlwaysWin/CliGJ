@@ -617,16 +617,27 @@ pub(crate) fn spawn_ipc_bridge_timer(
 ) -> Timer {
     let app_weak = app.as_weak();
     let timer = Timer::default();
+    let mut startup_retry_pending = true;
     timer.start(slint::TimerMode::Repeated, Duration::from_millis(40), move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
         };
+
+        if startup_retry_pending {
+            let snap0 = ipc.snapshot();
+            if !snap0.running {
+                let _ = ipc.start();
+            }
+            startup_retry_pending = false;
+        }
 
         let snap = ipc.snapshot();
         ui.set_ws_ipc_running(snap.running);
         ui.set_ws_ipc_client_count(snap.client_count as i32);
         let status_text = if snap.running {
             format!("IPC ON ({})", snap.client_count)
+        } else if !snap.last_error.trim().is_empty() {
+            format!("IPC OFF ({})", snap.last_error)
         } else {
             "IPC OFF".to_string()
         };

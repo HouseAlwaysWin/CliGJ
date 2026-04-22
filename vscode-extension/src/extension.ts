@@ -264,7 +264,8 @@ export function activate(context: vscode.ExtensionContext): void {
       return occurrence === 1 ? `@${fileName}` : `@${fileName}_${occurrence}`;
     });
     return {
-      prompt: promptLines.join("\n"),
+      // Keep one space between file tokens for multi-select explorer sends.
+      prompt: promptLines.join(" "),
       filePathPayloads: normalizedPaths
     };
   };
