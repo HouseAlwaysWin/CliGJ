@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
+use crate::gui::i18n::terminal_history_title_suffix_for_shell_setting;
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 use crate::gui::run::helpers::{copy_to_clipboard, terminal_history_plain_text};
@@ -32,7 +33,10 @@ pub(super) fn connect_terminal_history(
                 .row_data(s.current)
                 .unwrap_or_else(|| SharedString::from("Tab"))
                 .to_string();
-            let history_title = format!("{title} - 終端歷史");
+            let suffix = terminal_history_title_suffix_for_shell_setting(
+                ui.get_ws_shell_startup_language().as_str(),
+            );
+            let history_title = format!("{title} - {suffix}");
             history_window.set_history_title(SharedString::from(history_title.as_str()));
             history_window.set_history_text(SharedString::from(terminal_history_plain_text(tab).as_str()));
             history_window.set_terminal_font_family(ui.get_ws_terminal_font_family());

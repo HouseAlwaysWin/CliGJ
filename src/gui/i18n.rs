@@ -34,6 +34,14 @@ pub(crate) fn slint_locale_tag_for_shell_setting(label: &str) -> &'static str {
     }
 }
 
+pub(crate) fn terminal_history_title_suffix_for_shell_setting(label: &str) -> &'static str {
+    if slint_locale_tag_for_shell_setting(label) == "en" {
+        "Terminal History"
+    } else {
+        "終端歷史"
+    }
+}
+
 /// Apply bundled UI strings and force a full redraw so all `@tr` bindings re-evaluate.
 pub(crate) fn apply_slint_language_from_shell_setting(ui: &AppWindow, label: &str) {
     let tag = slint_locale_tag_for_shell_setting(label);

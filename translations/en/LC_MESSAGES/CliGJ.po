@@ -161,3 +161,9 @@ msgstr "Raw input: keys go to terminal (Ctrl+Shift+R)"
 
 msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
 msgstr "Line composer: turn off raw input for inject/composition (Ctrl+Shift+R)"
+
+msgid "重新整理"
+msgstr "Refresh"
+
+msgid "複製全部"
+msgstr "Copy all"

@@ -161,3 +161,9 @@ msgstr "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
 
 msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
 msgstr "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
+
+msgid "重新整理"
+msgstr "重新整理"
+
+msgid "複製全部"
+msgstr "複製全部"

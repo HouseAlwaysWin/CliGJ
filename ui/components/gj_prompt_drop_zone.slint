@@ -468,9 +468,9 @@ export component GjPromptDropZone inherits Rectangle {
                         }
                     }
 
-                    // Raw: SVG — 固定寬度，避免 min-width + stretch 被拉成寬膠囊
+                    // History: icon button
                     Rectangle {
-                        min-width: 52px;
+                        width: 28px;
                         height: 22px;
                         horizontal-stretch: 0;
                         border-width: 1px;
@@ -478,12 +478,13 @@ export component GjPromptDropZone inherits Rectangle {
                         border-radius: 11px;
                         background: #00000000;
 
-                        Text {
-                            text: @tr("歷史");
-                            color: AppTheme.text_muted;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 11px;
+                        Image {
+                            width: 14px;
+                            height: 14px;
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            source: @image-url("../icons/prompt_history.svg");
+                            colorize: AppTheme.text_muted;
                         }
 
                         history_ta := TouchArea {

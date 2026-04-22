@@ -158,9 +158,18 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             .collect::<Vec<_>>(),
     )));
     apply_slint_language_from_shell_setting(&app, ui_language.as_str());
-    app.set_ws_ipc_status_text(SharedString::from("IPC OFF"));
-    app.set_ws_ipc_running(false);
-    app.set_ws_ipc_client_count(0);
+    if let Err(e) = ipc_bridge.start() {
+        eprintln!("CliGJ: IPC auto-start: {e}");
+    }
+    let ipc_snap = ipc_bridge.snapshot();
+    app.set_ws_ipc_running(ipc_snap.running);
+    app.set_ws_ipc_client_count(ipc_snap.client_count as i32);
+    let ipc_status_text = if ipc_snap.running {
+        format!("IPC ON ({})", ipc_snap.client_count)
+    } else {
+        "IPC OFF".to_string()
+    };
+    app.set_ws_ipc_status_text(SharedString::from(ipc_status_text.as_str()));
 
     let _terminal_stream_dispatcher =
         timers::spawn_terminal_stream_dispatcher(&app, Rc::clone(&state), rx, ipc_bridge.clone());
