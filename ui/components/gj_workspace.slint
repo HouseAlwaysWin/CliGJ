@@ -10,6 +10,7 @@ export component GjWorkspace inherits Rectangle {
     in-out property <[string]> code-lines;
     in-out property <string> terminal-text;
     in-out property <[TermLine]> terminal-lines;
+    in-out property <[TermLine]> terminal-pinned-lines;
     in-out property <int> terminal-line-offset: 0;
     in-out property <int> terminal-total-lines: 0;
     in-out property <bool> auto-scroll;
@@ -83,6 +84,7 @@ export component GjWorkspace inherits Rectangle {
             terminal-text: root.terminal-text;
             terminal-font-family: root.terminal-font-family;
             terminal-lines <=> root.terminal-lines;
+            terminal-pinned-lines: root.terminal-pinned-lines;
             terminal-line-offset: root.terminal-line-offset;
             terminal-total-lines: root.terminal-total-lines;
             auto-scroll: root.auto-scroll;

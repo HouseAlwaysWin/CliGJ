@@ -18,7 +18,8 @@ use crate::gui::fonts::{
 };
 use crate::gui::ipc::IpcBridge;
 use crate::gui::interactive_commands::{
-    self, sync_interactive_command_choices_to_ui, sync_interactive_manage_editor_to_ui,
+    self, pinned_footer_lines_for_label, sync_interactive_command_choices_to_ui,
+    sync_interactive_manage_editor_to_ui,
 };
 use crate::gui::i18n::apply_slint_language_from_shell_setting;
 use crate::gui::shell_profiles::{
@@ -28,8 +29,9 @@ use crate::gui::shell_profiles::{
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::{
-    clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui, tab_update_from_ui,
-    terminal_scroll_top_for_tab, TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH,
+    clamp_saved_scroll_top, load_tab_to_ui, push_terminal_view_to_ui,
+    scrollable_terminal_line_count, tab_update_from_ui, terminal_scroll_top_for_tab,
+    TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH,
 };
 use crate::terminal::windows_conpty;
 
@@ -409,12 +411,16 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 None => return,
             }
         };
+        let pinned_footer_lines = {
+            let s = st_ai.borrow();
+            pinned_footer_lines_for_label(line_label.as_str(), &*s)
+        };
 
         let mut s = st_ai.borrow_mut();
         if s.current >= s.tabs.len() {
             return;
         }
-        if let Err(e) = s.respawn_conpty_for_interactive_command(&ui) {
+        if let Err(e) = s.respawn_conpty_for_interactive_command(&ui, pinned_footer_lines) {
             eprintln!("CliGJ: interactive command PTY restart: {e}");
             return;
         }
@@ -452,6 +458,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         rows.push(InteractiveCmdEditorRow {
             name: SharedString::new(),
             line: SharedString::new(),
+            pinned_footer_lines: SharedString::from("0"),
             key_locked: false,
             expanded: false,
             workspace_path: SharedString::new(),
@@ -513,6 +520,23 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         m.set_row_data(i, row);
     });
 
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_pinned_lines_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.pinned_footer_lines = new_text;
+        m.set_row_data(i, row);
+    });
+
     let st_save = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_save_interactive_manage(move || {
@@ -522,11 +546,12 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let rows_m = ui.get_ws_interactive_manage_rows();
         let n = rows_m.row_count();
         let mut seen = HashSet::<String>::new();
-        let mut out: Vec<(String, String)> = Vec::new();
+        let mut out: Vec<(String, String, usize)> = Vec::new();
         for i in 0..n {
             let row = rows_m.row_data(i).unwrap();
             let name = row.name.to_string();
             let line = row.line.to_string();
+            let pinned_footer_lines = row.pinned_footer_lines.to_string();
             let nt = name.trim();
             let lt = line.trim();
             if nt.is_empty() && lt.is_empty() {
@@ -545,7 +570,20 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 eprintln!("CliGJ: duplicate interactive command name: {nt}");
                 return;
             }
-            out.push((nt, lt.to_string()));
+            let pinned = if pinned_footer_lines.trim().is_empty() {
+                0
+            } else {
+                match pinned_footer_lines.trim().parse::<usize>() {
+                    Ok(v) => v,
+                    Err(_) => {
+                        eprintln!(
+                            "CliGJ: interactive command pinned footer rows must be a non-negative integer"
+                        );
+                        return;
+                    }
+                }
+            };
+            out.push((nt, lt.to_string(), pinned));
         }
         if out.is_empty() {
             eprintln!("CliGJ: need at least one interactive command");
@@ -613,6 +651,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         rows.push(InteractiveCmdEditorRow {
             name: SharedString::new(),
             line: SharedString::new(),
+            pinned_footer_lines: SharedString::new(),
             key_locked: false,
             expanded: true,
             workspace_path: SharedString::new(),
@@ -1137,8 +1176,9 @@ fn connect_terminal_wheel(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let current = s.current;
             let tab = &mut s.tabs[current];
             let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
-            let max_scroll =
-                ((tab.terminal_lines.len() as f32) * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
+            let max_scroll = ((scrollable_terminal_line_count(tab) as f32) * TERMINAL_ROW_HEIGHT_PX
+                - vh)
+                .max(0.0);
             let current = if tab.interactive_follow_output {
                 terminal_scroll_top_for_tab(tab, vh)
             } else {

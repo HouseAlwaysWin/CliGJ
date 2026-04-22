@@ -14,12 +14,13 @@ export component GjInteractiveManageDialog inherits Rectangle {
     callback remove-row(int);
     callback name-edited(int, string);
     callback line-edited(int, string);
+    callback pinned-lines-edited(int, string);
     callback save;
     callback close;
 
     Rectangle {
-        width: 560px;
-        height: 420px;
+        width: 640px;
+        height: 460px;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: AppTheme.panel;
@@ -40,6 +41,13 @@ export component GjInteractiveManageDialog inherits Rectangle {
 
             Text {
                 text: @tr("內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。");
+                color: AppTheme.text_muted;
+                font-size: 11px;
+                wrap: word-wrap;
+            }
+
+            Text {
+                text: "Pin rows keeps the last N terminal rows fixed at the bottom. Use 0 to disable.";
                 color: AppTheme.text_muted;
                 font-size: 11px;
                 wrap: word-wrap;
@@ -84,7 +92,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     spacing: 6px;
 
                     for row[key_idx] in root.manage-rows: Rectangle {
-                        min-height: 32px;
+                        min-height: 34px;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 6px;
@@ -138,6 +146,25 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                 text: row.line;
                                 edited(new_text) => {
                                     root.line-edited(key_idx, new_text);
+                                }
+                            }
+
+                            Text {
+                                text: "Pin";
+                                color: AppTheme.text_muted;
+                                font-size: 11px;
+                                vertical-alignment: center;
+                                horizontal-stretch: 0;
+                            }
+
+                            LineEdit {
+                                min-width: 54px;
+                                max-width: 64px;
+                                horizontal-stretch: 0;
+                                font-size: 12px;
+                                text: row.pinned-footer-lines;
+                                edited(new_text) => {
+                                    root.pinned-lines-edited(key_idx, new_text);
                                 }
                             }
 

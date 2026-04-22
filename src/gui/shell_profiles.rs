@@ -145,6 +145,7 @@ pub(crate) fn sync_shell_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
         .map(|(n, c, w)| InteractiveCmdEditorRow {
             name: SharedString::from(n.as_str()),
             line: SharedString::from(c.as_str()),
+            pinned_footer_lines: SharedString::new(),
             key_locked: is_reserved_shell_profile(n),
             expanded: false,
             workspace_path: SharedString::from(w.as_str()),

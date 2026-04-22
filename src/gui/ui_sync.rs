@@ -30,8 +30,27 @@ thread_local! {
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
 /// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
-pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {
+pub(crate) fn interactive_pinned_footer_start(tab: &TabState) -> Option<usize> {
+    if tab.terminal_mode != TerminalMode::InteractiveAi {
+        return None;
+    }
+    let pinned_rows = tab.interactive_pinned_footer_lines;
+    if pinned_rows == 0 {
+        return None;
+    }
     let n = tab.terminal_lines.len();
+    if n <= pinned_rows + 2 {
+        return None;
+    }
+    Some(n.saturating_sub(pinned_rows))
+}
+
+pub(crate) fn scrollable_terminal_line_count(tab: &TabState) -> usize {
+    interactive_pinned_footer_start(tab).unwrap_or(tab.terminal_lines.len())
+}
+
+pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {
+    let n = scrollable_terminal_line_count(tab);
     if n == 0 {
         return 0.0;
     }
@@ -54,7 +73,7 @@ pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f3
 
 /// Clamp [`TabState::terminal_saved_scroll_top_px`] to valid range for the current line count.
 pub(crate) fn clamp_saved_scroll_top(tab: &TabState, viewport_height_px: f32) -> f32 {
-    let n = tab.terminal_lines.len();
+    let n = scrollable_terminal_line_count(tab);
     if n == 0 {
         return 0.0;
     }
@@ -302,6 +321,20 @@ fn empty_term_line() -> TermLine {
     }
 }
 
+fn rendered_term_line_for_index(
+    tab: &TabState,
+    idx: usize,
+    cjk_fallback_font_family: &str,
+) -> TermLine {
+    let base_line = &tab.terminal_lines[idx];
+    let rendered = if tab.terminal_cursor_row == Some(idx) {
+        overlay_cursor_line(base_line, tab.terminal_cursor_col.unwrap_or(0))
+    } else {
+        base_line.clone()
+    };
+    build_term_line(&rendered, cjk_fallback_font_family)
+}
+
 /// Incremental cache: only rebuild rows inside [first, last] whose VT content changed.
 /// Returns true when cached rows in this window changed.
 pub(crate) fn sync_terminal_model_cache_range(
@@ -375,8 +408,20 @@ pub(crate) fn push_terminal_view_to_ui(
     tab.terminal_scroll_top_px = scroll_top;
     tab.terminal_view_height_px = vh;
 
-    let n = tab.terminal_lines.len();
-    if n == 0 {
+    let footer_start = interactive_pinned_footer_start(tab);
+    let body_n = scrollable_terminal_line_count(tab);
+    let footer_rows: Vec<TermLine> = footer_start
+        .map(|start| {
+            (start..tab.terminal_lines.len())
+                .map(|idx| {
+                    rendered_term_line_for_index(tab, idx, cjk_fallback_font_family.as_str())
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    ui.set_ws_terminal_pinned_lines(ModelRc::new(VecModel::from(footer_rows)));
+
+    if body_n == 0 {
         if tab.last_window_total != 0 {
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
@@ -402,10 +447,11 @@ pub(crate) fn push_terminal_view_to_ui(
         .max(0) as usize;
     let last_visible_bottom = scroll_top + vh;
     let last_visible = (last_visible_bottom / TERMINAL_ROW_HEIGHT_PX).ceil() as isize;
-    let last = (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, n as isize - 1) as usize;
+    let last =
+        (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, body_n as isize - 1) as usize;
     let first = first.min(last);
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
-    let total_changed = tab.last_window_total != n;
+    let total_changed = tab.last_window_total != body_n;
     let content_changed = sync_terminal_model_cache_range(
         tab,
         first,
@@ -417,7 +463,7 @@ pub(crate) fn push_terminal_view_to_ui(
         ui.set_ws_terminal_line_offset(first as i32);
     }
     if total_changed {
-        ui.set_ws_terminal_total_lines(n as i32);
+        ui.set_ws_terminal_total_lines(body_n as i32);
     }
 
     let model = &tab.terminal_slint_model;
@@ -475,7 +521,7 @@ pub(crate) fn push_terminal_view_to_ui(
 
     tab.last_window_first = first;
     tab.last_window_last = last;
-    tab.last_window_total = n;
+    tab.last_window_total = body_n;
     tab.last_pushed_scroll_top = scroll_top;
     tab.last_pushed_viewport_height = vh;
 
@@ -533,8 +579,9 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
 
-    let n = tab.terminal_lines.len();
+    let n = scrollable_terminal_line_count(tab);
     ui.set_ws_terminal_total_lines(n as i32);
+    ui.set_ws_terminal_pinned_lines(ModelRc::new(VecModel::from(Vec::<TermLine>::new())));
     // 清空舊 model 資料，強制 push_terminal_view_to_ui 完整重建
     {
         let model = &tab.terminal_slint_model;

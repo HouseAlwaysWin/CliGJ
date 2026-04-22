@@ -9,6 +9,7 @@ use crate::terminal::windows_conpty;
 use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
+use super::interactive_commands::pinned_footer_lines_for_program;
 use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
 use super::state::conpty_startup_cwd;
 use super::slint_ui::AppWindow;
@@ -16,7 +17,7 @@ use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
 impl GuiState {
-    pub(crate) fn prepare_current_tab_for_interactive_ai(&mut self) {
+    pub(crate) fn prepare_current_tab_for_interactive_ai(&mut self, pinned_footer_lines: usize) {
         if self.current >= self.tabs.len() {
             return;
         }
@@ -40,6 +41,7 @@ impl GuiState {
         tab.terminal_scroll_resync_next = true;
         tab.auto_scroll = true;
         tab.interactive_follow_output = true;
+        tab.interactive_pinned_footer_lines = pinned_footer_lines;
     }
 
     /// Drop the shell, spawn a fresh ConPTY, and reset the terminal buffer for Interactive AI.
@@ -47,6 +49,7 @@ impl GuiState {
     pub(crate) fn respawn_conpty_for_interactive_command(
         &mut self,
         ui: &AppWindow,
+        pinned_footer_lines: usize,
     ) -> Result<(), &'static str> {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
@@ -70,7 +73,7 @@ impl GuiState {
             tab.last_pushed_viewport_height = -1.0;
         }
 
-        self.prepare_current_tab_for_interactive_ai();
+        self.prepare_current_tab_for_interactive_ai(pinned_footer_lines);
 
         {
             let tab = &mut self.tabs[self.current];
@@ -133,6 +136,9 @@ impl GuiState {
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
+                Vec::<crate::gui::slint_ui::TermLine>::new(),
+            )));
             ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
             ui.invoke_ws_scroll_terminal_to_top();
         }
@@ -147,6 +153,9 @@ impl GuiState {
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
+                Vec::<crate::gui::slint_ui::TermLine>::new(),
+            )));
             ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
             ui.invoke_ws_scroll_terminal_to_top();
         }
@@ -251,6 +260,7 @@ impl GuiState {
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         self.tabs[self.current].cmd_type = new_cmd_type.to_string();
         self.tabs[self.current].terminal_mode = TerminalMode::Shell;
+        self.tabs[self.current].interactive_pinned_footer_lines = 0;
 
         #[cfg(target_os = "windows")]
         {
@@ -350,6 +360,11 @@ impl GuiState {
             full_command.split_whitespace().next(),
             Some("gemini" | "codex" | "claude" | "copilot")
         );
+        let interactive_pinned_footer_lines = full_command
+            .split_whitespace()
+            .next()
+            .map(|program| pinned_footer_lines_for_program(program, self))
+            .unwrap_or(0);
 
         if !full_command.is_empty() {
             let tab = &mut self.tabs[self.current];
@@ -360,9 +375,12 @@ impl GuiState {
         }
 
         if is_interactive_ai_launch {
-            self.prepare_current_tab_for_interactive_ai();
+            self.prepare_current_tab_for_interactive_ai(interactive_pinned_footer_lines);
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_total_lines(0);
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
+                Vec::<crate::gui::slint_ui::TermLine>::new(),
+            )));
         }
 
         #[cfg(target_os = "windows")]

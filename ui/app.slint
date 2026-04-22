@@ -20,7 +20,7 @@ export component AppWindow inherits Window {
     resize-border-width: AppTheme.chrome_resize_border;
     preferred-width: 800px;
     preferred-height: 600px;
-    min-width: 520px;
+    min-width: 800px;
     // Keep enough terminal rows for interactive TUIs like Gemini CLI. At smaller heights the
     // application itself switches layout/reflows aggressively, which cannot be made stable purely
     // from our side after a PTY resize.
@@ -39,6 +39,7 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-code-lines: [];
     in-out property <string> ws-terminal-text: "";
     in-out property <[TermLine]> ws-terminal-lines: [];
+    in-out property <[TermLine]> ws-terminal-pinned-lines: [];
     in-out property <int> ws-terminal-line-offset: 0;
     in-out property <int> ws-terminal-total-lines: 0;
     in-out property <bool> ws-auto-scroll: false;
@@ -120,6 +121,7 @@ export component AppWindow inherits Window {
     callback remove-interactive-manage-row(int);
     callback interactive-manage-name-edited(int, string);
     callback interactive-manage-line-edited(int, string);
+    callback interactive-manage-pinned-lines-edited(int, string);
     callback save-interactive-manage;
     callback close-interactive-manage;
     callback manage-add-shell-row;
@@ -266,6 +268,7 @@ export component AppWindow inherits Window {
                         code-lines <=> root.ws-code-lines;
                         terminal-text <=> root.ws-terminal-text;
                         terminal-lines <=> root.ws-terminal-lines;
+                        terminal-pinned-lines <=> root.ws-terminal-pinned-lines;
                         terminal-line-offset <=> root.ws-terminal-line-offset;
                         terminal-total-lines <=> root.ws-terminal-total-lines;
                         auto-scroll <=> root.ws-auto-scroll;
@@ -384,6 +387,9 @@ export component AppWindow inherits Window {
         }
         line-edited(idx, line) => {
             root.interactive-manage-line-edited(idx, line);
+        }
+        pinned-lines-edited(idx, value) => {
+            root.interactive-manage-pinned-lines-edited(idx, value);
         }
         save => {
             root.save-interactive-manage();

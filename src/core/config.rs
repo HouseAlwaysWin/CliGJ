@@ -85,16 +85,16 @@ impl AppConfig {
     }
 
     /// `[[ui.interactive_commands]]` — display `name` + shell `command` (all launcher rows, including former "presets").
-    pub fn interactive_commands(&self) -> Vec<(String, String)> {
+    pub fn interactive_commands(&self) -> Vec<(String, String, usize)> {
         read_interactive_command_array(self, "interactive_commands")
     }
 
     /// Deprecated: `[[ui.interactive_custom_commands]]` — read only for migrating old files.
-    pub fn interactive_custom_commands(&self) -> Vec<(String, String)> {
+    pub fn interactive_custom_commands(&self) -> Vec<(String, String, usize)> {
         read_interactive_command_array(self, "interactive_custom_commands")
     }
 
-    pub fn set_interactive_commands(&mut self, pairs: &[(String, String)]) {
+    pub fn set_interactive_commands(&mut self, pairs: &[(String, String, usize)]) {
         let ui = self
             .data
             .entry("ui".to_string())
@@ -107,11 +107,15 @@ impl AppConfig {
         };
         let arr: Vec<toml::Value> = pairs
             .iter()
-            .filter(|(n, c)| !n.is_empty() && !c.is_empty())
-            .map(|(n, c)| {
+            .filter(|(n, c, _)| !n.is_empty() && !c.is_empty())
+            .map(|(n, c, pinned_footer_lines)| {
                 let mut t = toml::Table::new();
                 t.insert("name".to_string(), toml::Value::String(n.clone()));
                 t.insert("command".to_string(), toml::Value::String(c.clone()));
+                t.insert(
+                    "pinned_footer_lines".to_string(),
+                    toml::Value::Integer((*pinned_footer_lines).try_into().unwrap_or(i64::MAX)),
+                );
                 toml::Value::Table(t)
             })
             .collect();
@@ -299,7 +303,7 @@ fn read_shell_profiles_array(cfg: &AppConfig) -> Vec<(String, String, String)> {
     out
 }
 
-fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String)> {
+fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String, usize)> {
     let Some(ui) = cfg.data.get("ui").and_then(|v| v.as_table()) else {
         return Vec::new();
     };
@@ -323,11 +327,46 @@ fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, St
             .unwrap_or("")
             .trim()
             .to_string();
+        let pinned_footer_lines = t
+            .get("pinned_footer_lines")
+            .and_then(interactive_pinned_footer_lines_value)
+            .unwrap_or_else(|| default_interactive_pinned_footer_lines(&name, &command));
         if !name.is_empty() && !command.is_empty() {
-            out.push((name, command));
+            out.push((name, command, pinned_footer_lines));
         }
     }
     out
+}
+
+fn interactive_pinned_footer_lines_value(value: &toml::Value) -> Option<usize> {
+    if let Some(n) = value.as_integer() {
+        return usize::try_from(n).ok();
+    }
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .and_then(|s| s.parse::<usize>().ok())
+}
+
+fn normalize_interactive_program_name(text: &str) -> String {
+    let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
+    let leaf = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed);
+    leaf.strip_suffix(".exe").unwrap_or(leaf).to_ascii_lowercase()
+}
+
+fn default_interactive_pinned_footer_lines(name: &str, command: &str) -> usize {
+    let name = normalize_interactive_program_name(name);
+    let command = command
+        .split_whitespace()
+        .next()
+        .map(normalize_interactive_program_name)
+        .unwrap_or_default();
+    if name == "gemini" || command == "gemini" {
+        8
+    } else {
+        0
+    }
 }
 
 impl Default for AppConfig {

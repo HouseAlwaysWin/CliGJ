@@ -15,7 +15,9 @@ use serde_json::json;
 use crate::gui::ipc::{IpcBridge, IpcGuiCommand, IpcGuiResponse};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
-use crate::gui::ui_sync::{push_terminal_view_to_ui, terminal_scroll_top_for_tab};
+use crate::gui::ui_sync::{
+    push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
+};
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
@@ -312,7 +314,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         }
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let exp = terminal_scroll_top_for_tab(tab, vh);
-        let n = tab.terminal_lines.len();
+        let n = scrollable_terminal_line_count(tab);
         let interactive = tab.terminal_mode == TerminalMode::InteractiveAi;
         let interactive_follow = interactive && tab.interactive_follow_output;
 
@@ -387,7 +389,7 @@ fn flush_pending_scroll(ui: &AppWindow, s: &mut GuiState) {
     if s.current < s.tabs.len() {
         let cur = s.current;
         let tab = &mut s.tabs[cur];
-        let n = tab.terminal_lines.len() as i32;
+        let n = scrollable_terminal_line_count(tab) as i32;
         ui.set_ws_terminal_total_lines(n);
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
         let scroll = terminal_scroll_top_for_tab(tab, vh);

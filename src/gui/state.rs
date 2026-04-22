@@ -6,6 +6,7 @@ use std::collections::{HashMap, HashSet};
 use slint::{Image, SharedString, VecModel};
 
 use crate::terminal::render::ColoredLine;
+use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
 
 #[cfg(target_os = "windows")]
@@ -149,6 +150,8 @@ pub struct TabState {
     pub(crate) terminal_saved_scroll_top_px: f32,
     /// Interactive AI tabs follow the newest frame until the user manually scrolls up.
     pub(crate) interactive_follow_output: bool,
+    /// Manually configured count of terminal rows to keep fixed at the bottom for Interactive AI.
+    pub(crate) interactive_pinned_footer_lines: usize,
     /// Last PTY grid size actually sent to this tab. Avoid same-size resize on tab switch because
     /// many CLIs/TUIs treat it as a redraw and pollute scrollback with duplicate frames.
     pub(crate) last_pty_cols: u16,
@@ -206,6 +209,7 @@ impl TabState {
             terminal_scroll_resync_next: false,
             terminal_saved_scroll_top_px: 0.0,
             interactive_follow_output: true,
+            interactive_pinned_footer_lines: 0,
             last_pty_cols: 120,
             last_pty_rows: 40,
             #[cfg(target_os = "windows")]
@@ -322,8 +326,8 @@ pub struct GuiState {
     pub(crate) at_picker_open_snapshot: bool,
     /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
     pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
-    /// From config `[[ui.interactive_commands]]`: (display name, command line).
-    pub(crate) interactive_commands: Vec<(String, String)>,
+    /// From config `[[ui.interactive_commands]]`: (display name, command line, pinned footer rows).
+    pub(crate) interactive_commands: Vec<InteractiveCommandSpec>,
     /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`: name, command, optional workspace root.
     pub(crate) shell_profiles: Vec<(String, String, String)>,
     /// Startup page setting: preferred UI language label (currently persisted only).

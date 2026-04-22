@@ -6,6 +6,7 @@ export component GjViewer inherits Rectangle {
     in property <string> terminal-text;
     in property <string> terminal-font-family: "DejaVu Sans Mono";
     in-out property <[TermLine]> terminal-lines;
+    in property <[TermLine]> terminal-pinned-lines: [];
     /// Global index of `terminal-lines[0]` in the full document.
     in property <int> terminal-line-offset: 0;
     /// Full document line count (for scroll extent and selection clamping).
@@ -19,6 +20,7 @@ export component GjViewer inherits Rectangle {
     private property <length> char-width: 7.8px;
     private property <length> stripe-width: 3px;
     private property <length> scrollbar-gutter: 14px;
+    private property <length> pinned-footer-height: root.terminal-pinned-lines.length * root.row-height;
     callback selection-committed(int, int, int, int);
     callback viewport-changed;
     callback terminal-resize-requested(int, int);
@@ -234,7 +236,7 @@ export component GjViewer inherits Rectangle {
         x: root.terminal-left-inset;
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset);
-        height: parent.height;
+        height: max(0px, parent.height - root.pinned-footer-height);
         viewport-width: parent.width;
         viewport-height: max(root.row-height, root.terminal-total-lines * root.row-height);
 
@@ -317,6 +319,68 @@ export component GjViewer inherits Rectangle {
         }
     }
 
+    if (root.terminal-pinned-lines.length > 0) : Rectangle {
+        x: root.terminal-left-inset;
+        y: sv.height;
+        width: max(0px, parent.width - root.terminal-left-inset);
+        height: root.pinned-footer-height;
+        background: AppTheme.bg;
+        clip: true;
+
+        Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: 1px;
+            background: AppTheme.tab_separator;
+        }
+
+        for line[idx] in root.terminal-pinned-lines: Rectangle {
+            x: 0px;
+            y: idx * root.row-height;
+            width: parent.width;
+            height: root.row-height;
+            background: AppTheme.bg;
+
+            Rectangle {
+                x: 0px;
+                y: 0px;
+                width: root.stripe-width;
+                height: parent.height;
+                background: #00000000;
+            }
+
+            Rectangle {
+                x: root.stripe-width;
+                y: 0px;
+                width: parent.width - root.stripe-width;
+                height: parent.height;
+                clip: true;
+
+                HorizontalLayout {
+                    spacing: 0px;
+                    padding: 0px;
+                    alignment: start;
+
+                    for span in line.spans: Rectangle {
+                        background: span.bg;
+                        height: root.row-height;
+
+                        Text {
+                            text: span.text;
+                            color: span.fg;
+                            font-size: 13px;
+                            font-family: span.font-family == "" ? root.terminal-font-family : span.font-family;
+                            wrap: no-wrap;
+                            vertical-alignment: center;
+                            horizontal-alignment: left;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // Wheel layer: always active for terminal scrolling / interactive follow.
     TouchArea {
         z: 100;
@@ -345,7 +409,7 @@ export component GjViewer inherits Rectangle {
         x: root.terminal-left-inset;
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset);
-        height: parent.height;
+        height: sv.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                 root.begin-selection(self.mouse-x, self.mouse-y);
