@@ -1,7 +1,8 @@
 param(
     [Parameter(Mandatory = $true)]
     [string]$Version,
-    [switch]$PushTag
+    [switch]$PushTag,
+    [switch]$SkipBuildValidation
 )
 
 $ErrorActionPreference = "Stop"
@@ -20,6 +21,28 @@ if ($status) {
 $existingTag = git tag --list $Version
 if ($existingTag) {
     throw "Tag already exists: $Version"
+}
+
+if (-not $SkipBuildValidation) {
+    Write-Host "Running release prechecks (UI + VS Code extension)..." -ForegroundColor Cyan
+    cargo check
+
+    Push-Location "vscode-extension"
+    try {
+        npm ci
+        npm run compile
+        $tmpVsix = Join-Path $env:TEMP "cligj-$Version-local-check.vsix"
+        if (Test-Path $tmpVsix) {
+            Remove-Item $tmpVsix -Force
+        }
+        npx @vscode/vsce package --no-yarn --out $tmpVsix
+        if (Test-Path $tmpVsix) {
+            Remove-Item $tmpVsix -Force
+        }
+    }
+    finally {
+        Pop-Location
+    }
 }
 
 git tag -a $Version -m "Release $Version"
