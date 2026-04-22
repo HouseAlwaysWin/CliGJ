@@ -15,10 +15,13 @@ permissions:
   contents: write
 
 jobs:
-  build-and-release-windows:
+  build-app-windows:
     runs-on: windows-latest
     env:
       CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: "0"
+      SCCACHE_GHA_ENABLED: "true"
+      RUSTC_WRAPPER: sccache
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -41,15 +44,63 @@ jobs:
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Setup sccache
+        uses: mozilla-actions/sccache-action@v0.0.7
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: release-windows
+          cache-on-failure: true
+
+      - name: Build release binary
+        run: cargo build --release
+
+      - name: Prepare app asset
+        id: asset
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.tag.outputs.value }}"
+          $exeAssetName = "CliGJ-$tag-windows-x64.exe"
+          Copy-Item "target/release/CliGJ.exe" $exeAssetName -Force
+          "name=$exeAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Upload app artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cligj-app
+          path: ${{ steps.asset.outputs.name }}
+          if-no-files-found: error
+          retention-days: 7
+
+  build-vsix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          fi
+          if [[ "${TAG}" != v* ]]; then
+            echo "Release tag must start with 'v'. Got: ${TAG}"
+            exit 1
+          fi
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: npm
           cache-dependency-path: vscode-extension/package-lock.json
-
-      - name: Build release binary
-        run: cargo build --release
 
       - name: Build VS Code extension package
         working-directory: vscode-extension
@@ -58,29 +109,56 @@ jobs:
           npm run compile
           npx @vscode/vsce package --no-yarn
 
-      - name: Prepare assets
+      - name: Prepare VSIX asset
         id: asset
-        shell: pwsh
+        shell: bash
         run: |
-          $tag = "${{ steps.tag.outputs.value }}"
-          $exeAssetName = "CliGJ-$tag-windows-x64.exe"
-          Copy-Item "target/release/CliGJ.exe" $exeAssetName -Force
+          TAG="${{ steps.tag.outputs.value }}"
+          VSIX_SOURCE="$(ls vscode-extension/*.vsix | head -n 1)"
+          if [ -z "${VSIX_SOURCE}" ]; then
+            echo "VSIX package not found under vscode-extension/"
+            exit 1
+          fi
+          VSIX_ASSET="CliGJ-Bridge-${TAG}.vsix"
+          cp "${VSIX_SOURCE}" "${VSIX_ASSET}"
+          echo "name=${VSIX_ASSET}" >> "$GITHUB_OUTPUT"
 
-          $vsixSource = Get-ChildItem "vscode-extension/*.vsix" | Select-Object -First 1
-          if (-not $vsixSource) {
-            throw "VSIX package not found under vscode-extension/"
-          }
-          $vsixAssetName = "CliGJ-Bridge-$tag.vsix"
-          Copy-Item $vsixSource.FullName $vsixAssetName -Force
+      - name: Upload VSIX artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cligj-vsix
+          path: ${{ steps.asset.outputs.name }}
+          if-no-files-found: error
+          retention-days: 7
 
-          "exe=$exeAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
-          "vsix=$vsixAssetName" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+  create-release:
+    needs: [build-app-windows, build-vsix]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Resolve release tag
+        id: tag
+        shell: bash
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "${{ inputs.version }}" ]; then
+            TAG="${{ inputs.version }}"
+          fi
+          if [[ "${TAG}" != v* ]]; then
+            echo "Release tag must start with 'v'. Got: ${TAG}"
+            exit 1
+          fi
+          echo "value=${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Download all release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
 
       - name: Create GitHub release and upload assets
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.tag.outputs.value }}
           files: |
-            ${{ steps.asset.outputs.exe }}
-            ${{ steps.asset.outputs.vsix }}
+            dist/cligj-app/*
+            dist/cligj-vsix/*
           generate_release_notes: true
