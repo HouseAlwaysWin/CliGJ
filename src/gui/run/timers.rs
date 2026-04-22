@@ -20,35 +20,52 @@ use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
+const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
+
+fn line_has_visible_text(line: &ColoredLine) -> bool {
+    line.spans
+        .iter()
+        .any(|span| span.text.chars().any(|ch| !ch.is_whitespace()))
+}
+
 /// After each ConPTY snapshot, physical rows `[0, chunk_first)` are not in the slice. The old
 /// code kept them as **blank leading rows** in `terminal_lines`, so as scrollback grew,
 /// `len()` approached the full PTY height → huge black gap above the real output and O(n) work
 /// (clear loop + Slint scroll extent). Drop that prefix and bump `terminal_physical_origin`
 /// so the dense buffer only holds the snapshot tail (same idea as `enforce_scrollback_cap`).
 fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize) {
-    if leading == 0 || tab.terminal_lines.len() < leading {
+    if leading == 0 || tab.terminal_lines.is_empty() {
         return;
     }
-    tab.terminal_lines.drain(0..leading);
-    tab.terminal_physical_origin = tab.terminal_physical_origin.saturating_add(leading);
+    let drop_leading = tab
+        .terminal_lines
+        .iter()
+        .take(leading.min(tab.terminal_lines.len()))
+        .take_while(|line| line.blank && line.spans.is_empty())
+        .count();
+    if drop_leading == 0 {
+        return;
+    }
+    tab.terminal_lines.drain(0..drop_leading);
+    tab.terminal_physical_origin = tab.terminal_physical_origin.saturating_add(drop_leading);
 
     let take_rows = std::mem::take(&mut tab.terminal_model_rows);
     tab.terminal_model_rows = take_rows
         .into_iter()
         // `then_some` evaluates its argument eagerly; `k - leading` must run only when `k >= leading`.
-        .filter_map(|(k, v)| (k >= leading).then(|| (k - leading, v)))
+        .filter_map(|(k, v)| (k >= drop_leading).then(|| (k - drop_leading, v)))
         .collect();
 
     let take_hashes = std::mem::take(&mut tab.terminal_model_hashes);
     tab.terminal_model_hashes = take_hashes
         .into_iter()
-        .filter_map(|(k, v)| (k >= leading).then(|| (k - leading, v)))
+        .filter_map(|(k, v)| (k >= drop_leading).then(|| (k - drop_leading, v)))
         .collect();
 
     let take_dirty = std::mem::take(&mut tab.terminal_model_dirty);
     tab.terminal_model_dirty = take_dirty
         .into_iter()
-        .filter_map(|k| (k >= leading).then(|| k - leading))
+        .filter_map(|k| (k >= drop_leading).then(|| k - drop_leading))
         .collect();
 
     tab.last_window_first = usize::MAX;
@@ -158,17 +175,26 @@ fn apply_pending_updates(
             replaced_with_vt_lines = true;
 
             if update.reset_terminal_buffer {
-                tab.terminal_lines.clear();
                 tab.terminal_model_rows.clear();
                 tab.terminal_model_hashes.clear();
                 tab.terminal_model_dirty.clear();
-                tab.terminal_physical_origin = 0;
                 tab.last_window_first = usize::MAX;
                 tab.last_window_last = usize::MAX;
                 tab.last_window_total = usize::MAX;
-                tab.interactive_history_lines.clear();
-                tab.interactive_frame_lines.clear();
-                tab.interactive_last_archived_signature.clear();
+            }
+
+            if chunk_first_idx < tab.terminal_physical_origin {
+                let prepend = tab.terminal_physical_origin - chunk_first_idx;
+                let mut rebased = vec![ColoredLine::default(); prepend];
+                rebased.append(&mut tab.terminal_lines);
+                tab.terminal_lines = rebased;
+                tab.terminal_physical_origin = chunk_first_idx;
+                tab.terminal_model_rows.clear();
+                tab.terminal_model_hashes.clear();
+                tab.terminal_model_dirty.clear();
+                tab.last_window_first = usize::MAX;
+                tab.last_window_last = usize::MAX;
+                tab.last_window_total = usize::MAX;
             }
 
             let origin = tab.terminal_physical_origin;
@@ -230,11 +256,31 @@ fn apply_pending_updates(
             // 裁掉游標以下的尾端空白行（PTY screen 的空白填充），
             // 避免 terminal_total_lines 過大導致新分頁出現不必要的滾輪。
             let cursor_local_end = tab.terminal_cursor_row.map(|r| r + 1).unwrap_or(0);
-            while tab.terminal_lines.len() > cursor_local_end {
-                if tab.terminal_lines.last().map_or(false, |l| l.blank) {
+            let interactive_tail_end = tab
+                .terminal_lines
+                .iter()
+                .rposition(line_has_visible_text)
+                .map(|idx| (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP).min(tab.terminal_lines.len()))
+                .unwrap_or(0);
+            let trim_floor = if tab.terminal_mode == TerminalMode::InteractiveAi {
+                interactive_tail_end
+            } else {
+                cursor_local_end
+            };
+            while tab.terminal_lines.len() > trim_floor {
+                if tab
+                    .terminal_lines
+                    .last()
+                    .is_some_and(|line| !line_has_visible_text(line))
+                {
                     tab.terminal_lines.pop();
                 } else {
                     break;
+                }
+            }
+            if let Some(cursor_row) = tab.terminal_cursor_row {
+                if cursor_row >= tab.terminal_lines.len() {
+                    tab.terminal_cursor_row = None;
                 }
             }
 
