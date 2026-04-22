@@ -60,11 +60,14 @@ fn set_shell_manage_rows(ui: &AppWindow, rows: Vec<InteractiveCmdEditorRow>) {
     ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
 
-fn refresh_interactive_tab_view(ui: &AppWindow, tab: &mut crate::gui::state::TabState) {
+fn refresh_terminal_tab_view(ui: &AppWindow, tab: &mut crate::gui::state::TabState) {
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     let saved = clamp_saved_scroll_top(tab, vh);
     tab.terminal_saved_scroll_top_px = saved;
-    let scroll = if tab.interactive_follow_output {
+    let scroll = if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output
+    {
+        terminal_scroll_top_for_tab(tab, vh)
+    } else if tab.auto_scroll {
         terminal_scroll_top_for_tab(tab, vh)
     } else {
         saved
@@ -650,7 +653,7 @@ fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 ui.set_ws_interactive_pin_lines(SharedString::from(
                     s.tabs[current].interactive_pinned_footer_lines.to_string().as_str(),
                 ));
-                refresh_interactive_tab_view(&ui, &mut s.tabs[current]);
+                refresh_terminal_tab_view(&ui, &mut s.tabs[current]);
             }
         }
     });
@@ -1344,9 +1347,7 @@ fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge
         tab.interactive_pinned_footer_lines = parsed;
         tab.interactive_pinned_footer_override = Some(parsed);
         ui.set_ws_interactive_pin_lines(SharedString::from(parsed.to_string().as_str()));
-        if tab.terminal_mode == TerminalMode::InteractiveAi {
-            refresh_interactive_tab_view(&ui, tab);
-        }
+        refresh_terminal_tab_view(&ui, tab);
     });
 
     let app_weak = app.as_weak();

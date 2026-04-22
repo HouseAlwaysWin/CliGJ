@@ -31,9 +31,6 @@ thread_local! {
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
 /// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
 pub(crate) fn interactive_pinned_footer_start(tab: &TabState) -> Option<usize> {
-    if tab.terminal_mode != TerminalMode::InteractiveAi {
-        return None;
-    }
     let pinned_rows = tab.interactive_pinned_footer_lines;
     if pinned_rows == 0 {
         return None;
@@ -578,7 +575,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
-    ui.set_ws_interactive_pin_lines_visible(tab.terminal_mode == TerminalMode::InteractiveAi);
+    ui.set_ws_interactive_pin_lines_visible(true);
     ui.set_ws_interactive_pin_lines(SharedString::from(
         tab.interactive_pinned_footer_lines.to_string().as_str(),
     ));
