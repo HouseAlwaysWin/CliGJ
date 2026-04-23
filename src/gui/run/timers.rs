@@ -46,6 +46,12 @@ fn line_has_shell_preamble_marker(line: &ColoredLine) -> bool {
 fn line_has_interactive_ai_marker(line: &ColoredLine) -> bool {
     let text = line_plain_text(line).to_ascii_lowercase();
     text.contains("gemini cli")
+        || text.contains("openai codex")
+        || text.contains(">_ openai codex")
+        || text.contains("implement {feature}")
+        || text.contains("/model to change")
+        || text.contains("claude")
+        || text.contains("copilot")
         || text.contains("waiting for authentication")
         || text.contains("signed in with google")
         || text.contains("about gemini")
@@ -1155,4 +1161,35 @@ pub(crate) fn spawn_inject_startup_timer(
         }
     });
     timer
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::terminal::render::ColoredSpan;
+
+    fn line(text: &str) -> ColoredLine {
+        ColoredLine {
+            blank: false,
+            spans: vec![ColoredSpan {
+                text: text.to_string(),
+                fg: [240, 240, 240],
+                bg: [18, 18, 18],
+            }],
+        }
+    }
+
+    #[test]
+    fn codex_snapshot_with_shell_preamble_is_trimmed_not_dropped() {
+        let mut lines = vec![
+            line("Microsoft Windows [Version 10.0.19045]"),
+            line("(c) Microsoft Corporation."),
+            line("D:\\Projects\\CliGJ>codex"),
+            line(">_ OpenAI Codex (v0.123.0)"),
+            line("model: gpt-5.4 xhigh /model to change"),
+        ];
+
+        assert!(!trim_or_drop_shell_preamble_snapshot(&mut lines));
+        assert_eq!(line_plain_text(&lines[0]), ">_ OpenAI Codex (v0.123.0)");
+    }
 }
