@@ -1,6 +1,6 @@
 import { AppTheme } from "theme.slint";
 import { LogicalKey } from "key_labels.slint";
-import { ScrollView, TextEdit } from "std-widgets.slint";
+import { ComboBox, ScrollView, TextEdit } from "std-widgets.slint";
 import { GjTerminalTabBar } from "components/gj_terminal_tab_bar.slint";
 import { GjWorkspace } from "components/gj_workspace.slint";
 import { GjWindowChrome } from "components/gj_window_chrome.slint";
@@ -80,6 +80,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-update-current-version: "";
     in-out property <string> ws-update-selected-version: "";
     in-out property <string> ws-update-status-text: "";
+    in-out property <bool> ws-update-confirm-open: false;
     in-out property <bool> ws-about-open: false;
     in-out property <string> ws-about-version: "";
     in-out property <string> ws-about-author: "";
@@ -489,6 +490,7 @@ export component AppWindow inherits Window {
             width: parent.width;
             height: parent.height;
             clicked => {
+                root.ws-update-confirm-open = false;
                 root.close-update-dialog();
             }
         }
@@ -532,44 +534,29 @@ export component AppWindow inherits Window {
                     font-weight: 600;
                 }
 
-                ScrollView {
-                    vertical-stretch: 1;
-                    horizontal-scrollbar-policy: always-off;
-                    vertical-scrollbar-policy: as-needed;
+                Rectangle {
+                    height: 34px;
+                    border-width: 1px;
+                    border-color: AppTheme.prompt_chrome_border;
+                    border-radius: 8px;
+                    background: #00000000;
 
-                    VerticalLayout {
-                        spacing: 4px;
-                        alignment: start;
-
-                        for ver in root.ws-update-versions: Rectangle {
-                            height: 28px;
-                            border-radius: 6px;
-                            border-width: 1px;
-                            border-color: root.ws-update-selected-version == ver ? AppTheme.accent : AppTheme.prompt_chrome_border;
-                            background: (root.ws-update-selected-version == ver || ver_ta.has-hover) ? #2d2d30 : #00000000;
-
-                            Text {
-                                text: ver;
-                                color: AppTheme.text;
-                                vertical-alignment: center;
-                                horizontal-alignment: left;
-                                x: 10px;
-                                width: parent.width - 16px;
-                                font-size: 12px;
-                            }
-
-                            ver_ta := TouchArea {
-                                clicked => {
-                                    root.ws-update-selected-version = ver;
-                                    root.update-version-selected(ver);
-                                }
-                            }
+                    ComboBox {
+                        width: parent.width;
+                        model: root.ws-update-versions;
+                        current-value <=> root.ws-update-selected-version;
+                        selected(ver) => {
+                            root.ws-update-confirm-open = false;
+                            root.ws-update-selected-version = ver;
+                            root.update-version-selected(ver);
                         }
                     }
                 }
 
                 Text {
-                    text: root.ws-update-status-text;
+                    text: root.ws-update-confirm-open
+                        ? (@tr("已選擇版本：") + root.ws-update-selected-version + @tr("。按下「確認切換」後將下載新版並關閉目前視窗。"))
+                        : root.ws-update-status-text;
                     color: AppTheme.text_muted;
                     font-size: 12px;
                     wrap: word-wrap;
@@ -600,6 +587,7 @@ export component AppWindow inherits Window {
                         refresh_ta := TouchArea {
                             clicked => {
                                 root.refresh-available-versions-requested();
+                                root.ws-update-confirm-open = false;
                             }
                         }
                     }
@@ -612,7 +600,7 @@ export component AppWindow inherits Window {
                         border-radius: 15px;
                         background: apply_ta.has-hover ? #35548a : #234171;
                         Text {
-                            text: @tr("切換版本");
+                            text: root.ws-update-confirm-open ? @tr("確認切換") : @tr("切換版本");
                             color: #ffffff;
                             horizontal-alignment: center;
                             vertical-alignment: center;
@@ -622,7 +610,13 @@ export component AppWindow inherits Window {
                         }
                         apply_ta := TouchArea {
                             clicked => {
-                                root.apply-update-version-requested(root.ws-update-selected-version);
+                                if !root.ws-update-confirm-open {
+                                    root.ws-update-confirm-open = true;
+                                    root.ws-update-status-text = @tr("再次按下「確認切換」開始更新，或按「關閉」取消。");
+                                } else {
+                                    root.ws-update-confirm-open = false;
+                                    root.apply-update-version-requested(root.ws-update-selected-version);
+                                }
                             }
                         }
                     }
@@ -645,6 +639,7 @@ export component AppWindow inherits Window {
                         }
                         close_update_ta := TouchArea {
                             clicked => {
+                                root.ws-update-confirm-open = false;
                                 root.close-update-dialog();
                             }
                         }
