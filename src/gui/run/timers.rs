@@ -117,7 +117,11 @@ fn longest_snapshot_prefix_seen(history: &[ColoredLine], snapshot: &[ColoredLine
     best
 }
 
-fn append_interactive_snapshot(tab: &mut TabState, lines: &[ColoredLine]) {
+fn append_interactive_snapshot_with_reflow_policy(
+    tab: &mut TabState,
+    lines: &[ColoredLine],
+    replace_reflow_without_overlap: bool,
+) {
     let snapshot: Vec<ColoredLine> = lines
         .iter()
         .filter(|line| line_has_visible_text(line))
@@ -133,7 +137,11 @@ fn append_interactive_snapshot(tab: &mut TabState, lines: &[ColoredLine]) {
     let tail_overlap = longest_history_snapshot_overlap(&tab.interactive_history_lines, &snapshot);
     let seen_overlap = longest_snapshot_prefix_seen(&tab.interactive_history_lines, &snapshot);
     let overlap = tail_overlap.max(seen_overlap);
-    if overlap == 0 && !tab.interactive_history_lines.is_empty() && snapshot.len() > 3 {
+    if replace_reflow_without_overlap
+        && overlap == 0
+        && !tab.interactive_history_lines.is_empty()
+        && snapshot.len() > 3
+    {
         // Resize reflow can rewrite the same logical screen with different line breaks.
         // Exact line overlap fails in that case, so replace the stale-width archive instead
         // of appending the reflowed snapshot as duplicate content.
@@ -148,8 +156,133 @@ fn append_interactive_snapshot(tab: &mut TabState, lines: &[ColoredLine]) {
     }
 }
 
+fn append_interactive_snapshot(tab: &mut TabState, lines: &[ColoredLine]) {
+    append_interactive_snapshot_with_reflow_policy(tab, lines, true);
+}
+
+fn append_interactive_snapshot_preserving_history(tab: &mut TabState, lines: &[ColoredLine]) {
+    append_interactive_snapshot_with_reflow_policy(tab, lines, false);
+}
+
 fn append_interactive_history_block(tab: &mut TabState, lines: &[ColoredLine]) {
     append_interactive_snapshot(tab, lines);
+}
+
+fn visible_interactive_lines(lines: &[ColoredLine]) -> Vec<ColoredLine> {
+    lines
+        .iter()
+        .filter(|line| line_has_visible_text(line))
+        .cloned()
+        .collect()
+}
+
+fn interactive_frame_signature(lines: &[ColoredLine]) -> String {
+    let mut signature = String::new();
+    for line in lines.iter().filter(|line| line_has_visible_text(line)) {
+        let text = line_plain_text(line);
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !signature.is_empty() {
+            signature.push('\n');
+        }
+        signature.push_str(trimmed);
+    }
+    signature
+}
+
+fn frame_contains_codex_marker(lines: &[ColoredLine]) -> bool {
+    lines.iter().any(|line| {
+        let text = line_plain_text(line).to_ascii_lowercase();
+        text.contains("openai codex") || text.contains(">_ openai codex")
+    })
+}
+
+fn is_codex_interactive_frame(tab: &TabState, lines: &[ColoredLine]) -> bool {
+    tab.interactive_launcher_program.eq_ignore_ascii_case("codex")
+        || frame_contains_codex_marker(lines)
+}
+
+fn codex_footer_start(lines: &[ColoredLine]) -> usize {
+    lines
+        .iter()
+        .rposition(|line| {
+            let text = line_plain_text(line);
+            text.trim_start().starts_with('\u{203a}')
+        })
+        .unwrap_or(lines.len())
+}
+
+fn codex_frame_key(lines: &[ColoredLine]) -> Option<String> {
+    let body_end = codex_footer_start(lines);
+    let body = &lines[..body_end];
+
+    for line in body {
+        let text = line_plain_text(line);
+        let trimmed = text.trim();
+        if trimmed.starts_with('/') && !trimmed.contains("      ") {
+            return Some(format!("cmd:{trimmed}"));
+        }
+    }
+
+    body.iter().rev().find_map(|line| {
+        let text = line_plain_text(line);
+        let trimmed = text.trim();
+        trimmed
+            .strip_prefix('\u{203a}')
+            .map(str::trim)
+            .filter(|prompt| !prompt.is_empty())
+            .map(|prompt| format!("prompt:{prompt}"))
+    })
+}
+
+fn longest_codex_viewport_overlap(current: &[ColoredLine], next: &[ColoredLine]) -> usize {
+    let max_overlap = current.len().min(next.len());
+    for overlap in (3..=max_overlap).rev() {
+        if current[current.len() - overlap..] == next[..overlap] {
+            return overlap;
+        }
+    }
+    0
+}
+
+fn archive_codex_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
+    let signature = interactive_frame_signature(lines);
+    if signature.is_empty() || signature == tab.interactive_last_archived_signature {
+        return;
+    }
+    append_interactive_snapshot_preserving_history(tab, lines);
+    tab.interactive_last_archived_signature = signature;
+}
+
+fn maybe_archive_codex_frame_before_replace(tab: &mut TabState, next_frame: &[ColoredLine]) {
+    if tab.interactive_frame_lines.is_empty()
+        || next_frame.is_empty()
+        || (!is_codex_interactive_frame(tab, &tab.interactive_frame_lines)
+            && !is_codex_interactive_frame(tab, next_frame))
+    {
+        return;
+    }
+
+    let current_visible = visible_interactive_lines(&tab.interactive_frame_lines);
+    let next_visible = visible_interactive_lines(next_frame);
+    if current_visible.is_empty() || next_visible.is_empty() {
+        return;
+    }
+
+    let viewport_overlap = longest_codex_viewport_overlap(&current_visible, &next_visible);
+    if viewport_overlap > 0 && viewport_overlap < current_visible.len() {
+        let dropped_len = current_visible.len() - viewport_overlap;
+        archive_codex_block_if_new(tab, &current_visible[..dropped_len]);
+        return;
+    }
+
+    let current_key = codex_frame_key(&current_visible);
+    let next_key = codex_frame_key(&next_visible);
+    if (current_key.is_some() || next_key.is_some()) && current_key != next_key {
+        archive_codex_block_if_new(tab, &current_visible);
+    }
 }
 
 fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
@@ -459,10 +592,14 @@ fn apply_pending_updates(
                     } else {
                         if update.reset_terminal_buffer {
                             // Resize snapshots are a reflowed baseline; old frame rows are stale.
-                            tab.interactive_history_lines.clear();
+                            if !is_codex_interactive_frame(tab, &snapshot_lines) {
+                                tab.interactive_history_lines.clear();
+                                tab.interactive_last_archived_signature.clear();
+                            }
                             tab.interactive_frame_lines.clear();
                             tab.terminal_lines.clear();
                         } else {
+                            maybe_archive_codex_frame_before_replace(tab, &snapshot_lines);
                             archive_dropped_interactive_prefix(tab, chunk_first_idx);
                         }
                         tab.interactive_frame_lines = snapshot_lines;
@@ -493,7 +630,10 @@ fn apply_pending_updates(
                 if update.reset_terminal_buffer {
                     // Resize rewrites/reflows the current screen. Do not archive the old frame;
                     // the next snapshot is the replacement baseline.
-                    tab.interactive_history_lines.clear();
+                    if !is_codex_interactive_frame(tab, &tab.interactive_frame_lines) {
+                        tab.interactive_history_lines.clear();
+                        tab.interactive_last_archived_signature.clear();
+                    }
                     tab.interactive_frame_lines.clear();
                     tab.terminal_lines.clear();
                     tab.terminal_physical_origin = chunk_first_idx;
@@ -1191,5 +1331,74 @@ mod tests {
 
         assert!(!trim_or_drop_shell_preamble_snapshot(&mut lines));
         assert_eq!(line_plain_text(&lines[0]), ">_ OpenAI Codex (v0.123.0)");
+    }
+
+    #[test]
+    fn codex_frame_key_uses_submitted_lines_not_footer_input() {
+        let autocomplete = vec![
+            line("│  >_ OpenAI Codex (v0.123.0)"),
+            line("  /status      show current session configuration and token usage"),
+            line("\u{203a} /st"),
+        ];
+        assert_eq!(codex_frame_key(&autocomplete), None);
+
+        let status = vec![
+            line("  /status      show current session configuration and token usage"),
+            line("/status"),
+            line("│  >_ OpenAI Codex (v0.123.0)"),
+            line("\u{203a} Use /skills to list available skills"),
+        ];
+        assert_eq!(codex_frame_key(&status), Some("cmd:/status".to_string()));
+    }
+
+    #[test]
+    fn codex_frame_transition_archives_previous_frame_once() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut tab = TabState::new(1, tx, None);
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.interactive_launcher_program = "codex".to_string();
+        tab.interactive_frame_lines = vec![
+            line("╭────────────────────────╮"),
+            line("│  >_ OpenAI Codex       │"),
+            line("│  Welcome               │"),
+            line("\u{203a} Use /skills to list available skills"),
+        ];
+        let status = vec![
+            line("/status"),
+            line("╭────────────────────────╮"),
+            line("│  >_ OpenAI Codex       │"),
+            line("│  Model: gpt-5.4        │"),
+            line("\u{203a} Use /skills to list available skills"),
+        ];
+
+        maybe_archive_codex_frame_before_replace(&mut tab, &status);
+        let archived_len = tab.interactive_history_lines.len();
+        assert!(archived_len > 0);
+        assert!(tab
+            .interactive_history_lines
+            .iter()
+            .any(|line| line_plain_text(line).contains("Welcome")));
+
+        maybe_archive_codex_frame_before_replace(&mut tab, &status);
+        assert_eq!(tab.interactive_history_lines.len(), archived_len);
+    }
+
+    #[test]
+    fn codex_footer_typing_does_not_archive_each_prompt_edit() {
+        let (tx, _rx) = std::sync::mpsc::channel();
+        let mut tab = TabState::new(1, tx, None);
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.interactive_launcher_program = "codex".to_string();
+        tab.interactive_frame_lines = vec![
+            line("│  >_ OpenAI Codex       │"),
+            line("\u{203a} /st"),
+        ];
+        let next = vec![
+            line("│  >_ OpenAI Codex       │"),
+            line("\u{203a} /sta"),
+        ];
+
+        maybe_archive_codex_frame_before_replace(&mut tab, &next);
+        assert!(tab.interactive_history_lines.is_empty());
     }
 }
