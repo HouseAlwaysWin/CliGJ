@@ -383,6 +383,7 @@ pub enum ControlCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InteractiveFloorReset {
     ModeStart,
+    Viewport,
 }
 
 pub fn start_reader_thread(
@@ -512,6 +513,13 @@ pub fn start_reader_thread(
                         last_snapshot_fp = None;
                         if size_changed {
                             pending_reset = true;
+                            if render_mode == ReaderRenderMode::InteractiveAi
+                                && pending_interactive_floor_reset
+                                    != Some(InteractiveFloorReset::ModeStart)
+                            {
+                                pending_interactive_floor_reset =
+                                    Some(InteractiveFloorReset::Viewport);
+                            }
                             resize_settle_deadline =
                                 Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
                         }
@@ -561,13 +569,15 @@ pub fn start_reader_thread(
                             let cursor = term.cursor_pos();
                             screen.phys_row(cursor.y)
                         }
+                        InteractiveFloorReset::Viewport => total.saturating_sub(term_rows),
                     };
                 }
             }
             let (start, end, total_for_render, filled) = match render_mode {
                 ReaderRenderMode::InteractiveAi => {
-                    // Interactive launchers repaint the viewport on resize. Keep GUI scrollback,
-                    // but never pull in full-screen frames that predate the latest reset.
+                    // Interactive launchers repaint the viewport on resize. Win10 ConPTY can leave
+                    // prior repaint frames in scrollback, so resize resets re-anchor at the active
+                    // viewport before this tail window is selected.
                     let snapshot_row_count = snapshot_cap.min(total.max(1));
                     let floor = interactive_snapshot_floor.min(total);
                     let start = total.saturating_sub(snapshot_row_count).max(floor);
