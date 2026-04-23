@@ -160,6 +160,10 @@ pub struct TabState {
     pub(crate) terminal_pinned_footer_override: Option<usize>,
     /// Normalized launcher program name for the current interactive tab, used for live config updates.
     pub(crate) interactive_launcher_program: String,
+    /// Case-insensitive visible-text markers that identify the active Interactive AI screen.
+    pub(crate) interactive_markers: Vec<String>,
+    /// Archive rewritten viewport frames for TUIs that redraw instead of emitting scrollback.
+    pub(crate) interactive_archive_repainted_frames: bool,
     /// Append-only raw PTY event log for replay/debugging. This records bytes/control events before
     /// GUI-level interpretation, so it survives render-mode filtering and resize heuristics.
     pub(crate) raw_pty_events: Vec<RawPtyEvent>,
@@ -292,6 +296,8 @@ impl TabState {
             terminal_pinned_footer_lines: 0,
             terminal_pinned_footer_override: None,
             interactive_launcher_program: String::new(),
+            interactive_markers: Vec::new(),
+            interactive_archive_repainted_frames: false,
             raw_pty_events: Vec::new(),
             raw_pty_event_bytes: 0,
             last_pty_cols: 120,
@@ -387,6 +393,8 @@ impl TabState {
         self.interactive_history_lines.clear();
         self.interactive_frame_lines.clear();
         self.interactive_last_archived_signature.clear();
+        self.interactive_markers.clear();
+        self.interactive_archive_repainted_frames = false;
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();
@@ -642,7 +650,7 @@ pub struct GuiState {
     pub(crate) at_picker_open_snapshot: bool,
     /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
     pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
-    /// From config `[[ui.interactive_commands]]`: (display name, command line, pinned footer rows).
+    /// From config `[[ui.interactive_commands]]`.
     pub(crate) interactive_commands: Vec<InteractiveCommandSpec>,
     /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`: name, command, optional workspace root.
     pub(crate) shell_profiles: Vec<(String, String, String)>,

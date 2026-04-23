@@ -8,6 +8,29 @@ pub struct AppConfig {
     pub data: toml::Table,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InteractiveCommandConfig {
+    pub name: String,
+    pub command: String,
+    pub pinned_footer_lines: usize,
+    pub markers: Vec<String>,
+    pub archive_repainted_frames: bool,
+}
+
+impl InteractiveCommandConfig {
+    pub fn with_defaults(name: String, command: String, pinned_footer_lines: usize) -> Self {
+        Self {
+            markers: default_interactive_markers(&name, &command),
+            archive_repainted_frames: default_interactive_archive_repainted_frames(
+                &name, &command,
+            ),
+            name,
+            command,
+            pinned_footer_lines,
+        }
+    }
+}
+
 pub fn config_dir_path() -> Result<PathBuf> {
     let base = dirs::config_dir().ok_or(AppError::MissingConfigDir)?;
     Ok(base.join("cligj"))
@@ -84,17 +107,17 @@ impl AppConfig {
         Ok(())
     }
 
-    /// `[[ui.interactive_commands]]` — display `name` + shell `command` (all launcher rows, including former "presets").
-    pub fn interactive_commands(&self) -> Vec<(String, String, usize)> {
+    /// `[[ui.interactive_commands]]` — display `name` + shell `command` plus runtime detection rules.
+    pub fn interactive_commands(&self) -> Vec<InteractiveCommandConfig> {
         read_interactive_command_array(self, "interactive_commands")
     }
 
     /// Deprecated: `[[ui.interactive_custom_commands]]` — read only for migrating old files.
-    pub fn interactive_custom_commands(&self) -> Vec<(String, String, usize)> {
+    pub fn interactive_custom_commands(&self) -> Vec<InteractiveCommandConfig> {
         read_interactive_command_array(self, "interactive_custom_commands")
     }
 
-    pub fn set_interactive_commands(&mut self, pairs: &[(String, String, usize)]) {
+    pub fn set_interactive_commands(&mut self, pairs: &[InteractiveCommandConfig]) {
         let ui = self
             .data
             .entry("ui".to_string())
@@ -107,14 +130,33 @@ impl AppConfig {
         };
         let arr: Vec<toml::Value> = pairs
             .iter()
-            .filter(|(n, c, _)| !n.is_empty() && !c.is_empty())
-            .map(|(n, c, pinned_footer_lines)| {
+            .filter(|spec| !spec.name.is_empty() && !spec.command.is_empty())
+            .map(|spec| {
                 let mut t = toml::Table::new();
-                t.insert("name".to_string(), toml::Value::String(n.clone()));
-                t.insert("command".to_string(), toml::Value::String(c.clone()));
+                t.insert("name".to_string(), toml::Value::String(spec.name.clone()));
+                t.insert(
+                    "command".to_string(),
+                    toml::Value::String(spec.command.clone()),
+                );
                 t.insert(
                     "pinned_footer_lines".to_string(),
-                    toml::Value::Integer((*pinned_footer_lines).try_into().unwrap_or(i64::MAX)),
+                    toml::Value::Integer(
+                        spec.pinned_footer_lines.try_into().unwrap_or(i64::MAX),
+                    ),
+                );
+                t.insert(
+                    "markers".to_string(),
+                    toml::Value::Array(
+                        spec.markers
+                            .iter()
+                            .filter(|marker| !marker.trim().is_empty())
+                            .map(|marker| toml::Value::String(marker.trim().to_string()))
+                            .collect(),
+                    ),
+                );
+                t.insert(
+                    "archive_repainted_frames".to_string(),
+                    toml::Value::Boolean(spec.archive_repainted_frames),
                 );
                 toml::Value::Table(t)
             })
@@ -303,7 +345,7 @@ fn read_shell_profiles_array(cfg: &AppConfig) -> Vec<(String, String, String)> {
     out
 }
 
-fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, String, usize)> {
+fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<InteractiveCommandConfig> {
     let Some(ui) = cfg.data.get("ui").and_then(|v| v.as_table()) else {
         return Vec::new();
     };
@@ -332,7 +374,21 @@ fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<(String, St
             .and_then(interactive_pinned_footer_lines_value)
             .unwrap_or_else(|| default_interactive_pinned_footer_lines(&name, &command));
         if !name.is_empty() && !command.is_empty() {
-            out.push((name, command, pinned_footer_lines));
+            let markers = t
+                .get("markers")
+                .map(interactive_marker_values)
+                .unwrap_or_else(|| default_interactive_markers(&name, &command));
+            let archive_repainted_frames = t
+                .get("archive_repainted_frames")
+                .and_then(interactive_bool_value)
+                .unwrap_or_else(|| default_interactive_archive_repainted_frames(&name, &command));
+            out.push(InteractiveCommandConfig {
+                name,
+                command,
+                pinned_footer_lines,
+                markers,
+                archive_repainted_frames,
+            });
         }
     }
     out
@@ -349,24 +405,86 @@ fn interactive_pinned_footer_lines_value(value: &toml::Value) -> Option<usize> {
         .and_then(|s| s.parse::<usize>().ok())
 }
 
+fn interactive_marker_values(value: &toml::Value) -> Vec<String> {
+    if let Some(arr) = value.as_array() {
+        return arr
+            .iter()
+            .filter_map(|item| item.as_str())
+            .map(str::trim)
+            .filter(|item| !item.is_empty())
+            .map(ToString::to_string)
+            .collect();
+    }
+    value
+        .as_str()
+        .map(str::trim)
+        .filter(|item| !item.is_empty())
+        .map(|item| vec![item.to_string()])
+        .unwrap_or_default()
+}
+
+fn interactive_bool_value(value: &toml::Value) -> Option<bool> {
+    if let Some(value) = value.as_bool() {
+        return Some(value);
+    }
+    match value.as_str()?.trim().to_ascii_lowercase().as_str() {
+        "true" | "1" | "yes" | "on" => Some(true),
+        "false" | "0" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
 fn normalize_interactive_program_name(text: &str) -> String {
     let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
     let leaf = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed);
     leaf.strip_suffix(".exe").unwrap_or(leaf).to_ascii_lowercase()
 }
 
-fn default_interactive_pinned_footer_lines(name: &str, command: &str) -> usize {
-    let name = normalize_interactive_program_name(name);
-    let command = command
+fn interactive_program_name(name: &str, command: &str) -> String {
+    command
         .split_whitespace()
         .next()
         .map(normalize_interactive_program_name)
-        .unwrap_or_default();
-    if name == "gemini" || command == "gemini" {
+        .filter(|program| !program.is_empty())
+        .unwrap_or_else(|| normalize_interactive_program_name(name))
+}
+
+fn default_interactive_pinned_footer_lines(name: &str, command: &str) -> usize {
+    if interactive_program_name(name, command) == "gemini" {
         8
     } else {
         0
     }
+}
+
+fn default_interactive_markers(name: &str, command: &str) -> Vec<String> {
+    match interactive_program_name(name, command).as_str() {
+        "gemini" => vec![
+            "gemini cli",
+            "waiting for authentication",
+            "signed in with google",
+            "about gemini",
+            "gemini.md",
+            "? for shortcuts",
+            "type your message",
+        ],
+        "codex" => vec![
+            "openai codex",
+            ">_ openai codex",
+            "implement {feature}",
+            "/model to change",
+        ],
+        "claude" => vec!["claude"],
+        "copilot" => vec!["copilot"],
+        _ => Vec::new(),
+    }
+    .into_iter()
+    .map(ToString::to_string)
+    .collect()
+}
+
+fn default_interactive_archive_repainted_frames(name: &str, command: &str) -> bool {
+    interactive_program_name(name, command) == "codex"
 }
 
 impl Default for AppConfig {
@@ -415,5 +533,61 @@ fn value_to_string(value: &toml::Value) -> String {
         toml::Value::Boolean(b) => b.to_string(),
         toml::Value::Datetime(dt) => dt.to_string(),
         toml::Value::Array(_) | toml::Value::Table(_) => value.to_string(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn config_from_toml(input: &str) -> AppConfig {
+        let value: toml::Value = toml::from_str(input).unwrap();
+        AppConfig {
+            data: value.as_table().unwrap().clone(),
+        }
+    }
+
+    #[test]
+    fn interactive_command_reads_custom_markers_and_repaint_policy() {
+        let cfg = config_from_toml(
+            r#"
+            [[ui.interactive_commands]]
+            name = "Acme AI"
+            command = "acme-ai --tui"
+            pinned_footer_lines = 2
+            markers = ["Acme AI", "Ready for input"]
+            archive_repainted_frames = true
+            "#,
+        );
+
+        let commands = cfg.interactive_commands();
+        assert_eq!(commands.len(), 1);
+        assert_eq!(commands[0].name, "Acme AI");
+        assert_eq!(commands[0].command, "acme-ai --tui");
+        assert_eq!(commands[0].pinned_footer_lines, 2);
+        assert_eq!(
+            commands[0].markers,
+            vec!["Acme AI".to_string(), "Ready for input".to_string()]
+        );
+        assert!(commands[0].archive_repainted_frames);
+    }
+
+    #[test]
+    fn interactive_command_applies_builtin_codex_defaults_when_missing() {
+        let cfg = config_from_toml(
+            r#"
+            [[ui.interactive_commands]]
+            name = "Codex"
+            command = "codex"
+            "#,
+        );
+
+        let commands = cfg.interactive_commands();
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0]
+            .markers
+            .iter()
+            .any(|marker| marker == "openai codex"));
+        assert!(commands[0].archive_repainted_frames);
     }
 }

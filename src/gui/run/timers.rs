@@ -43,28 +43,25 @@ fn line_has_shell_preamble_marker(line: &ColoredLine) -> bool {
     text.contains("microsoft windows") || text.contains("microsoft corporation")
 }
 
-fn line_has_interactive_ai_marker(line: &ColoredLine) -> bool {
+fn line_has_interactive_ai_marker(line: &ColoredLine, markers: &[String]) -> bool {
     let text = line_plain_text(line).to_ascii_lowercase();
-    text.contains("gemini cli")
-        || text.contains("openai codex")
-        || text.contains(">_ openai codex")
-        || text.contains("implement {feature}")
-        || text.contains("/model to change")
-        || text.contains("claude")
-        || text.contains("copilot")
-        || text.contains("waiting for authentication")
-        || text.contains("signed in with google")
-        || text.contains("about gemini")
-        || text.contains("gemini.md")
-        || text.contains("? for shortcuts")
-        || text.contains("type your message")
+    markers.iter().any(|marker| {
+        let marker = marker.trim().to_ascii_lowercase();
+        !marker.is_empty() && text.contains(marker.as_str())
+    })
 }
 
-fn trim_or_drop_shell_preamble_snapshot(lines: &mut Vec<ColoredLine>) -> bool {
+fn trim_or_drop_shell_preamble_snapshot(lines: &mut Vec<ColoredLine>, markers: &[String]) -> bool {
+    if markers.is_empty() {
+        return false;
+    }
     let Some(shell_marker_idx) = lines.iter().position(line_has_shell_preamble_marker) else {
         return false;
     };
-    if let Some(ai_marker_idx) = lines.iter().position(line_has_interactive_ai_marker) {
+    if let Some(ai_marker_idx) = lines
+        .iter()
+        .position(|line| line_has_interactive_ai_marker(line, markers))
+    {
         if ai_marker_idx > shell_marker_idx {
             lines.drain(0..ai_marker_idx);
         }
@@ -192,19 +189,7 @@ fn interactive_frame_signature(lines: &[ColoredLine]) -> String {
     signature
 }
 
-fn frame_contains_codex_marker(lines: &[ColoredLine]) -> bool {
-    lines.iter().any(|line| {
-        let text = line_plain_text(line).to_ascii_lowercase();
-        text.contains("openai codex") || text.contains(">_ openai codex")
-    })
-}
-
-fn is_codex_interactive_frame(tab: &TabState, lines: &[ColoredLine]) -> bool {
-    tab.interactive_launcher_program.eq_ignore_ascii_case("codex")
-        || frame_contains_codex_marker(lines)
-}
-
-fn codex_footer_start(lines: &[ColoredLine]) -> usize {
+fn repainted_frame_footer_start(lines: &[ColoredLine]) -> usize {
     lines
         .iter()
         .rposition(|line| {
@@ -214,8 +199,8 @@ fn codex_footer_start(lines: &[ColoredLine]) -> usize {
         .unwrap_or(lines.len())
 }
 
-fn codex_frame_key(lines: &[ColoredLine]) -> Option<String> {
-    let body_end = codex_footer_start(lines);
+fn repainted_frame_key(lines: &[ColoredLine]) -> Option<String> {
+    let body_end = repainted_frame_footer_start(lines);
     let body = &lines[..body_end];
 
     for line in body {
@@ -237,7 +222,7 @@ fn codex_frame_key(lines: &[ColoredLine]) -> Option<String> {
     })
 }
 
-fn longest_codex_viewport_overlap(current: &[ColoredLine], next: &[ColoredLine]) -> usize {
+fn longest_repainted_viewport_overlap(current: &[ColoredLine], next: &[ColoredLine]) -> usize {
     let max_overlap = current.len().min(next.len());
     for overlap in (3..=max_overlap).rev() {
         if current[current.len() - overlap..] == next[..overlap] {
@@ -247,7 +232,7 @@ fn longest_codex_viewport_overlap(current: &[ColoredLine], next: &[ColoredLine])
     0
 }
 
-fn archive_codex_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
+fn archive_repainted_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
     let signature = interactive_frame_signature(lines);
     if signature.is_empty() || signature == tab.interactive_last_archived_signature {
         return;
@@ -256,11 +241,10 @@ fn archive_codex_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
     tab.interactive_last_archived_signature = signature;
 }
 
-fn maybe_archive_codex_frame_before_replace(tab: &mut TabState, next_frame: &[ColoredLine]) {
+fn maybe_archive_repainted_frame_before_replace(tab: &mut TabState, next_frame: &[ColoredLine]) {
     if tab.interactive_frame_lines.is_empty()
         || next_frame.is_empty()
-        || (!is_codex_interactive_frame(tab, &tab.interactive_frame_lines)
-            && !is_codex_interactive_frame(tab, next_frame))
+        || !tab.interactive_archive_repainted_frames
     {
         return;
     }
@@ -271,17 +255,17 @@ fn maybe_archive_codex_frame_before_replace(tab: &mut TabState, next_frame: &[Co
         return;
     }
 
-    let viewport_overlap = longest_codex_viewport_overlap(&current_visible, &next_visible);
+    let viewport_overlap = longest_repainted_viewport_overlap(&current_visible, &next_visible);
     if viewport_overlap > 0 && viewport_overlap < current_visible.len() {
         let dropped_len = current_visible.len() - viewport_overlap;
-        archive_codex_block_if_new(tab, &current_visible[..dropped_len]);
+        archive_repainted_block_if_new(tab, &current_visible[..dropped_len]);
         return;
     }
 
-    let current_key = codex_frame_key(&current_visible);
-    let next_key = codex_frame_key(&next_visible);
+    let current_key = repainted_frame_key(&current_visible);
+    let next_key = repainted_frame_key(&next_visible);
     if (current_key.is_some() || next_key.is_some()) && current_key != next_key {
-        archive_codex_block_if_new(tab, &current_visible);
+        archive_repainted_block_if_new(tab, &current_visible);
     }
 }
 
@@ -304,7 +288,7 @@ fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
     append_interactive_history_block(tab, &dropped);
 }
 
-fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine]) -> bool {
+fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine], markers: &[String]) -> bool {
     let Some(first_visible) = lines
         .iter()
         .map(line_plain_text)
@@ -314,13 +298,9 @@ fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine]) -> bool {
         return false;
     };
 
-    let has_interactive_footer = lines.iter().any(|line| {
-        let text = line_plain_text(line).to_ascii_lowercase();
-        text.contains("type your message")
-            || text.contains("gemini.md")
-            || text.contains("workspace (/directory)")
-            || text.contains("? for shortcuts")
-    });
+    let has_interactive_footer = lines
+        .iter()
+        .any(|line| line_has_interactive_ai_marker(line, markers));
 
     has_interactive_footer
         && (first_visible.starts_with("│")
@@ -517,7 +497,7 @@ fn apply_pending_updates(
         if stale_shell_update {
             // The launcher command is submitted while the reader may still have Shell snapshots
             // queued. Once the UI has switched to InteractiveAi, those Shell frames are stale
-            // pre-launch scrollback and must not be archived as Gemini/Codex output.
+            // pre-launch scrollback and must not be archived as interactive CLI output.
             continue;
         }
         if let Some(mode) = update.terminal_mode {
@@ -554,8 +534,10 @@ fn apply_pending_updates(
                     let previous_cursor_col = tab.terminal_cursor_col;
                     let previous_origin = tab.terminal_physical_origin;
                     let mut snapshot_lines = std::mem::take(&mut new_lines);
-                    let drop_shell_preamble_snapshot =
-                        trim_or_drop_shell_preamble_snapshot(&mut snapshot_lines);
+                    let drop_shell_preamble_snapshot = trim_or_drop_shell_preamble_snapshot(
+                        &mut snapshot_lines,
+                        &tab.interactive_markers,
+                    );
                     let frame_end = snapshot_lines
                         .iter()
                         .rposition(line_has_visible_text)
@@ -566,7 +548,10 @@ fn apply_pending_updates(
                         .unwrap_or(0);
                     snapshot_lines.truncate(frame_end);
                     let restore_previous_resize_frame = update.reset_terminal_buffer
-                        && snapshot_starts_mid_interactive_frame(&snapshot_lines)
+                        && snapshot_starts_mid_interactive_frame(
+                            &snapshot_lines,
+                            &tab.interactive_markers,
+                        )
                         && previous_terminal_lines
                             .as_ref()
                             .is_some_and(|previous| !previous.is_empty());
@@ -592,14 +577,14 @@ fn apply_pending_updates(
                     } else {
                         if update.reset_terminal_buffer {
                             // Resize snapshots are a reflowed baseline; old frame rows are stale.
-                            if !is_codex_interactive_frame(tab, &snapshot_lines) {
+                            if !tab.interactive_archive_repainted_frames {
                                 tab.interactive_history_lines.clear();
                                 tab.interactive_last_archived_signature.clear();
                             }
                             tab.interactive_frame_lines.clear();
                             tab.terminal_lines.clear();
                         } else {
-                            maybe_archive_codex_frame_before_replace(tab, &snapshot_lines);
+                            maybe_archive_repainted_frame_before_replace(tab, &snapshot_lines);
                             archive_dropped_interactive_prefix(tab, chunk_first_idx);
                         }
                         tab.interactive_frame_lines = snapshot_lines;
@@ -630,7 +615,7 @@ fn apply_pending_updates(
                 if update.reset_terminal_buffer {
                     // Resize rewrites/reflows the current screen. Do not archive the old frame;
                     // the next snapshot is the replacement baseline.
-                    if !is_codex_interactive_frame(tab, &tab.interactive_frame_lines) {
+                    if !tab.interactive_archive_repainted_frames {
                         tab.interactive_history_lines.clear();
                         tab.interactive_last_archived_signature.clear();
                     }
@@ -1328,19 +1313,23 @@ mod tests {
             line(">_ OpenAI Codex (v0.123.0)"),
             line("model: gpt-5.4 xhigh /model to change"),
         ];
+        let markers = vec!["openai codex".to_string(), "/model to change".to_string()];
 
-        assert!(!trim_or_drop_shell_preamble_snapshot(&mut lines));
+        assert!(!trim_or_drop_shell_preamble_snapshot(
+            &mut lines,
+            &markers
+        ));
         assert_eq!(line_plain_text(&lines[0]), ">_ OpenAI Codex (v0.123.0)");
     }
 
     #[test]
-    fn codex_frame_key_uses_submitted_lines_not_footer_input() {
+    fn repainted_frame_key_uses_submitted_lines_not_footer_input() {
         let autocomplete = vec![
             line("│  >_ OpenAI Codex (v0.123.0)"),
             line("  /status      show current session configuration and token usage"),
             line("\u{203a} /st"),
         ];
-        assert_eq!(codex_frame_key(&autocomplete), None);
+        assert_eq!(repainted_frame_key(&autocomplete), None);
 
         let status = vec![
             line("  /status      show current session configuration and token usage"),
@@ -1348,15 +1337,19 @@ mod tests {
             line("│  >_ OpenAI Codex (v0.123.0)"),
             line("\u{203a} Use /skills to list available skills"),
         ];
-        assert_eq!(codex_frame_key(&status), Some("cmd:/status".to_string()));
+        assert_eq!(
+            repainted_frame_key(&status),
+            Some("cmd:/status".to_string())
+        );
     }
 
     #[test]
-    fn codex_frame_transition_archives_previous_frame_once() {
+    fn repainted_frame_transition_archives_previous_frame_once() {
         let (tx, _rx) = std::sync::mpsc::channel();
         let mut tab = TabState::new(1, tx, None);
         tab.terminal_mode = TerminalMode::InteractiveAi;
         tab.interactive_launcher_program = "codex".to_string();
+        tab.interactive_archive_repainted_frames = true;
         tab.interactive_frame_lines = vec![
             line("╭────────────────────────╮"),
             line("│  >_ OpenAI Codex       │"),
@@ -1371,7 +1364,7 @@ mod tests {
             line("\u{203a} Use /skills to list available skills"),
         ];
 
-        maybe_archive_codex_frame_before_replace(&mut tab, &status);
+        maybe_archive_repainted_frame_before_replace(&mut tab, &status);
         let archived_len = tab.interactive_history_lines.len();
         assert!(archived_len > 0);
         assert!(tab
@@ -1379,16 +1372,17 @@ mod tests {
             .iter()
             .any(|line| line_plain_text(line).contains("Welcome")));
 
-        maybe_archive_codex_frame_before_replace(&mut tab, &status);
+        maybe_archive_repainted_frame_before_replace(&mut tab, &status);
         assert_eq!(tab.interactive_history_lines.len(), archived_len);
     }
 
     #[test]
-    fn codex_footer_typing_does_not_archive_each_prompt_edit() {
+    fn repainted_footer_typing_does_not_archive_each_prompt_edit() {
         let (tx, _rx) = std::sync::mpsc::channel();
         let mut tab = TabState::new(1, tx, None);
         tab.terminal_mode = TerminalMode::InteractiveAi;
         tab.interactive_launcher_program = "codex".to_string();
+        tab.interactive_archive_repainted_frames = true;
         tab.interactive_frame_lines = vec![
             line("│  >_ OpenAI Codex       │"),
             line("\u{203a} /st"),
@@ -1398,7 +1392,7 @@ mod tests {
             line("\u{203a} /sta"),
         ];
 
-        maybe_archive_codex_frame_before_replace(&mut tab, &next);
+        maybe_archive_repainted_frame_before_replace(&mut tab, &next);
         assert!(tab.interactive_history_lines.is_empty());
     }
 }

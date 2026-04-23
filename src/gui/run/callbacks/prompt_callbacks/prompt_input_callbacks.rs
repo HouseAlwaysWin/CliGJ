@@ -5,7 +5,7 @@ use slint::{ComponentHandle, Model, SharedString};
 
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
-use crate::gui::interactive_commands::{self, launcher_program_for_label, pinned_footer_lines_for_label};
+use crate::gui::interactive_commands::{self, spec_for_label};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::tab_update_from_ui;
@@ -247,14 +247,20 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 None => return,
             }
         };
-        let pinned_footer_lines = {
+        let interactive_spec = {
             let s = st_ai.borrow();
-            pinned_footer_lines_for_label(line_label.as_str(), &*s)
+            spec_for_label(line_label.as_str(), &*s)
         };
-        let launcher_program = {
-            let s = st_ai.borrow();
-            launcher_program_for_label(line_label.as_str(), &*s).unwrap_or_default()
+        let Some(interactive_spec) = interactive_spec else {
+            return;
         };
+        let pinned_footer_lines = interactive_spec.pinned_footer_lines;
+        let launcher_program = interactive_spec
+            .command
+            .split_whitespace()
+            .next()
+            .map(interactive_commands::normalized_program_name)
+            .unwrap_or_default();
 
         let mut s = st_ai.borrow_mut();
         if s.current >= s.tabs.len() {
@@ -266,6 +272,9 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         let current = s.current;
         s.tabs[current].interactive_launcher_program = launcher_program;
+        s.tabs[current].interactive_markers = interactive_spec.markers;
+        s.tabs[current].interactive_archive_repainted_frames =
+            interactive_spec.archive_repainted_frames;
         drop(s);
 
         let app_weak_inner = ui.as_weak();

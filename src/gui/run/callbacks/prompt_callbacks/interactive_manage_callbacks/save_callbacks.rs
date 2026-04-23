@@ -4,9 +4,9 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::core::config::AppConfig;
+use crate::core::config::{AppConfig, InteractiveCommandConfig};
 use crate::gui::interactive_commands::{
-    pinned_footer_lines_for_specs, sync_interactive_command_choices_to_ui,
+    pinned_footer_lines_for_specs, spec_for_program_in_specs, sync_interactive_command_choices_to_ui,
 };
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
@@ -23,7 +23,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         let rows_m = ui.get_ws_interactive_manage_rows();
         let n = rows_m.row_count();
         let mut seen = HashSet::<String>::new();
-        let mut out: Vec<(String, String, usize)> = Vec::new();
+        let existing_specs = st_save.borrow().interactive_commands.clone();
+        let mut out: Vec<InteractiveCommandConfig> = Vec::new();
         for i in 0..n {
             let row = rows_m.row_data(i).unwrap();
             let name = row.name.to_string();
@@ -60,7 +61,17 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                     }
                 }
             };
-            out.push((nt, lt.to_string(), pinned));
+            let mut spec = existing_specs
+                .iter()
+                .find(|spec| spec.name == nt || spec.command == lt)
+                .cloned()
+                .unwrap_or_else(|| {
+                    InteractiveCommandConfig::with_defaults(nt.clone(), lt.to_string(), pinned)
+                });
+            spec.name = nt;
+            spec.command = lt.to_string();
+            spec.pinned_footer_lines = pinned;
+            out.push(spec);
         }
         if out.is_empty() {
             eprintln!("CliGJ: need at least one interactive command");
@@ -83,6 +94,12 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 }
                 tab.terminal_pinned_footer_lines =
                     pinned_footer_lines_for_specs(tab.interactive_launcher_program.as_str(), &specs);
+                if let Some(spec) =
+                    spec_for_program_in_specs(tab.interactive_launcher_program.as_str(), &specs)
+                {
+                    tab.interactive_markers = spec.markers.clone();
+                    tab.interactive_archive_repainted_frames = spec.archive_repainted_frames;
+                }
             }
             current < s.tabs.len() && s.tabs[current].terminal_mode == TerminalMode::InteractiveAi
         };

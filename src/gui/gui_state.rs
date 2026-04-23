@@ -9,7 +9,7 @@ use crate::terminal::windows_conpty;
 use crate::terminal::windows_conpty::ReaderRenderMode;
 
 use super::composer_sync::diff_composer_to_conpty;
-use super::interactive_commands::{normalized_program_name, pinned_footer_lines_for_program};
+use super::interactive_commands::{normalized_program_name, spec_for_program};
 use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
 use super::state::conpty_startup_cwd;
 use super::slint_ui::AppWindow;
@@ -46,6 +46,8 @@ impl GuiState {
         tab.interactive_follow_output = true;
         tab.terminal_pinned_footer_lines = effective_pinned_footer_lines;
         tab.interactive_launcher_program.clear();
+        tab.interactive_markers.clear();
+        tab.interactive_archive_repainted_frames = false;
     }
 
     /// Drop the shell, spawn a fresh ConPTY, and reset the terminal buffer for Interactive AI.
@@ -365,19 +367,16 @@ impl GuiState {
                 .trim()
                 .to_string()
         };
-        let is_interactive_ai_launch = matches!(
-            full_command.split_whitespace().next(),
-            Some("gemini" | "codex" | "claude" | "copilot")
-        );
         let interactive_launcher_program = full_command
             .split_whitespace()
             .next()
             .map(normalized_program_name)
             .unwrap_or_default();
-        let launcher_default_pinned_footer_lines = full_command
-            .split_whitespace()
-            .next()
-            .map(|program| pinned_footer_lines_for_program(program, self))
+        let interactive_spec = spec_for_program(interactive_launcher_program.as_str(), self);
+        let is_interactive_ai_launch = interactive_spec.is_some();
+        let launcher_default_pinned_footer_lines = interactive_spec
+            .as_ref()
+            .map(|spec| spec.pinned_footer_lines)
             .unwrap_or(0);
 
         if !full_command.is_empty() {
@@ -390,6 +389,12 @@ impl GuiState {
 
         if is_interactive_ai_launch {
             self.prepare_current_tab_for_interactive_ai(launcher_default_pinned_footer_lines);
+            if let Some(spec) = &interactive_spec {
+                let tab = &mut self.tabs[self.current];
+                tab.interactive_launcher_program = interactive_launcher_program.clone();
+                tab.interactive_markers = spec.markers.clone();
+                tab.interactive_archive_repainted_frames = spec.archive_repainted_frames;
+            }
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_total_lines(0);
             ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
@@ -465,8 +470,10 @@ impl GuiState {
         tab.prompt_picked_images.clear();
         tab.prompt_picked_selections.clear();
         tab.composer_pty_mirror.clear();
-        if is_interactive_ai_launch {
+        if let Some(spec) = interactive_spec {
             tab.interactive_launcher_program = interactive_launcher_program;
+            tab.interactive_markers = spec.markers;
+            tab.interactive_archive_repainted_frames = spec.archive_repainted_frames;
         }
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
         self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
