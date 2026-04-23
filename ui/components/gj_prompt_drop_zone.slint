@@ -539,8 +539,8 @@ export component GjPromptDropZone inherits Rectangle {
                             height: parent.height;
                             accessible-role: button;
                             accessible-label: root.raw-input-enabled
-                                ? @tr("原始輸入：按鍵送往終端（Ctrl+Shift+R）")
-                                : @tr("行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）");
+                                ? @tr("原始輸入：按鍵送往終端（Ctrl+Alt+R）")
+                                : @tr("行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Alt+R）");
                             accessible-checkable: true;
                             accessible-checked: root.raw-input-enabled;
                             clicked => {
@@ -558,7 +558,7 @@ export component GjPromptDropZone inherits Rectangle {
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
                             Text {
-                                text: @tr("原生 Ctrl+Shift+R");
+                                text: @tr("原生 Ctrl+Alt+R");
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
