@@ -32,6 +32,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             name: SharedString::new(),
             line: SharedString::new(),
             pinned_footer_lines: SharedString::from("0"),
+            markers: SharedString::new(),
+            archive_repainted_frames: false,
             key_locked: false,
             expanded: false,
             workspace_path: SharedString::new(),
@@ -107,6 +109,40 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         row.pinned_footer_lines = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_markers_edited(move |idx, new_text| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.markers = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_archive_repainted_toggled(move |idx| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.archive_repainted_frames = !row.archive_repainted_frames;
         m.set_row_data(i, row);
     });
 

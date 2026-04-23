@@ -530,6 +530,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             name: SharedString::new(),
             line: SharedString::new(),
             pinned_footer_lines: SharedString::new(),
+            markers: SharedString::new(),
+            archive_repainted_frames: false,
             key_locked: false,
             expanded: true,
             workspace_path: SharedString::new(),

@@ -60,6 +60,8 @@ pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState
             pinned_footer_lines: SharedString::from(
                 spec.pinned_footer_lines.to_string().as_str(),
             ),
+            markers: SharedString::from(spec.markers.join(", ").as_str()),
+            archive_repainted_frames: spec.archive_repainted_frames,
             key_locked: is_reserved_preset_display_name(spec.name.as_str()),
             expanded: false,
             workspace_path: SharedString::new(),

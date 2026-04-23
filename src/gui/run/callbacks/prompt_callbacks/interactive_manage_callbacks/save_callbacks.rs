@@ -30,6 +30,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let name = row.name.to_string();
             let line = row.line.to_string();
             let pinned_footer_lines = row.pinned_footer_lines.to_string();
+            let markers = row.markers.to_string();
             let nt = name.trim();
             let lt = line.trim();
             if nt.is_empty() && lt.is_empty() {
@@ -71,6 +72,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             spec.name = nt;
             spec.command = lt.to_string();
             spec.pinned_footer_lines = pinned;
+            spec.markers = parse_marker_editor_text(markers.as_str());
+            spec.archive_repainted_frames = row.archive_repainted_frames;
             out.push(spec);
         }
         if out.is_empty() {
@@ -126,4 +129,12 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             }
         }
     });
+}
+
+fn parse_marker_editor_text(text: &str) -> Vec<String> {
+    text.split([',', '\n'])
+        .map(str::trim)
+        .filter(|marker| !marker.is_empty())
+        .map(ToString::to_string)
+        .collect()
 }

@@ -142,6 +142,8 @@ export component AppWindow inherits Window {
     callback interactive-manage-name-edited(int, string);
     callback interactive-manage-line-edited(int, string);
     callback interactive-manage-pinned-lines-edited(int, string);
+    callback interactive-manage-markers-edited(int, string);
+    callback interactive-manage-archive-repainted-toggled(int);
     callback save-interactive-manage;
     callback close-interactive-manage;
     callback manage-add-shell-row;
@@ -420,6 +422,12 @@ export component AppWindow inherits Window {
         }
         pinned-lines-edited(idx, value) => {
             root.interactive-manage-pinned-lines-edited(idx, value);
+        }
+        markers-edited(idx, value) => {
+            root.interactive-manage-markers-edited(idx, value);
+        }
+        archive-repainted-toggled(idx) => {
+            root.interactive-manage-archive-repainted-toggled(idx);
         }
         save => {
             root.save-interactive-manage();

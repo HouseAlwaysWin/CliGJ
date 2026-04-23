@@ -19,6 +19,10 @@ export struct InteractiveCmdEditorRow {
     line: string,
     /// Interactive launcher only: keep the last N terminal rows fixed at the bottom. `0` disables.
     pinned-footer-lines: string,
+    /// Interactive launcher only: comma-separated visible text markers that identify the CLI screen.
+    markers: string,
+    /// Interactive launcher only: archive repaint-only TUI frames as GUI-side history.
+    archive-repainted-frames: bool,
     /// Built-in preset rows: key label is read-only; name is still carried for display.
     key-locked: bool,
     expanded: bool,

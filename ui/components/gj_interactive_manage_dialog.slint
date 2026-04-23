@@ -15,6 +15,8 @@ export component GjInteractiveManageDialog inherits Rectangle {
     callback name-edited(int, string);
     callback line-edited(int, string);
     callback pinned-lines-edited(int, string);
+    callback markers-edited(int, string);
+    callback archive-repainted-toggled(int);
     callback save;
     callback close;
 
@@ -47,7 +49,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
             }
 
             Text {
-                text: "Pin rows keeps the last N terminal rows fixed at the bottom. Use 0 to disable.";
+                text: "Pin keeps bottom rows fixed. Markers identify new interactive CLI screens. Replay saves repaint-only TUI history.";
                 color: AppTheme.text_muted;
                 font-size: 11px;
                 wrap: word-wrap;
@@ -92,107 +94,160 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     spacing: 6px;
 
                     for row[key_idx] in root.manage-rows: Rectangle {
-                        min-height: 34px;
+                        min-height: 70px;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 6px;
                         background: #00000000;
 
-                        HorizontalLayout {
+                        VerticalLayout {
                             padding-left: 6px;
                             padding-right: 6px;
+                            padding-top: 6px;
+                            padding-bottom: 6px;
                             spacing: 6px;
-                            alignment: center;
 
-                            if row.key-locked: Rectangle {
-                                horizontal-stretch: 1;
-                                min-width: 96px;
-                                min-height: 26px;
-                                background: #00000020;
-                                border-radius: 4px;
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: center;
+
+                                if row.key-locked: Rectangle {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    min-height: 26px;
+                                    background: #00000020;
+                                    border-radius: 4px;
+
+                                    Text {
+                                        text: row.name;
+                                        color: AppTheme.text_muted;
+                                        font-size: 12px;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: left;
+                                        overflow: elide;
+                                    }
+                                }
+
+                                if !row.key-locked: LineEdit {
+                                    horizontal-stretch: 1;
+                                    min-width: 96px;
+                                    font-size: 12px;
+                                    text: row.name;
+                                    edited(new_text) => {
+                                        root.name-edited(key_idx, new_text);
+                                    }
+                                }
 
                                 Text {
-                                    text: row.name;
+                                    text: ">";
                                     color: AppTheme.text_muted;
                                     font-size: 12px;
                                     vertical-alignment: center;
-                                    horizontal-alignment: left;
-                                    overflow: elide;
+                                    horizontal-stretch: 0;
                                 }
-                            }
 
-                            if !row.key-locked: LineEdit {
-                                horizontal-stretch: 1;
-                                min-width: 96px;
-                                font-size: 12px;
-                                text: row.name;
-                                edited(new_text) => {
-                                    root.name-edited(key_idx, new_text);
+                                LineEdit {
+                                    horizontal-stretch: 2;
+                                    min-width: 140px;
+                                    font-size: 12px;
+                                    text: row.line;
+                                    edited(new_text) => {
+                                        root.line-edited(key_idx, new_text);
+                                    }
                                 }
-                            }
-
-                            Text {
-                                text: ">";
-                                color: AppTheme.text_muted;
-                                font-size: 12px;
-                                vertical-alignment: center;
-                                horizontal-stretch: 0;
-                            }
-
-                            LineEdit {
-                                horizontal-stretch: 2;
-                                min-width: 140px;
-                                font-size: 12px;
-                                text: row.line;
-                                edited(new_text) => {
-                                    root.line-edited(key_idx, new_text);
-                                }
-                            }
-
-                            Text {
-                                text: "Pin";
-                                color: AppTheme.text_muted;
-                                font-size: 11px;
-                                vertical-alignment: center;
-                                horizontal-stretch: 0;
-                            }
-
-                            LineEdit {
-                                min-width: 54px;
-                                max-width: 64px;
-                                horizontal-stretch: 0;
-                                font-size: 12px;
-                                text: row.pinned-footer-lines;
-                                edited(new_text) => {
-                                    root.pinned-lines-edited(key_idx, new_text);
-                                }
-                            }
-
-                            Rectangle {
-                                min-width: 44px;
-                                max-width: 52px;
-                                height: 24px;
-                                horizontal-stretch: 0;
-                                border-width: 1px;
-                                border-color: #ff4f6d;
-                                border-radius: 6px;
-                                background: #00000000;
 
                                 Text {
-                                    text: @tr("刪除");
-                                    color: #ff8ca8;
+                                    text: "Pin";
+                                    color: AppTheme.text_muted;
                                     font-size: 11px;
-                                    horizontal-alignment: center;
                                     vertical-alignment: center;
+                                    horizontal-stretch: 0;
                                 }
 
-                                TouchArea {
-                                    enabled: !row.key-locked;
-                                    clicked => {
-                                        root.remove-row(key_idx);
+                                LineEdit {
+                                    min-width: 54px;
+                                    max-width: 64px;
+                                    horizontal-stretch: 0;
+                                    font-size: 12px;
+                                    text: row.pinned-footer-lines;
+                                    edited(new_text) => {
+                                        root.pinned-lines-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Rectangle {
+                                    min-width: 44px;
+                                    max-width: 52px;
+                                    height: 24px;
+                                    horizontal-stretch: 0;
+                                    border-width: 1px;
+                                    border-color: #ff4f6d;
+                                    border-radius: 6px;
+                                    background: #00000000;
+
+                                    Text {
+                                        text: @tr("刪除");
+                                        color: #ff8ca8;
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    TouchArea {
+                                        enabled: !row.key-locked;
+                                        clicked => {
+                                            root.remove-row(key_idx);
+                                        }
                                     }
                                 }
                             }
+
+                            HorizontalLayout {
+                                spacing: 6px;
+                                alignment: center;
+
+                                Text {
+                                    text: "Markers";
+                                    color: AppTheme.text_muted;
+                                    font-size: 11px;
+                                    vertical-alignment: center;
+                                    horizontal-stretch: 0;
+                                }
+
+                                LineEdit {
+                                    horizontal-stretch: 1;
+                                    min-width: 220px;
+                                    font-size: 12px;
+                                    text: row.markers;
+                                    edited(new_text) => {
+                                        root.markers-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Rectangle {
+                                    min-width: 62px;
+                                    max-width: 72px;
+                                    height: 24px;
+                                    horizontal-stretch: 0;
+                                    border-width: 1px;
+                                    border-color: row.archive-repainted-frames ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                                    border-radius: 6px;
+                                    background: row.archive-repainted-frames ? AppTheme.accent : #00000000;
+
+                                    Text {
+                                        text: "Replay";
+                                        color: row.archive-repainted-frames ? AppTheme.text : AppTheme.text_muted;
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    TouchArea {
+                                        clicked => {
+                                            root.archive-repainted-toggled(key_idx);
+                                        }
+                                    }
+                                }
                         }
                     }
                 }
@@ -256,4 +311,5 @@ export component GjInteractiveManageDialog inherits Rectangle {
             }
         }
     }
+}
 }

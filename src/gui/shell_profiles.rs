@@ -146,6 +146,8 @@ pub(crate) fn sync_shell_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
             name: SharedString::from(n.as_str()),
             line: SharedString::from(c.as_str()),
             pinned_footer_lines: SharedString::new(),
+            markers: SharedString::new(),
+            archive_repainted_frames: false,
             key_locked: is_reserved_shell_profile(n),
             expanded: false,
             workspace_path: SharedString::from(w.as_str()),
