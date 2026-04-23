@@ -6,7 +6,9 @@ use std::io::Read;
 use std::io::Write;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
+use std::sync::mpsc::RecvTimeoutError;
 use std::thread;
+use std::time::{Duration, Instant};
 
 use std::sync::Arc;
 
@@ -69,6 +71,9 @@ pub struct TerminalRender {
     pub text: String,
     /// ONLY lines that changed (matches changed_indices length).
     pub lines: Vec<ColoredLine>,
+    /// Number of physical rows covered by this snapshot window.
+    pub snapshot_len: usize,
+    /// Total physical rows known to wezterm-term for this screen.
     pub full_len: usize,
     pub first_line_idx: usize,
     pub cursor_row: Option<usize>,
@@ -221,6 +226,7 @@ impl Drop for ConptySession {
 }
 
 const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
+const CONPTY_RESIZE_SETTLE_MS: u64 = 120;
 
 fn snapshot_content_fingerprint(
     total_rows: usize,
@@ -312,6 +318,7 @@ fn terminal_render_from_lines_cached(
         render_mode,
         text: String::new(),
         lines: changed_lines,
+        snapshot_len: render_window_len,
         full_len: total_scrollback_rows,
         first_line_idx: render_first_idx,
         cursor_row: cursor_local_row.map(|row| render_first_idx + row),
@@ -381,47 +388,92 @@ pub fn start_reader_thread(
         let writer: Box<dyn Write + Send> = Box::new(std::io::sink());
         let palette = config.color_palette();
         let mut term = Terminal::new(term_size, config, "CliGJ", "0", writer);
+        term.enable_conpty_quirks();
 
         let mut last_snapshot_fp: Option<u64> = None;
         let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
         let mut pending_reset = false;
         let mut render_mode = initial_render_mode;
         let mut last_alt_screen_active = false;
+        let mut interactive_snapshot_floor = 0usize;
+        let mut pending_interactive_floor_reset =
+            initial_render_mode == ReaderRenderMode::InteractiveAi;
+        let mut resize_settle_deadline: Option<Instant> = None;
 
-        while let Ok(event) = event_rx.recv() {
-            match event {
-                Event::Bytes(bytes) => {
-                    term.advance_bytes(&bytes);
-                }
-                Event::Control(ControlCommand::Resize { cols, rows }) => {
-                    let new_cols = cols as usize;
-                    let new_rows = rows as usize;
-                    let size_changed = term_cols != new_cols || term_rows != new_rows;
-                    term_cols = new_cols;
-                    term_rows = new_rows;
-                    term.resize(TerminalSize {
-                        rows: term_rows,
-                        cols: term_cols,
-                        pixel_width: 0,
-                        pixel_height: 0,
-                        dpi: 0,
-                    });
-                    // Reflow changes the whole screen; drop line fingerprints so we re-emit
-                    // every row. Otherwise incremental diffs leave stale UI rows ("ghost" UI).
-                    line_cache.clear();
-                    last_snapshot_fp = None;
-                    if size_changed {
-                        pending_reset = true;
+        loop {
+            let event = match resize_settle_deadline {
+                Some(deadline) => {
+                    let now = Instant::now();
+                    if deadline > now {
+                        match event_rx.recv_timeout(deadline.duration_since(now)) {
+                            Ok(event) => Some(event),
+                            Err(RecvTimeoutError::Timeout) => None,
+                            Err(RecvTimeoutError::Disconnected) => break,
+                        }
+                    } else {
+                        None
                     }
                 }
-                Event::Control(ControlCommand::SetRenderMode(new_mode)) => {
-                    if render_mode != new_mode {
-                        render_mode = new_mode;
+                None => match event_rx.recv() {
+                    Ok(event) => Some(event),
+                    Err(_) => break,
+                },
+            };
+
+            if let Some(event) = event {
+                match event {
+                    Event::Bytes(bytes) => {
+                        term.advance_bytes(&bytes);
+                        if resize_settle_deadline.is_some() {
+                            resize_settle_deadline = Some(
+                                Instant::now()
+                                    + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS),
+                            );
+                        }
+                    }
+                    Event::Control(ControlCommand::Resize { cols, rows }) => {
+                        let new_cols = cols as usize;
+                        let new_rows = rows as usize;
+                        let size_changed = term_cols != new_cols || term_rows != new_rows;
+                        term_cols = new_cols;
+                        term_rows = new_rows;
+                        term.resize(TerminalSize {
+                            rows: term_rows,
+                            cols: term_cols,
+                            pixel_width: 0,
+                            pixel_height: 0,
+                            dpi: 0,
+                        });
+                        // Reflow changes the whole screen; drop line fingerprints so we re-emit
+                        // every row. Otherwise incremental diffs leave stale UI rows ("ghost" UI).
                         line_cache.clear();
                         last_snapshot_fp = None;
-                        pending_reset = true;
+                        if size_changed {
+                            pending_reset = true;
+                            resize_settle_deadline =
+                                Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
+                            if render_mode == ReaderRenderMode::InteractiveAi {
+                                pending_interactive_floor_reset = true;
+                            }
+                        }
+                    }
+                    Event::Control(ControlCommand::SetRenderMode(new_mode)) => {
+                        if render_mode != new_mode {
+                            render_mode = new_mode;
+                            line_cache.clear();
+                            last_snapshot_fp = None;
+                            pending_reset = true;
+                            pending_interactive_floor_reset =
+                                render_mode == ReaderRenderMode::InteractiveAi;
+                        }
                     }
                 }
+            } else {
+                resize_settle_deadline = None;
+            }
+
+            if resize_settle_deadline.is_some() {
+                continue;
             }
 
             // After processing events, render a snapshot of the recent screen/scrollback tail.
@@ -430,6 +482,9 @@ pub fn start_reader_thread(
                 line_cache.clear();
                 last_snapshot_fp = None;
                 pending_reset = true;
+                if render_mode == ReaderRenderMode::InteractiveAi {
+                    pending_interactive_floor_reset = true;
+                }
                 last_alt_screen_active = alt_screen_active;
             }
 
@@ -439,10 +494,17 @@ pub fn start_reader_thread(
                 .saturating_mul(4)
                 .min(CONPTY_SNAPSHOT_MAX_LINES)
                 .max(term_rows);
+            if pending_interactive_floor_reset && render_mode == ReaderRenderMode::InteractiveAi {
+                interactive_snapshot_floor = total.saturating_sub(term_rows);
+                pending_interactive_floor_reset = false;
+            }
             let (start, end, total_for_render, filled) = match render_mode {
                 ReaderRenderMode::InteractiveAi => {
+                    // Interactive launchers repaint the viewport on resize. Keep GUI scrollback,
+                    // but never pull in full-screen frames that predate the latest reset.
                     let snapshot_row_count = snapshot_cap.min(total.max(1));
-                    let start = total.saturating_sub(snapshot_row_count);
+                    let floor = interactive_snapshot_floor.min(total);
+                    let start = total.saturating_sub(snapshot_row_count).max(floor);
                     let end = total;
                     let total_for_render = total;
                     let filled = total > term_rows;

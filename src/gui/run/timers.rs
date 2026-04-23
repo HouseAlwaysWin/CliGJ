@@ -35,16 +35,19 @@ fn line_has_visible_text(line: &ColoredLine) -> bool {
 /// `len()` approached the full PTY height → huge black gap above the real output and O(n) work
 /// (clear loop + Slint scroll extent). Drop that prefix and bump `terminal_physical_origin`
 /// so the dense buffer only holds the snapshot tail (same idea as `enforce_scrollback_cap`).
-fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize) {
+fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize, force: bool) {
     if leading == 0 || tab.terminal_lines.is_empty() {
         return;
     }
-    let drop_leading = tab
-        .terminal_lines
-        .iter()
-        .take(leading.min(tab.terminal_lines.len()))
-        .take_while(|line| line.blank && line.spans.is_empty())
-        .count();
+    let drop_leading = if force {
+        leading.min(tab.terminal_lines.len())
+    } else {
+        tab.terminal_lines
+            .iter()
+            .take(leading.min(tab.terminal_lines.len()))
+            .take_while(|line| line.blank && line.spans.is_empty())
+            .count()
+    };
     if drop_leading == 0 {
         return;
     }
@@ -81,6 +84,7 @@ struct PendingTabUpdate {
     set_auto_scroll: Option<bool>,
     replace_text: Option<String>,
     replace_lines: Option<Vec<ColoredLine>>,
+    snapshot_len: Option<usize>,
     full_len: Option<usize>,
     first_line_idx: Option<usize>,
     cursor_row: Option<usize>,
@@ -107,7 +111,7 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
         entry.cursor_col = chunk.cursor_col;
         let mut lines = chunk.lines;
         let indices = chunk.changed_indices;
-        
+
         if let Some(existing_lines) = entry.replace_lines.as_mut() {
             if entry.first_line_idx == Some(chunk.first_line_idx) {
                 let existing_indices = &mut entry.changed_indices;
@@ -131,7 +135,12 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
         }
         
         entry.full_len = Some(chunk.full_len);
-        let keep_text = entry.replace_lines.as_ref().is_some_and(|l| l.is_empty()) && entry.changed_indices.is_empty();
+        entry.snapshot_len = Some(chunk.snapshot_len);
+        let keep_text = entry
+            .replace_lines
+            .as_ref()
+            .is_some_and(|l| l.is_empty())
+            && entry.changed_indices.is_empty();
         entry.replace_text = if keep_text { Some(chunk.text) } else { None };
         entry.append_text.clear();
         return;
@@ -172,11 +181,28 @@ fn apply_pending_updates(
         let mut replaced_with_vt_lines = false;
         if let Some(mut new_lines) = update.replace_lines {
             let chunk_first_idx = update.first_line_idx.unwrap_or(0);
-            let full_len_in_chunk = update.full_len.unwrap_or(0);
-            let phys_end = chunk_first_idx + full_len_in_chunk;
+            let snapshot_len = update.snapshot_len.unwrap_or_else(|| {
+                update
+                    .changed_indices
+                    .iter()
+                    .copied()
+                    .max()
+                    .map(|idx| idx + 1)
+                    .unwrap_or(new_lines.len())
+            });
+            let mut phys_end = chunk_first_idx.saturating_add(snapshot_len);
+            if let Some(full_len) = update.full_len {
+                if full_len > 0 {
+                    phys_end = phys_end.min(full_len.max(chunk_first_idx));
+                }
+            }
             replaced_with_vt_lines = true;
 
             if update.reset_terminal_buffer {
+                tab.terminal_lines.clear();
+                tab.terminal_physical_origin = chunk_first_idx;
+                tab.terminal_cursor_row = None;
+                tab.terminal_cursor_col = None;
                 tab.terminal_model_rows.clear();
                 tab.terminal_model_hashes.clear();
                 tab.terminal_model_dirty.clear();
@@ -248,7 +274,8 @@ fn apply_pending_updates(
             }
 
             let leading = chunk_first_idx.saturating_sub(origin);
-            compact_terminal_lines_after_snapshot(tab, leading);
+            let drop_snapshot_prefix = tab.terminal_mode == TerminalMode::InteractiveAi;
+            compact_terminal_lines_after_snapshot(tab, leading, drop_snapshot_prefix);
 
             tab.terminal_cursor_row = update
                 .cursor_row

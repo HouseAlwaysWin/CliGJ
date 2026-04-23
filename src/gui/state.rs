@@ -248,6 +248,7 @@ impl TabState {
                             },
                             text: render.text,
                             lines: render.lines,
+                            snapshot_len: render.snapshot_len,
                             full_len: render.full_len,
                             first_line_idx: render.first_line_idx,
                             cursor_row: render.cursor_row,
@@ -352,6 +353,9 @@ pub struct TerminalChunk {
     pub(crate) terminal_mode: TerminalMode,
     pub(crate) text: String,
     pub(crate) lines: Vec<ColoredLine>,
+    /// Number of physical rows covered by this snapshot window.
+    pub(crate) snapshot_len: usize,
+    /// Total physical rows known by the terminal emulator.
     pub(crate) full_len: usize,
     pub(crate) first_line_idx: usize,
     pub(crate) cursor_row: Option<usize>,
