@@ -383,7 +383,6 @@ pub enum ControlCommand {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum InteractiveFloorReset {
     ModeStart,
-    Viewport,
 }
 
 pub fn start_reader_thread(
@@ -515,10 +514,6 @@ pub fn start_reader_thread(
                             pending_reset = true;
                             resize_settle_deadline =
                                 Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
-                            if render_mode == ReaderRenderMode::InteractiveAi {
-                                pending_interactive_floor_reset =
-                                    Some(InteractiveFloorReset::Viewport);
-                            }
                         }
                     }
                     Event::Control(ControlCommand::SetRenderMode(new_mode)) => {
@@ -550,9 +545,6 @@ pub fn start_reader_thread(
                 line_cache.clear();
                 last_snapshot_fp = None;
                 pending_reset = true;
-                if render_mode == ReaderRenderMode::InteractiveAi {
-                    pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
-                }
                 last_alt_screen_active = alt_screen_active;
             }
 
@@ -568,9 +560,6 @@ pub fn start_reader_thread(
                         InteractiveFloorReset::ModeStart => {
                             let cursor = term.cursor_pos();
                             screen.phys_row(cursor.y)
-                        }
-                        InteractiveFloorReset::Viewport => {
-                            interactive_snapshot_floor.max(total.saturating_sub(term_rows))
                         }
                     };
                 }

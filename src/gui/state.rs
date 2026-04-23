@@ -8,6 +8,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use slint::{Image, SharedString, VecModel};
 
 use crate::terminal::pty_event::{RawPtyEvent, RawPtyMode};
+use crate::terminal::replay::replay_raw_pty_events;
 use crate::terminal::render::ColoredLine;
 use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
@@ -184,7 +185,22 @@ pub(crate) struct RawPtyDumpResult {
     pub(crate) raw_path: PathBuf,
     pub(crate) index_path: PathBuf,
     pub(crate) escaped_path: PathBuf,
-    pub(crate) screen_path: PathBuf,
+    pub(crate) live_visible_path: PathBuf,
+    pub(crate) live_full_path: PathBuf,
+    pub(crate) meta_path: PathBuf,
+    pub(crate) event_count: usize,
+    pub(crate) byte_count: usize,
+}
+
+pub(crate) struct RawPtyReplayDumpResult {
+    pub(crate) dir: PathBuf,
+    pub(crate) live_visible_path: PathBuf,
+    pub(crate) live_full_path: PathBuf,
+    pub(crate) replay_visible_path: PathBuf,
+    pub(crate) replay_tail_2x_path: PathBuf,
+    pub(crate) replay_active_viewport_path: PathBuf,
+    pub(crate) replay_full_path: PathBuf,
+    pub(crate) meta_path: PathBuf,
     pub(crate) event_count: usize,
     pub(crate) byte_count: usize,
 }
@@ -213,6 +229,21 @@ fn colored_lines_plain_text(lines: &[ColoredLine]) -> String {
         out.push('\n');
     }
     out
+}
+
+fn live_visible_plain_text(tab: &TabState) -> String {
+    if tab.terminal_lines.is_empty() {
+        return tab.terminal_text.clone();
+    }
+    if tab.last_window_first == usize::MAX || tab.last_window_last == usize::MAX {
+        return colored_lines_plain_text(&tab.terminal_lines);
+    }
+    let first = tab.last_window_first.min(tab.terminal_lines.len());
+    let last = tab.last_window_last.min(tab.terminal_lines.len().saturating_sub(1));
+    if first > last || first >= tab.terminal_lines.len() {
+        return String::new();
+    }
+    colored_lines_plain_text(&tab.terminal_lines[first..=last])
 }
 
 impl TabState {
@@ -401,10 +432,12 @@ impl TabState {
             .map_err(|e| format!("system time before unix epoch: {e}"))?
             .as_millis();
         let stem = format!("cligj-raw-pty-tab-{}-{timestamp_ms}", self.id);
-        let raw_path = dir.join(format!("{stem}.bin"));
-        let index_path = dir.join(format!("{stem}.jsonl"));
-        let escaped_path = dir.join(format!("{stem}.escaped.txt"));
-        let screen_path = dir.join(format!("{stem}.screen.txt"));
+        let raw_path = dir.join(format!("{stem}.raw.bin"));
+        let index_path = dir.join(format!("{stem}.events.jsonl"));
+        let escaped_path = dir.join(format!("{stem}.raw_escaped.txt"));
+        let live_visible_path = dir.join(format!("{stem}.live_visible.txt"));
+        let live_full_path = dir.join(format!("{stem}.live_full.txt"));
+        let meta_path = dir.join(format!("{stem}.meta.json"));
 
         let mut raw_file =
             std::fs::File::create(&raw_path).map_err(|e| format!("create raw dump: {e}"))?;
@@ -467,18 +500,131 @@ impl TabState {
             }
         }
 
-        let screen_text = colored_lines_plain_text(&self.terminal_lines);
-        std::fs::write(&screen_path, screen_text)
-            .map_err(|e| format!("write screen dump: {e}"))?;
+        let live_visible_text = live_visible_plain_text(self);
+        std::fs::write(&live_visible_path, live_visible_text)
+            .map_err(|e| format!("write live visible dump: {e}"))?;
+
+        let live_full_text = if self.terminal_lines.is_empty() {
+            self.terminal_text.clone()
+        } else {
+            colored_lines_plain_text(&self.terminal_lines)
+        };
+        std::fs::write(&live_full_path, live_full_text)
+            .map_err(|e| format!("write live full dump: {e}"))?;
+
+        let meta = serde_json::json!({
+            "tabId": self.id,
+            "eventCount": self.raw_pty_events.len(),
+            "byteCount": offset,
+            "rawPath": raw_path,
+            "indexPath": index_path,
+            "escapedPath": escaped_path,
+            "liveVisiblePath": live_visible_path,
+            "liveFullPath": live_full_path,
+        });
+        std::fs::write(
+            &meta_path,
+            serde_json::to_string_pretty(&meta)
+                .map_err(|e| format!("serialize raw dump meta: {e}"))?,
+        )
+        .map_err(|e| format!("write raw dump meta: {e}"))?;
 
         Ok(RawPtyDumpResult {
             dir,
             raw_path,
             index_path,
             escaped_path,
-            screen_path,
+            live_visible_path,
+            live_full_path,
+            meta_path,
             event_count: self.raw_pty_events.len(),
             byte_count: offset,
+        })
+    }
+
+    pub fn dump_debug_replay(&self, dir: Option<PathBuf>) -> Result<RawPtyReplayDumpResult, String> {
+        let dir = dir.unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("raw_pty_replays")
+        });
+        std::fs::create_dir_all(&dir).map_err(|e| format!("create replay dir: {e}"))?;
+
+        let timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("system time before unix epoch: {e}"))?
+            .as_millis();
+        let stem = format!("cligj-replay-tab-{}-{timestamp_ms}", self.id);
+        let live_visible_path = dir.join(format!("{stem}.live_visible.txt"));
+        let live_full_path = dir.join(format!("{stem}.live_full.txt"));
+        let replay_visible_path = dir.join(format!("{stem}.replay_visible.txt"));
+        let replay_tail_2x_path = dir.join(format!("{stem}.replay_tail_2x.txt"));
+        let replay_active_viewport_path = dir.join(format!("{stem}.replay_active_viewport.txt"));
+        let replay_full_path = dir.join(format!("{stem}.replay_full.txt"));
+        let meta_path = dir.join(format!("{stem}.meta.json"));
+
+        let live_visible_text = live_visible_plain_text(self);
+        std::fs::write(&live_visible_path, live_visible_text)
+            .map_err(|e| format!("write live visible dump: {e}"))?;
+
+        let live_full_text = if self.terminal_lines.is_empty() {
+            self.terminal_text.clone()
+        } else {
+            colored_lines_plain_text(&self.terminal_lines)
+        };
+        std::fs::write(&live_full_path, live_full_text)
+            .map_err(|e| format!("write live full dump: {e}"))?;
+
+        let replay = replay_raw_pty_events(&self.raw_pty_events)?;
+        std::fs::write(&replay_visible_path, replay.visible_text.as_str())
+            .map_err(|e| format!("write replay visible dump: {e}"))?;
+        std::fs::write(&replay_tail_2x_path, replay.tail_2x_text.as_str())
+            .map_err(|e| format!("write replay tail 2x dump: {e}"))?;
+        std::fs::write(&replay_active_viewport_path, replay.active_viewport_text.as_str())
+            .map_err(|e| format!("write replay active viewport dump: {e}"))?;
+        std::fs::write(&replay_full_path, replay.full_text.as_str())
+            .map_err(|e| format!("write replay full dump: {e}"))?;
+
+        let final_mode = match replay.final_mode {
+            RawPtyMode::Shell => "shell",
+            RawPtyMode::InteractiveAi => "interactive_ai",
+        };
+        let meta = serde_json::json!({
+            "tabId": self.id,
+            "eventCount": self.raw_pty_events.len(),
+            "byteCount": self.raw_pty_event_bytes,
+            "finalMode": final_mode,
+            "cols": replay.cols,
+            "rows": replay.rows,
+            "totalRows": replay.total_rows,
+            "visibleStart": replay.visible_start,
+            "tail2xStart": replay.tail_2x_start,
+            "renderStart": replay.render_start,
+            "liveVisiblePath": live_visible_path,
+            "liveFullPath": live_full_path,
+            "replayVisiblePath": replay_visible_path,
+            "replayTail2xPath": replay_tail_2x_path,
+            "replayActiveViewportPath": replay_active_viewport_path,
+            "replayFullPath": replay_full_path,
+        });
+        std::fs::write(
+            &meta_path,
+            serde_json::to_string_pretty(&meta)
+                .map_err(|e| format!("serialize replay meta: {e}"))?,
+        )
+        .map_err(|e| format!("write replay meta: {e}"))?;
+
+        Ok(RawPtyReplayDumpResult {
+            dir,
+            live_visible_path,
+            live_full_path,
+            replay_visible_path,
+            replay_tail_2x_path,
+            replay_active_viewport_path,
+            replay_full_path,
+            meta_path,
+            event_count: self.raw_pty_events.len(),
+            byte_count: self.raw_pty_event_bytes,
         })
     }
 }

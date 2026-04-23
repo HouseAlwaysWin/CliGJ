@@ -87,12 +87,14 @@ pub(super) fn connect_terminal_history(
         match tab.dump_raw_pty_events(None) {
             Ok(result) => {
                 let message = format!(
-                    "Raw PTY dump completed\n\nDirectory: {}\nRaw bytes: {}\nEvent index: {}\nEscaped raw stream: {}\nCurrent screen text: {}\nEvents: {}\nBytes: {}\n\n--- Terminal History ---\n{}",
+                    "Raw PTY dump completed\n\nDirectory: {}\nRaw bytes: {}\nEvent index: {}\nEscaped raw stream: {}\nLive visible: {}\nLive full: {}\nMeta: {}\nEvents: {}\nBytes: {}\n\n--- Terminal History ---\n{}",
                     result.dir.display(),
                     result.raw_path.display(),
                     result.index_path.display(),
                     result.escaped_path.display(),
-                    result.screen_path.display(),
+                    result.live_visible_path.display(),
+                    result.live_full_path.display(),
+                    result.meta_path.display(),
                     result.event_count,
                     result.byte_count,
                     terminal_history_plain_text(tab),
@@ -102,6 +104,43 @@ pub(super) fn connect_terminal_history(
             Err(e) => {
                 history_window_dump.set_history_text(SharedString::from(
                     format!("Raw PTY dump failed: {e}").as_str(),
+                ));
+            }
+        }
+    });
+
+    let st_replay = Rc::clone(&state);
+    let history_window_replay = Rc::clone(&history_window);
+    history_window.on_debug_replay_requested(move || {
+        let s = st_replay.borrow();
+        if s.current >= s.tabs.len() {
+            history_window_replay.set_history_text(SharedString::from(
+                "Debug replay failed: no active tab",
+            ));
+            return;
+        }
+        let tab = &s.tabs[s.current];
+        match tab.dump_debug_replay(None) {
+            Ok(result) => {
+                let message = format!(
+                    "Debug replay completed\n\nDirectory: {}\nLive visible: {}\nLive full: {}\nReplay visible: {}\nReplay tail 2x: {}\nReplay active viewport: {}\nReplay full: {}\nMeta: {}\nEvents: {}\nBytes: {}\n\n--- Terminal History ---\n{}",
+                    result.dir.display(),
+                    result.live_visible_path.display(),
+                    result.live_full_path.display(),
+                    result.replay_visible_path.display(),
+                    result.replay_tail_2x_path.display(),
+                    result.replay_active_viewport_path.display(),
+                    result.replay_full_path.display(),
+                    result.meta_path.display(),
+                    result.event_count,
+                    result.byte_count,
+                    terminal_history_plain_text(tab),
+                );
+                history_window_replay.set_history_text(SharedString::from(message.as_str()));
+            }
+            Err(e) => {
+                history_window_replay.set_history_text(SharedString::from(
+                    format!("Debug replay failed: {e}").as_str(),
                 ));
             }
         }
