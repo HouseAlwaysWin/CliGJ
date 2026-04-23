@@ -17,6 +17,8 @@ export struct PromptImageChip {
 export struct InteractiveCmdEditorRow {
     name: string,
     line: string,
+    /// Whether this command should use the InteractiveAi terminal path.
+    interactive-cli: bool,
     /// Interactive launcher only: keep the last N terminal rows fixed at the bottom. `0` disables.
     pinned-footer-lines: string,
     /// Interactive launcher only: comma-separated visible text markers that identify the CLI screen.

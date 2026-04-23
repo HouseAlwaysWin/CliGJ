@@ -529,6 +529,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         rows.push(InteractiveCmdEditorRow {
             name: SharedString::new(),
             line: SharedString::new(),
+            interactive_cli: false,
             pinned_footer_lines: SharedString::new(),
             markers: SharedString::new(),
             archive_repainted_frames: false,

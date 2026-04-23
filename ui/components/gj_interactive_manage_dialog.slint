@@ -14,6 +14,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
     callback remove-row(int);
     callback name-edited(int, string);
     callback line-edited(int, string);
+    callback interactive-cli-toggled(int);
     callback pinned-lines-edited(int, string);
     callback markers-edited(int, string);
     callback archive-repainted-toggled(int);
@@ -21,10 +22,10 @@ export component GjInteractiveManageDialog inherits Rectangle {
     callback close;
 
     Rectangle {
-        width: 640px;
-        height: 460px;
-        x: (parent.width - self.width) / 2;
-        y: (parent.height - self.height) / 2;
+        width: parent.width - 24px;
+        height: parent.height - 24px;
+        x: 12px;
+        y: 12px;
         background: AppTheme.panel;
         border-width: 1px;
         border-color: AppTheme.prompt_chrome_border;
@@ -49,7 +50,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
             }
 
             Text {
-                text: "Pin keeps bottom rows fixed. Markers identify new interactive CLI screens. Replay saves repaint-only TUI history.";
+                text: "Interactive decides whether the command uses the InteractiveAi terminal path. Markers identify CLI screens; Replay saves repaint-only TUI history.";
                 color: AppTheme.text_muted;
                 font-size: 11px;
                 wrap: word-wrap;
@@ -57,7 +58,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
 
             HorizontalLayout {
                 spacing: 8px;
-                alignment: end;
+                alignment: start;
 
                 Rectangle {
                     min-width: 64px;
@@ -83,6 +84,55 @@ export component GjInteractiveManageDialog inherits Rectangle {
                         }
                     }
                 }
+
+                Rectangle {
+                    min-width: 72px;
+                    height: 26px;
+                    horizontal-stretch: 0;
+                    border-width: 1px;
+                    border-color: AppTheme.prompt_chrome_border;
+                    border-radius: 8px;
+                    background: #00000000;
+
+                    Text {
+                        text: @tr("關閉");
+                        color: AppTheme.text_muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: 12px;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.close();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 72px;
+                    height: 26px;
+                    horizontal-stretch: 0;
+                    border-width: 1px;
+                    border-color: AppTheme.accent;
+                    border-radius: 8px;
+                    background: AppTheme.accent;
+
+                    Text {
+                        text: @tr("儲存");
+                        color: AppTheme.text;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: 12px;
+                        font-weight: 700;
+                    }
+
+                    TouchArea {
+                        clicked => {
+                            root.save();
+                        }
+                    }
+                }
             }
 
             ScrollView {
@@ -94,7 +144,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     spacing: 6px;
 
                     for row[key_idx] in root.manage-rows: Rectangle {
-                        min-height: 70px;
+                        min-height: 78px;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 6px;
@@ -109,11 +159,12 @@ export component GjInteractiveManageDialog inherits Rectangle {
 
                             HorizontalLayout {
                                 spacing: 6px;
-                                alignment: center;
+                                alignment: start;
 
                                 if row.key-locked: Rectangle {
-                                    horizontal-stretch: 1;
+                                    horizontal-stretch: 0;
                                     min-width: 96px;
+                                    max-width: 96px;
                                     min-height: 26px;
                                     background: #00000020;
                                     border-radius: 4px;
@@ -129,8 +180,9 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                 }
 
                                 if !row.key-locked: LineEdit {
-                                    horizontal-stretch: 1;
+                                    horizontal-stretch: 0;
                                     min-width: 96px;
+                                    max-width: 96px;
                                     font-size: 12px;
                                     text: row.name;
                                     edited(new_text) => {
@@ -147,12 +199,38 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                 }
 
                                 LineEdit {
-                                    horizontal-stretch: 2;
-                                    min-width: 140px;
+                                    horizontal-stretch: 0;
+                                    min-width: 220px;
+                                    max-width: 280px;
                                     font-size: 12px;
                                     text: row.line;
                                     edited(new_text) => {
                                         root.line-edited(key_idx, new_text);
+                                    }
+                                }
+
+                                Rectangle {
+                                    min-width: 82px;
+                                    max-width: 92px;
+                                    height: 24px;
+                                    horizontal-stretch: 0;
+                                    border-width: 1px;
+                                    border-color: row.interactive-cli ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                                    border-radius: 6px;
+                                    background: row.interactive-cli ? AppTheme.accent : #00000000;
+
+                                    Text {
+                                        text: "Interactive";
+                                        color: row.interactive-cli ? AppTheme.text : AppTheme.text_muted;
+                                        font-size: 11px;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+
+                                    TouchArea {
+                                        clicked => {
+                                            root.interactive-cli-toggled(key_idx);
+                                        }
                                     }
                                 }
 
@@ -204,7 +282,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
 
                             HorizontalLayout {
                                 spacing: 6px;
-                                alignment: center;
+                                alignment: start;
 
                                 Text {
                                     text: "Markers";
@@ -215,8 +293,9 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                 }
 
                                 LineEdit {
-                                    horizontal-stretch: 1;
-                                    min-width: 220px;
+                                    horizontal-stretch: 0;
+                                    min-width: 420px;
+                                    max-width: 520px;
                                     font-size: 12px;
                                     text: row.markers;
                                     edited(new_text) => {
@@ -253,62 +332,6 @@ export component GjInteractiveManageDialog inherits Rectangle {
                 }
             }
 
-            HorizontalLayout {
-                spacing: 8px;
-                Rectangle {
-                    horizontal-stretch: 1;
-                    background: #00000000;
-                }
-
-                Rectangle {
-                    min-width: 72px;
-                    height: 28px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: #00000000;
-
-                    Text {
-                        text: @tr("關閉");
-                        color: AppTheme.text_muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.close();
-                        }
-                    }
-                }
-
-                Rectangle {
-                    min-width: 72px;
-                    height: 28px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.accent;
-                    border-radius: 8px;
-                    background: AppTheme.accent;
-
-                    Text {
-                        text: @tr("儲存");
-                        color: AppTheme.text;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                        font-weight: 700;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.save();
-                        }
-                    }
-                }
-            }
         }
     }
 }

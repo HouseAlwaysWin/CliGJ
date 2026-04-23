@@ -262,6 +262,14 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             .map(interactive_commands::normalized_program_name)
             .unwrap_or_default();
 
+        if !interactive_spec.interactive_cli {
+            let mut s = st_ai.borrow_mut();
+            if let Err(e) = s.inject_bytes_into_current(&ui, launch_cmd.as_bytes()) {
+                eprintln!("CliGJ: inject command: {e}");
+            }
+            return;
+        }
+
         let mut s = st_ai.borrow_mut();
         if s.current >= s.tabs.len() {
             return;

@@ -71,6 +71,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 });
             spec.name = nt;
             spec.command = lt.to_string();
+            spec.interactive_cli = row.interactive_cli;
             spec.pinned_footer_lines = pinned;
             spec.markers = parse_marker_editor_text(markers.as_str());
             spec.archive_repainted_frames = row.archive_repainted_frames;

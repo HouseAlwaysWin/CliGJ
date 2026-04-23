@@ -12,6 +12,7 @@ pub struct AppConfig {
 pub struct InteractiveCommandConfig {
     pub name: String,
     pub command: String,
+    pub interactive_cli: bool,
     pub pinned_footer_lines: usize,
     pub markers: Vec<String>,
     pub archive_repainted_frames: bool,
@@ -20,6 +21,7 @@ pub struct InteractiveCommandConfig {
 impl InteractiveCommandConfig {
     pub fn with_defaults(name: String, command: String, pinned_footer_lines: usize) -> Self {
         Self {
+            interactive_cli: true,
             markers: default_interactive_markers(&name, &command),
             archive_repainted_frames: default_interactive_archive_repainted_frames(
                 &name, &command,
@@ -137,6 +139,10 @@ impl AppConfig {
                 t.insert(
                     "command".to_string(),
                     toml::Value::String(spec.command.clone()),
+                );
+                t.insert(
+                    "interactive_cli".to_string(),
+                    toml::Value::Boolean(spec.interactive_cli),
                 );
                 t.insert(
                     "pinned_footer_lines".to_string(),
@@ -374,6 +380,10 @@ fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<Interactive
             .and_then(interactive_pinned_footer_lines_value)
             .unwrap_or_else(|| default_interactive_pinned_footer_lines(&name, &command));
         if !name.is_empty() && !command.is_empty() {
+            let interactive_cli = t
+                .get("interactive_cli")
+                .and_then(interactive_bool_value)
+                .unwrap_or(true);
             let markers = t
                 .get("markers")
                 .map(interactive_marker_values)
@@ -385,6 +395,7 @@ fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<Interactive
             out.push(InteractiveCommandConfig {
                 name,
                 command,
+                interactive_cli,
                 pinned_footer_lines,
                 markers,
                 archive_repainted_frames,
@@ -554,6 +565,7 @@ mod tests {
             [[ui.interactive_commands]]
             name = "Acme AI"
             command = "acme-ai --tui"
+            interactive_cli = true
             pinned_footer_lines = 2
             markers = ["Acme AI", "Ready for input"]
             archive_repainted_frames = true
@@ -564,6 +576,7 @@ mod tests {
         assert_eq!(commands.len(), 1);
         assert_eq!(commands[0].name, "Acme AI");
         assert_eq!(commands[0].command, "acme-ai --tui");
+        assert!(commands[0].interactive_cli);
         assert_eq!(commands[0].pinned_footer_lines, 2);
         assert_eq!(
             commands[0].markers,
@@ -584,10 +597,27 @@ mod tests {
 
         let commands = cfg.interactive_commands();
         assert_eq!(commands.len(), 1);
+        assert!(commands[0].interactive_cli);
         assert!(commands[0]
             .markers
             .iter()
             .any(|marker| marker == "openai codex"));
         assert!(commands[0].archive_repainted_frames);
+    }
+
+    #[test]
+    fn interactive_command_can_disable_interactive_cli_route() {
+        let cfg = config_from_toml(
+            r#"
+            [[ui.interactive_commands]]
+            name = "Build"
+            command = "cargo build"
+            interactive_cli = false
+            "#,
+        );
+
+        let commands = cfg.interactive_commands();
+        assert_eq!(commands.len(), 1);
+        assert!(!commands[0].interactive_cli);
     }
 }

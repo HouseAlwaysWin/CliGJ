@@ -57,6 +57,7 @@ pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState
         .map(|spec| InteractiveCmdEditorRow {
             name: SharedString::from(spec.name.as_str()),
             line: SharedString::from(spec.command.as_str()),
+            interactive_cli: spec.interactive_cli,
             pinned_footer_lines: SharedString::from(
                 spec.pinned_footer_lines.to_string().as_str(),
             ),

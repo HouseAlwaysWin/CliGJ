@@ -31,6 +31,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         rows.push(InteractiveCmdEditorRow {
             name: SharedString::new(),
             line: SharedString::new(),
+            interactive_cli: true,
             pinned_footer_lines: SharedString::from("0"),
             markers: SharedString::new(),
             archive_repainted_frames: false,
@@ -109,6 +110,23 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         row.pinned_footer_lines = new_text;
+        m.set_row_data(i, row);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_interactive_manage_interactive_cli_toggled(move |idx| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if idx < 0 {
+            return;
+        }
+        let i = idx as usize;
+        let m = ui.get_ws_interactive_manage_rows();
+        let Some(mut row) = m.row_data(i) else {
+            return;
+        };
+        row.interactive_cli = !row.interactive_cli;
         m.set_row_data(i, row);
     });
 

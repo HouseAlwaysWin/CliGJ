@@ -372,7 +372,8 @@ impl GuiState {
             .next()
             .map(normalized_program_name)
             .unwrap_or_default();
-        let interactive_spec = spec_for_program(interactive_launcher_program.as_str(), self);
+        let interactive_spec = spec_for_program(interactive_launcher_program.as_str(), self)
+            .filter(|spec| spec.interactive_cli);
         let is_interactive_ai_launch = interactive_spec.is_some();
         let launcher_default_pinned_footer_lines = interactive_spec
             .as_ref()
