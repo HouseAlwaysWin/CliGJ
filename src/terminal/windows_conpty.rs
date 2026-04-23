@@ -329,10 +329,48 @@ fn terminal_render_from_lines_cached(
     }
 }
 
+fn terminal_render_from_lines_full(
+    render_mode: ReaderRenderMode,
+    lines: &[&Line],
+    start_phys_idx: usize,
+    total_scrollback_rows: usize,
+    term_screen_rows: usize,
+    palette: &ColorPalette,
+    cursor_local_row: Option<usize>,
+    cursor_col: Option<usize>,
+) -> TerminalRender {
+    let full_lines: Vec<ColoredLine> = lines
+        .iter()
+        .map(|line| line_to_colored_spans(line, palette, None))
+        .collect();
+    let render_window_len = full_lines.len();
+
+    TerminalRender {
+        render_mode,
+        text: String::new(),
+        lines: full_lines,
+        snapshot_len: render_window_len,
+        full_len: total_scrollback_rows,
+        first_line_idx: start_phys_idx,
+        cursor_row: cursor_local_row.map(|row| start_phys_idx + row),
+        cursor_col,
+        filled: render_window_len > term_screen_rows,
+        // Empty changed_indices intentionally means "lines contains the full snapshot".
+        changed_indices: Vec::new(),
+        reset_terminal_buffer: false,
+    }
+}
+
 #[derive(Debug)]
 pub enum ControlCommand {
     Resize { cols: u16, rows: u16 },
     SetRenderMode(ReaderRenderMode),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InteractiveFloorReset {
+    ModeStart,
+    Viewport,
 }
 
 pub fn start_reader_thread(
@@ -397,7 +435,8 @@ pub fn start_reader_thread(
         let mut last_alt_screen_active = false;
         let mut interactive_snapshot_floor = 0usize;
         let mut pending_interactive_floor_reset =
-            initial_render_mode == ReaderRenderMode::InteractiveAi;
+            (initial_render_mode == ReaderRenderMode::InteractiveAi)
+                .then_some(InteractiveFloorReset::ModeStart);
         let mut resize_settle_deadline: Option<Instant> = None;
 
         loop {
@@ -453,7 +492,8 @@ pub fn start_reader_thread(
                             resize_settle_deadline =
                                 Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
                             if render_mode == ReaderRenderMode::InteractiveAi {
-                                pending_interactive_floor_reset = true;
+                                pending_interactive_floor_reset =
+                                    Some(InteractiveFloorReset::Viewport);
                             }
                         }
                     }
@@ -464,7 +504,8 @@ pub fn start_reader_thread(
                             last_snapshot_fp = None;
                             pending_reset = true;
                             pending_interactive_floor_reset =
-                                render_mode == ReaderRenderMode::InteractiveAi;
+                                (render_mode == ReaderRenderMode::InteractiveAi)
+                                    .then_some(InteractiveFloorReset::ModeStart);
                         }
                     }
                 }
@@ -483,7 +524,7 @@ pub fn start_reader_thread(
                 last_snapshot_fp = None;
                 pending_reset = true;
                 if render_mode == ReaderRenderMode::InteractiveAi {
-                    pending_interactive_floor_reset = true;
+                    pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
                 }
                 last_alt_screen_active = alt_screen_active;
             }
@@ -494,9 +535,18 @@ pub fn start_reader_thread(
                 .saturating_mul(4)
                 .min(CONPTY_SNAPSHOT_MAX_LINES)
                 .max(term_rows);
-            if pending_interactive_floor_reset && render_mode == ReaderRenderMode::InteractiveAi {
-                interactive_snapshot_floor = total.saturating_sub(term_rows);
-                pending_interactive_floor_reset = false;
+            if let Some(reset) = pending_interactive_floor_reset.take() {
+                if render_mode == ReaderRenderMode::InteractiveAi {
+                    interactive_snapshot_floor = match reset {
+                        InteractiveFloorReset::ModeStart => {
+                            let cursor = term.cursor_pos();
+                            screen.phys_row(cursor.y)
+                        }
+                        InteractiveFloorReset::Viewport => {
+                            interactive_snapshot_floor.max(total.saturating_sub(term_rows))
+                        }
+                    };
+                }
             }
             let (start, end, total_for_render, filled) = match render_mode {
                 ReaderRenderMode::InteractiveAi => {
@@ -551,19 +601,16 @@ pub fn start_reader_thread(
                     cursor_col,
                     &mut line_cache,
                 ),
-                ReaderRenderMode::InteractiveAi => {
-                    terminal_render_from_lines_cached(
-                        ReaderRenderMode::InteractiveAi,
-                        &line_refs,
-                        start,
-                        total_for_render,
-                        term_rows,
-                        &palette,
-                        cursor_local_row,
-                        cursor_col,
-                        &mut line_cache,
-                    )
-                }
+                ReaderRenderMode::InteractiveAi => terminal_render_from_lines_full(
+                    ReaderRenderMode::InteractiveAi,
+                    &line_refs,
+                    start,
+                    total_for_render,
+                    term_rows,
+                    &palette,
+                    cursor_local_row,
+                    cursor_col,
+                ),
             };
             render.filled = filled;
             render.reset_terminal_buffer = pending_reset;

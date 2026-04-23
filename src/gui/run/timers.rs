@@ -14,7 +14,7 @@ use serde_json::json;
 
 use crate::gui::ipc::{IpcBridge, IpcGuiCommand, IpcGuiResponse};
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode};
+use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode, TERMINAL_SCROLLBACK_CAP};
 use crate::gui::ui_sync::{
     push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
@@ -23,11 +23,183 @@ use crate::terminal::render::ColoredLine;
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
 const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
-
 fn line_has_visible_text(line: &ColoredLine) -> bool {
     line.spans
         .iter()
         .any(|span| span.text.chars().any(|ch| !ch.is_whitespace()))
+}
+
+fn line_plain_text(line: &ColoredLine) -> String {
+    let mut text = String::new();
+    for span in &line.spans {
+        text.push_str(span.text.as_str());
+    }
+    text
+}
+
+fn line_has_shell_preamble_marker(line: &ColoredLine) -> bool {
+    let text = line_plain_text(line).to_ascii_lowercase();
+    text.contains("microsoft windows") || text.contains("microsoft corporation")
+}
+
+fn line_has_interactive_ai_marker(line: &ColoredLine) -> bool {
+    let text = line_plain_text(line).to_ascii_lowercase();
+    text.contains("gemini cli")
+        || text.contains("waiting for authentication")
+        || text.contains("signed in with google")
+        || text.contains("about gemini")
+        || text.contains("gemini.md")
+        || text.contains("? for shortcuts")
+        || text.contains("type your message")
+}
+
+fn trim_or_drop_shell_preamble_snapshot(lines: &mut Vec<ColoredLine>) -> bool {
+    let Some(shell_marker_idx) = lines.iter().position(line_has_shell_preamble_marker) else {
+        return false;
+    };
+    if let Some(ai_marker_idx) = lines.iter().position(line_has_interactive_ai_marker) {
+        if ai_marker_idx > shell_marker_idx {
+            lines.drain(0..ai_marker_idx);
+        }
+        return false;
+    }
+    true
+}
+
+fn reset_terminal_model_cache(tab: &mut TabState) {
+    tab.terminal_model_rows.clear();
+    tab.terminal_model_hashes.clear();
+    tab.terminal_model_dirty.clear();
+    tab.last_window_first = usize::MAX;
+    tab.last_window_last = usize::MAX;
+    tab.last_window_total = usize::MAX;
+}
+
+fn history_ends_with_block(history: &[ColoredLine], block: &[ColoredLine]) -> bool {
+    history.len() >= block.len() && &history[history.len() - block.len()..] == block
+}
+
+fn longest_history_snapshot_overlap(history: &[ColoredLine], snapshot: &[ColoredLine]) -> usize {
+    let max_overlap = history.len().min(snapshot.len());
+    for overlap in (1..=max_overlap).rev() {
+        if history[history.len() - overlap..] == snapshot[..overlap] {
+            return overlap;
+        }
+    }
+    0
+}
+
+fn longest_snapshot_prefix_seen(history: &[ColoredLine], snapshot: &[ColoredLine]) -> usize {
+    if history.is_empty() || snapshot.is_empty() {
+        return 0;
+    }
+    let mut best = 0usize;
+    for start in 0..history.len() {
+        let mut len = 0usize;
+        while start + len < history.len()
+            && len < snapshot.len()
+            && history[start + len] == snapshot[len]
+        {
+            len += 1;
+        }
+        best = best.max(len);
+        if best == snapshot.len() {
+            break;
+        }
+    }
+    best
+}
+
+fn append_interactive_snapshot(tab: &mut TabState, lines: &[ColoredLine]) {
+    let snapshot: Vec<ColoredLine> = lines
+        .iter()
+        .filter(|line| line_has_visible_text(line))
+        .cloned()
+        .collect();
+    if snapshot.is_empty() {
+        return;
+    }
+    if history_ends_with_block(&tab.interactive_history_lines, &snapshot) {
+        return;
+    }
+
+    let tail_overlap = longest_history_snapshot_overlap(&tab.interactive_history_lines, &snapshot);
+    let seen_overlap = longest_snapshot_prefix_seen(&tab.interactive_history_lines, &snapshot);
+    let overlap = tail_overlap.max(seen_overlap);
+    if overlap == 0 && !tab.interactive_history_lines.is_empty() && snapshot.len() > 3 {
+        // Resize reflow can rewrite the same logical screen with different line breaks.
+        // Exact line overlap fails in that case, so replace the stale-width archive instead
+        // of appending the reflowed snapshot as duplicate content.
+        tab.interactive_history_lines.clear();
+    }
+    tab.interactive_history_lines
+        .extend(snapshot.into_iter().skip(overlap));
+
+    if tab.interactive_history_lines.len() > TERMINAL_SCROLLBACK_CAP {
+        let excess = tab.interactive_history_lines.len() - TERMINAL_SCROLLBACK_CAP;
+        tab.interactive_history_lines.drain(0..excess);
+    }
+}
+
+fn append_interactive_history_block(tab: &mut TabState, lines: &[ColoredLine]) {
+    append_interactive_snapshot(tab, lines);
+}
+
+fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
+    if new_origin <= tab.terminal_physical_origin {
+        return;
+    }
+    let dropped_len = (new_origin - tab.terminal_physical_origin)
+        .min(tab.interactive_frame_lines.len());
+    if dropped_len == 0 {
+        tab.terminal_physical_origin = new_origin;
+        return;
+    }
+    let dropped: Vec<ColoredLine> = tab
+        .interactive_frame_lines
+        .iter()
+        .take(dropped_len)
+        .cloned()
+        .collect();
+    append_interactive_history_block(tab, &dropped);
+}
+
+fn compose_interactive_terminal_lines(tab: &mut TabState) {
+    let frame_end = tab
+        .interactive_frame_lines
+        .iter()
+        .rposition(line_has_visible_text)
+        .map(|idx| {
+            (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP).min(tab.interactive_frame_lines.len())
+        })
+        .unwrap_or(0);
+    let frame_visible_block: Vec<ColoredLine> = tab
+        .interactive_frame_lines
+        .iter()
+        .take(frame_end)
+        .filter(|line| line_has_visible_text(line))
+        .cloned()
+        .collect();
+    let frame_already_archived = !frame_visible_block.is_empty()
+        && history_ends_with_block(&tab.interactive_history_lines, &frame_visible_block);
+
+    tab.terminal_lines.clear();
+    tab.terminal_lines
+        .extend(tab.interactive_history_lines.iter().cloned());
+    if !frame_already_archived {
+        tab.terminal_lines
+            .extend(tab.interactive_frame_lines.iter().take(frame_end).cloned());
+    }
+
+    if tab.terminal_lines.len() > TERMINAL_SCROLLBACK_CAP {
+        let excess = tab.terminal_lines.len() - TERMINAL_SCROLLBACK_CAP;
+        let hist_drop = excess.min(tab.interactive_history_lines.len());
+        if hist_drop > 0 {
+            tab.interactive_history_lines.drain(0..hist_drop);
+        }
+        tab.terminal_lines.drain(0..excess);
+    }
+    reset_terminal_model_cache(tab);
 }
 
 /// After each ConPTY snapshot, physical rows `[0, chunk_first)` are not in the slice. The old
@@ -169,10 +341,17 @@ fn apply_pending_updates(
             continue;
         };
         let tab = &mut state.tabs[tab_idx];
+        let stale_shell_update =
+            tab.terminal_mode == TerminalMode::InteractiveAi
+                && update.terminal_mode == Some(TerminalMode::Shell);
+        if stale_shell_update {
+            // The launcher command is submitted while the reader may still have Shell snapshots
+            // queued. Once the UI has switched to InteractiveAi, those Shell frames are stale
+            // pre-launch scrollback and must not be archived as Gemini/Codex output.
+            continue;
+        }
         if let Some(mode) = update.terminal_mode {
-            if !(tab.terminal_mode == TerminalMode::InteractiveAi && mode == TerminalMode::Shell) {
-                tab.terminal_mode = mode;
-            }
+            tab.terminal_mode = mode;
         }
         if let Some(v) = update.set_auto_scroll {
             tab.auto_scroll = v;
@@ -198,7 +377,170 @@ fn apply_pending_updates(
             }
             replaced_with_vt_lines = true;
 
-            if update.reset_terminal_buffer {
+            if tab.terminal_mode == TerminalMode::InteractiveAi {
+                if update.changed_indices.is_empty() && !new_lines.is_empty() {
+                    let previous_terminal_lines = if update.reset_terminal_buffer {
+                        // Resize snapshots are a full reflowed baseline. Old history/frame rows
+                        // are stale at the previous width and would duplicate the new snapshot.
+                        let previous = tab.terminal_lines.clone();
+                        tab.interactive_history_lines.clear();
+                        tab.interactive_frame_lines.clear();
+                        tab.terminal_lines.clear();
+                        Some(previous)
+                    } else {
+                        Some(tab.terminal_lines.clone())
+                    };
+                    let mut snapshot_lines = std::mem::take(&mut new_lines);
+                    let drop_shell_preamble_snapshot =
+                        trim_or_drop_shell_preamble_snapshot(&mut snapshot_lines);
+                    let frame_end = snapshot_lines
+                        .iter()
+                        .rposition(line_has_visible_text)
+                        .map(|idx| {
+                            (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP)
+                                .min(snapshot_lines.len())
+                        })
+                        .unwrap_or(0);
+                    snapshot_lines.truncate(frame_end);
+
+                    if drop_shell_preamble_snapshot {
+                        tab.interactive_frame_lines.clear();
+                        tab.terminal_lines.clear();
+                        reset_terminal_model_cache(tab);
+                    } else if snapshot_lines.is_empty() {
+                        if let Some(previous_terminal_lines) = previous_terminal_lines {
+                            if !previous_terminal_lines.is_empty() {
+                                tab.terminal_lines = previous_terminal_lines;
+                            }
+                        }
+                    } else {
+                        if !update.reset_terminal_buffer {
+                            archive_dropped_interactive_prefix(tab, chunk_first_idx);
+                        }
+                        tab.interactive_frame_lines = snapshot_lines;
+                        compose_interactive_terminal_lines(tab);
+                    }
+
+                    tab.terminal_physical_origin = chunk_first_idx;
+                    tab.terminal_cursor_row = update
+                        .cursor_row
+                        .and_then(|phys| phys.checked_sub(chunk_first_idx))
+                        .map(|row| tab.interactive_history_lines.len() + row);
+                    tab.terminal_cursor_col = update.cursor_col;
+                    if let Some(cursor_row) = tab.terminal_cursor_row {
+                        if cursor_row >= tab.terminal_lines.len() {
+                            tab.terminal_cursor_row = None;
+                        }
+                    }
+                    reset_terminal_model_cache(tab);
+                    tab.terminal_text.clear();
+                } else {
+                let previous_terminal_lines = if update.reset_terminal_buffer {
+                    Some(tab.terminal_lines.clone())
+                } else {
+                    None
+                };
+                if update.reset_terminal_buffer {
+                    // Resize rewrites/reflows the current screen. Do not archive the old frame;
+                    // the next snapshot is the replacement baseline.
+                    tab.interactive_history_lines.clear();
+                    tab.interactive_frame_lines.clear();
+                    tab.terminal_lines.clear();
+                    tab.terminal_physical_origin = chunk_first_idx;
+                    tab.terminal_cursor_row = None;
+                    tab.terminal_cursor_col = None;
+                    reset_terminal_model_cache(tab);
+                }
+
+                if chunk_first_idx < tab.terminal_physical_origin {
+                    let prepend = tab.terminal_physical_origin - chunk_first_idx;
+                    let mut rebased = vec![ColoredLine::default(); prepend];
+                    rebased.append(&mut tab.interactive_frame_lines);
+                    tab.interactive_frame_lines = rebased;
+                    tab.terminal_physical_origin = chunk_first_idx;
+                    reset_terminal_model_cache(tab);
+                }
+
+                let origin = tab.terminal_physical_origin;
+                let leading = chunk_first_idx.saturating_sub(origin);
+                if leading > 0 {
+                    let drop_leading = leading.min(tab.interactive_frame_lines.len());
+                    if drop_leading > 0 && !update.reset_terminal_buffer {
+                        let dropped: Vec<ColoredLine> = tab
+                            .interactive_frame_lines
+                            .iter()
+                            .take(drop_leading)
+                            .cloned()
+                            .collect();
+                        append_interactive_history_block(tab, &dropped);
+                    }
+                    tab.interactive_frame_lines.drain(0..drop_leading);
+                    tab.terminal_physical_origin =
+                        tab.terminal_physical_origin.saturating_add(drop_leading);
+                    if leading > drop_leading {
+                        tab.terminal_physical_origin = chunk_first_idx;
+                    }
+                }
+
+                let origin = tab.terminal_physical_origin;
+                let local_len = phys_end.saturating_sub(origin);
+                if local_len > tab.interactive_frame_lines.len() {
+                    tab.interactive_frame_lines
+                        .resize(local_len, ColoredLine::default());
+                }
+
+                let indices = &update.changed_indices;
+                if indices.is_empty() && !new_lines.is_empty() {
+                    for i in 0..new_lines.len() {
+                        let phys = chunk_first_idx + i;
+                        let Some(local) = phys.checked_sub(origin) else {
+                            continue;
+                        };
+                        if local < tab.interactive_frame_lines.len() {
+                            tab.interactive_frame_lines[local] = std::mem::take(&mut new_lines[i]);
+                        }
+                    }
+                } else {
+                    for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
+                        let phys = chunk_first_idx + snapshot_idx;
+                        let Some(local) = phys.checked_sub(origin) else {
+                            continue;
+                        };
+                        if local < tab.interactive_frame_lines.len() && delta_idx < new_lines.len()
+                        {
+                            tab.interactive_frame_lines[local] =
+                                std::mem::take(&mut new_lines[delta_idx]);
+                        }
+                    }
+                }
+
+                let tail_keep = phys_end.saturating_sub(origin);
+                if tab.interactive_frame_lines.len() > tail_keep {
+                    tab.interactive_frame_lines.truncate(tail_keep);
+                }
+
+                let history_len = tab.interactive_history_lines.len();
+                tab.terminal_cursor_row = update.cursor_row.and_then(|phys| {
+                    phys.checked_sub(tab.terminal_physical_origin)
+                        .map(|row| history_len + row)
+                });
+                tab.terminal_cursor_col = update.cursor_col;
+                compose_interactive_terminal_lines(tab);
+                if tab.terminal_lines.is_empty() {
+                    if let Some(previous_terminal_lines) = previous_terminal_lines {
+                        tab.terminal_lines = previous_terminal_lines;
+                        reset_terminal_model_cache(tab);
+                    }
+                }
+                if let Some(cursor_row) = tab.terminal_cursor_row {
+                    if cursor_row >= tab.terminal_lines.len() {
+                        tab.terminal_cursor_row = None;
+                    }
+                }
+                tab.terminal_text.clear();
+                }
+            } else {
+                if update.reset_terminal_buffer {
                 tab.terminal_lines.clear();
                 tab.terminal_physical_origin = chunk_first_idx;
                 tab.terminal_cursor_row = None;
@@ -274,7 +616,8 @@ fn apply_pending_updates(
             }
 
             let leading = chunk_first_idx.saturating_sub(origin);
-            let drop_snapshot_prefix = tab.terminal_mode == TerminalMode::InteractiveAi;
+            let drop_snapshot_prefix =
+                update.reset_terminal_buffer && tab.terminal_mode == TerminalMode::InteractiveAi;
             compact_terminal_lines_after_snapshot(tab, leading, drop_snapshot_prefix);
 
             tab.terminal_cursor_row = update
@@ -315,6 +658,7 @@ fn apply_pending_updates(
 
             tab.enforce_scrollback_cap();
             tab.terminal_text.clear();
+                }
         }
 
         if !update.append_text.is_empty() && !replaced_with_vt_lines {
