@@ -18,6 +18,7 @@ use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode, TERMINA
 use crate::gui::ui_sync::{
     push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
+use crate::terminal::pty_event::RawPtyEvent;
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
@@ -253,6 +254,7 @@ fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize, for
 #[derive(Default)]
 struct PendingTabUpdate {
     terminal_mode: Option<TerminalMode>,
+    raw_pty_events: Vec<RawPtyEvent>,
     set_auto_scroll: Option<bool>,
     replace_text: Option<String>,
     replace_lines: Option<Vec<ColoredLine>>,
@@ -271,6 +273,7 @@ struct PendingTabUpdate {
 fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, PendingTabUpdate>) {
     let entry = pending.entry(chunk.tab_id).or_default();
     entry.terminal_mode = Some(chunk.terminal_mode);
+    entry.raw_pty_events.extend(chunk.raw_pty_events);
     if let Some(v) = chunk.set_auto_scroll {
         entry.set_auto_scroll = Some(v);
     }
@@ -336,11 +339,12 @@ fn apply_pending_updates(
         tab_index_by_id.insert(t.id, idx);
     }
 
-    for (tab_id, update) in pending {
+    for (tab_id, mut update) in pending {
         let Some(&tab_idx) = tab_index_by_id.get(&tab_id) else {
             continue;
         };
         let tab = &mut state.tabs[tab_idx];
+        tab.append_raw_pty_events(std::mem::take(&mut update.raw_pty_events));
         let stale_shell_update =
             tab.terminal_mode == TerminalMode::InteractiveAi
                 && update.terminal_mode == Some(TerminalMode::Shell);

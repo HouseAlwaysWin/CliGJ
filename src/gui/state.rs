@@ -2,9 +2,12 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::collections::{HashMap, HashSet};
+use std::io::Write;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use slint::{Image, SharedString, VecModel};
 
+use crate::terminal::pty_event::{RawPtyEvent, RawPtyMode};
 use crate::terminal::render::ColoredLine;
 use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
@@ -156,6 +159,10 @@ pub struct TabState {
     pub(crate) terminal_pinned_footer_override: Option<usize>,
     /// Normalized launcher program name for the current interactive tab, used for live config updates.
     pub(crate) interactive_launcher_program: String,
+    /// Append-only raw PTY event log for replay/debugging. This records bytes/control events before
+    /// GUI-level interpretation, so it survives render-mode filtering and resize heuristics.
+    pub(crate) raw_pty_events: Vec<RawPtyEvent>,
+    pub(crate) raw_pty_event_bytes: usize,
     /// Last PTY grid size actually sent to this tab. Avoid same-size resize on tab switch because
     /// many CLIs/TUIs treat it as a redraw and pollute scrollback with duplicate frames.
     pub(crate) last_pty_cols: u16,
@@ -169,6 +176,44 @@ pub struct TabState {
 
 /// Hard cap on VT rows kept client-side; oldest lines are discarded first (see `enforce_scrollback_cap`).
 pub(crate) const TERMINAL_SCROLLBACK_CAP: usize = 1200;
+pub(crate) const RAW_PTY_EVENT_CAP: usize = 8192;
+pub(crate) const RAW_PTY_BYTE_CAP: usize = 4 * 1024 * 1024;
+
+pub(crate) struct RawPtyDumpResult {
+    pub(crate) dir: PathBuf,
+    pub(crate) raw_path: PathBuf,
+    pub(crate) index_path: PathBuf,
+    pub(crate) escaped_path: PathBuf,
+    pub(crate) screen_path: PathBuf,
+    pub(crate) event_count: usize,
+    pub(crate) byte_count: usize,
+}
+
+fn escaped_bytes_for_debug(bytes: &[u8]) -> String {
+    let mut out = String::new();
+    for &byte in bytes {
+        match byte {
+            b'\n' => out.push_str("\\n\n"),
+            b'\r' => out.push_str("\\r"),
+            b'\t' => out.push_str("\\t"),
+            0x1b => out.push_str("\\x1b"),
+            0x20..=0x7e => out.push(byte as char),
+            _ => out.push_str(format!("\\x{byte:02x}").as_str()),
+        }
+    }
+    out
+}
+
+fn colored_lines_plain_text(lines: &[ColoredLine]) -> String {
+    let mut out = String::new();
+    for line in lines {
+        for span in &line.spans {
+            out.push_str(span.text.as_str());
+        }
+        out.push('\n');
+    }
+    out
+}
 
 impl TabState {
     pub fn new(id: u64, tx: mpsc::Sender<TerminalChunk>, startup_cwd: Option<PathBuf>) -> Self {
@@ -216,6 +261,8 @@ impl TabState {
             terminal_pinned_footer_lines: 0,
             terminal_pinned_footer_override: None,
             interactive_launcher_program: String::new(),
+            raw_pty_events: Vec::new(),
+            raw_pty_event_bytes: 0,
             last_pty_cols: 120,
             last_pty_rows: 40,
             #[cfg(target_os = "windows")]
@@ -246,6 +293,7 @@ impl TabState {
                                 ReaderRenderMode::Shell => TerminalMode::Shell,
                                 ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
                             },
+                            raw_pty_events: render.raw_pty_events,
                             text: render.text,
                             lines: render.lines,
                             snapshot_len: render.snapshot_len,
@@ -318,6 +366,121 @@ impl TabState {
         self.terminal_cursor_col = None;
         self.terminal_physical_origin = 0;
     }
+
+    pub fn append_raw_pty_events(&mut self, events: Vec<RawPtyEvent>) {
+        if events.is_empty() {
+            return;
+        }
+        for event in events {
+            self.raw_pty_event_bytes = self.raw_pty_event_bytes.saturating_add(event.byte_len());
+            self.raw_pty_events.push(event);
+        }
+        while self.raw_pty_events.len() > RAW_PTY_EVENT_CAP
+            || self.raw_pty_event_bytes > RAW_PTY_BYTE_CAP
+        {
+            if self.raw_pty_events.is_empty() {
+                self.raw_pty_event_bytes = 0;
+                break;
+            }
+            let removed = self.raw_pty_events.remove(0);
+            self.raw_pty_event_bytes =
+                self.raw_pty_event_bytes.saturating_sub(removed.byte_len());
+        }
+    }
+
+    pub fn dump_raw_pty_events(&self, dir: Option<PathBuf>) -> Result<RawPtyDumpResult, String> {
+        let dir = dir.unwrap_or_else(|| {
+            std::env::current_dir()
+                .unwrap_or_else(|_| PathBuf::from("."))
+                .join("raw_pty_dumps")
+        });
+        std::fs::create_dir_all(&dir).map_err(|e| format!("create dump dir: {e}"))?;
+
+        let timestamp_ms = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|e| format!("system time before unix epoch: {e}"))?
+            .as_millis();
+        let stem = format!("cligj-raw-pty-tab-{}-{timestamp_ms}", self.id);
+        let raw_path = dir.join(format!("{stem}.bin"));
+        let index_path = dir.join(format!("{stem}.jsonl"));
+        let escaped_path = dir.join(format!("{stem}.escaped.txt"));
+        let screen_path = dir.join(format!("{stem}.screen.txt"));
+
+        let mut raw_file =
+            std::fs::File::create(&raw_path).map_err(|e| format!("create raw dump: {e}"))?;
+        let mut index_file =
+            std::fs::File::create(&index_path).map_err(|e| format!("create index dump: {e}"))?;
+        let mut escaped_file = std::fs::File::create(&escaped_path)
+            .map_err(|e| format!("create escaped dump: {e}"))?;
+
+        let mut offset = 0usize;
+        for (idx, event) in self.raw_pty_events.iter().enumerate() {
+            match event {
+                RawPtyEvent::Bytes(bytes) => {
+                    raw_file
+                        .write_all(bytes)
+                        .map_err(|e| format!("write raw bytes: {e}"))?;
+                    let line = serde_json::json!({
+                        "event_index": idx,
+                        "kind": "bytes",
+                        "offset": offset,
+                        "len": bytes.len(),
+                    });
+                    writeln!(index_file, "{line}")
+                        .map_err(|e| format!("write index bytes event: {e}"))?;
+                    writeln!(
+                        escaped_file,
+                        "\n--- event {idx}: bytes offset={offset} len={} ---\n{}",
+                        bytes.len(),
+                        escaped_bytes_for_debug(bytes)
+                    )
+                    .map_err(|e| format!("write escaped bytes event: {e}"))?;
+                    offset = offset.saturating_add(bytes.len());
+                }
+                RawPtyEvent::Resize { cols, rows } => {
+                    let line = serde_json::json!({
+                        "event_index": idx,
+                        "kind": "resize",
+                        "cols": cols,
+                        "rows": rows,
+                    });
+                    writeln!(index_file, "{line}")
+                        .map_err(|e| format!("write index resize event: {e}"))?;
+                    writeln!(escaped_file, "\n--- event {idx}: resize cols={cols} rows={rows} ---")
+                        .map_err(|e| format!("write escaped resize event: {e}"))?;
+                }
+                RawPtyEvent::RenderMode { mode } => {
+                    let mode = match mode {
+                        RawPtyMode::Shell => "shell",
+                        RawPtyMode::InteractiveAi => "interactive_ai",
+                    };
+                    let line = serde_json::json!({
+                        "event_index": idx,
+                        "kind": "render_mode",
+                        "mode": mode,
+                    });
+                    writeln!(index_file, "{line}")
+                        .map_err(|e| format!("write index render mode event: {e}"))?;
+                    writeln!(escaped_file, "\n--- event {idx}: render_mode mode={mode} ---")
+                        .map_err(|e| format!("write escaped render mode event: {e}"))?;
+                }
+            }
+        }
+
+        let screen_text = colored_lines_plain_text(&self.terminal_lines);
+        std::fs::write(&screen_path, screen_text)
+            .map_err(|e| format!("write screen dump: {e}"))?;
+
+        Ok(RawPtyDumpResult {
+            dir,
+            raw_path,
+            index_path,
+            escaped_path,
+            screen_path,
+            event_count: self.raw_pty_events.len(),
+            byte_count: offset,
+        })
+    }
 }
 
 pub struct GuiState {
@@ -351,6 +514,7 @@ pub struct GuiState {
 pub struct TerminalChunk {
     pub(crate) tab_id: u64,
     pub(crate) terminal_mode: TerminalMode,
+    pub(crate) raw_pty_events: Vec<RawPtyEvent>,
     pub(crate) text: String,
     pub(crate) lines: Vec<ColoredLine>,
     /// Number of physical rows covered by this snapshot window.

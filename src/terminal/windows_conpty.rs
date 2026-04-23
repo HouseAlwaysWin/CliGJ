@@ -18,6 +18,7 @@ use wezterm_term::Terminal;
 use wezterm_term::TerminalSize;
 use wezterm_term::color::ColorPalette;
 
+use crate::terminal::pty_event::{RawPtyEvent, RawPtyMode};
 use crate::terminal::render::{line_to_colored_spans, ColoredLine};
 
 use windows::core::{PCWSTR, PWSTR};
@@ -68,6 +69,7 @@ pub struct ConptySpawn {
 
 pub struct TerminalRender {
     pub render_mode: ReaderRenderMode,
+    pub raw_pty_events: Vec<RawPtyEvent>,
     pub text: String,
     /// ONLY lines that changed (matches changed_indices length).
     pub lines: Vec<ColoredLine>,
@@ -89,6 +91,15 @@ pub struct TerminalRender {
 pub enum ReaderRenderMode {
     Shell,
     InteractiveAi,
+}
+
+impl From<ReaderRenderMode> for RawPtyMode {
+    fn from(value: ReaderRenderMode) -> Self {
+        match value {
+            ReaderRenderMode::Shell => Self::Shell,
+            ReaderRenderMode::InteractiveAi => Self::InteractiveAi,
+        }
+    }
 }
 
 pub fn spawn_conpty(shell: &str, cols: i16, rows: i16, current_dir: Option<&Path>) -> Result<ConptySpawn, String> {
@@ -316,6 +327,7 @@ fn terminal_render_from_lines_cached(
 
     TerminalRender {
         render_mode,
+        raw_pty_events: Vec::new(),
         text: String::new(),
         lines: changed_lines,
         snapshot_len: render_window_len,
@@ -347,6 +359,7 @@ fn terminal_render_from_lines_full(
 
     TerminalRender {
         render_mode,
+        raw_pty_events: Vec::new(),
         text: String::new(),
         lines: full_lines,
         snapshot_len: render_window_len,
@@ -438,6 +451,15 @@ pub fn start_reader_thread(
             (initial_render_mode == ReaderRenderMode::InteractiveAi)
                 .then_some(InteractiveFloorReset::ModeStart);
         let mut resize_settle_deadline: Option<Instant> = None;
+        let mut pending_raw_pty_events = vec![
+            RawPtyEvent::RenderMode {
+                mode: initial_render_mode.into(),
+            },
+            RawPtyEvent::Resize {
+                cols: term_cols as u16,
+                rows: term_rows as u16,
+            },
+        ];
 
         loop {
             let event = match resize_settle_deadline {
@@ -463,6 +485,7 @@ pub fn start_reader_thread(
                 match event {
                     Event::Bytes(bytes) => {
                         term.advance_bytes(&bytes);
+                        pending_raw_pty_events.push(RawPtyEvent::Bytes(bytes));
                         if resize_settle_deadline.is_some() {
                             resize_settle_deadline = Some(
                                 Instant::now()
@@ -471,6 +494,7 @@ pub fn start_reader_thread(
                         }
                     }
                     Event::Control(ControlCommand::Resize { cols, rows }) => {
+                        pending_raw_pty_events.push(RawPtyEvent::Resize { cols, rows });
                         let new_cols = cols as usize;
                         let new_rows = rows as usize;
                         let size_changed = term_cols != new_cols || term_rows != new_rows;
@@ -498,6 +522,9 @@ pub fn start_reader_thread(
                         }
                     }
                     Event::Control(ControlCommand::SetRenderMode(new_mode)) => {
+                        pending_raw_pty_events.push(RawPtyEvent::RenderMode {
+                            mode: new_mode.into(),
+                        });
                         if render_mode != new_mode {
                             render_mode = new_mode;
                             line_cache.clear();
@@ -584,7 +611,7 @@ pub fn start_reader_thread(
                 cursor_local_row,
                 cursor_col,
             );
-            if last_snapshot_fp == Some(fp) {
+            if last_snapshot_fp == Some(fp) && pending_raw_pty_events.is_empty() {
                 continue;
             }
             last_snapshot_fp = Some(fp);
@@ -612,6 +639,7 @@ pub fn start_reader_thread(
                     cursor_col,
                 ),
             };
+            render.raw_pty_events = std::mem::take(&mut pending_raw_pty_events);
             render.filled = filled;
             render.reset_terminal_buffer = pending_reset;
             pending_reset = false;
