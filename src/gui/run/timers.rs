@@ -150,8 +150,8 @@ fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
     if new_origin <= tab.terminal_physical_origin {
         return;
     }
-    let dropped_len = (new_origin - tab.terminal_physical_origin)
-        .min(tab.interactive_frame_lines.len());
+    let dropped_len =
+        (new_origin - tab.terminal_physical_origin).min(tab.interactive_frame_lines.len());
     if dropped_len == 0 {
         tab.terminal_physical_origin = new_origin;
         return;
@@ -163,6 +163,33 @@ fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
         .cloned()
         .collect();
     append_interactive_history_block(tab, &dropped);
+}
+
+fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine]) -> bool {
+    let Some(first_visible) = lines
+        .iter()
+        .map(line_plain_text)
+        .map(|text| text.trim().to_string())
+        .find(|text| !text.is_empty())
+    else {
+        return false;
+    };
+
+    let has_interactive_footer = lines.iter().any(|line| {
+        let text = line_plain_text(line).to_ascii_lowercase();
+        text.contains("type your message")
+            || text.contains("gemini.md")
+            || text.contains("workspace (/directory)")
+            || text.contains("? for shortcuts")
+    });
+
+    has_interactive_footer
+        && (first_visible.starts_with("│")
+            || first_visible.starts_with("╰")
+            || first_visible.contains("CLI Version")
+            || first_visible.contains("Git Commit")
+            || first_visible.contains("Sandbox")
+            || first_visible.contains("Auth Method"))
 }
 
 fn compose_interactive_terminal_lines(tab: &mut TabState) {
@@ -383,17 +410,10 @@ fn apply_pending_updates(
 
             if tab.terminal_mode == TerminalMode::InteractiveAi {
                 if update.changed_indices.is_empty() && !new_lines.is_empty() {
-                    let previous_terminal_lines = if update.reset_terminal_buffer {
-                        // Resize snapshots are a full reflowed baseline. Old history/frame rows
-                        // are stale at the previous width and would duplicate the new snapshot.
-                        let previous = tab.terminal_lines.clone();
-                        tab.interactive_history_lines.clear();
-                        tab.interactive_frame_lines.clear();
-                        tab.terminal_lines.clear();
-                        Some(previous)
-                    } else {
-                        Some(tab.terminal_lines.clone())
-                    };
+                    let previous_terminal_lines = Some(tab.terminal_lines.clone());
+                    let previous_cursor_row = tab.terminal_cursor_row;
+                    let previous_cursor_col = tab.terminal_cursor_col;
+                    let previous_origin = tab.terminal_physical_origin;
                     let mut snapshot_lines = std::mem::take(&mut new_lines);
                     let drop_shell_preamble_snapshot =
                         trim_or_drop_shell_preamble_snapshot(&mut snapshot_lines);
@@ -406,10 +426,23 @@ fn apply_pending_updates(
                         })
                         .unwrap_or(0);
                     snapshot_lines.truncate(frame_end);
+                    let restore_previous_resize_frame = update.reset_terminal_buffer
+                        && snapshot_starts_mid_interactive_frame(&snapshot_lines)
+                        && previous_terminal_lines
+                            .as_ref()
+                            .is_some_and(|previous| !previous.is_empty());
 
                     if drop_shell_preamble_snapshot {
                         tab.interactive_frame_lines.clear();
                         tab.terminal_lines.clear();
+                        reset_terminal_model_cache(tab);
+                    } else if restore_previous_resize_frame {
+                        if let Some(previous_terminal_lines) = previous_terminal_lines {
+                            tab.terminal_lines = previous_terminal_lines;
+                        }
+                        tab.terminal_cursor_row = previous_cursor_row;
+                        tab.terminal_cursor_col = previous_cursor_col;
+                        tab.terminal_physical_origin = previous_origin;
                         reset_terminal_model_cache(tab);
                     } else if snapshot_lines.is_empty() {
                         if let Some(previous_terminal_lines) = previous_terminal_lines {
@@ -418,22 +451,29 @@ fn apply_pending_updates(
                             }
                         }
                     } else {
-                        if !update.reset_terminal_buffer {
+                        if update.reset_terminal_buffer {
+                            // Resize snapshots are a reflowed baseline; old frame rows are stale.
+                            tab.interactive_history_lines.clear();
+                            tab.interactive_frame_lines.clear();
+                            tab.terminal_lines.clear();
+                        } else {
                             archive_dropped_interactive_prefix(tab, chunk_first_idx);
                         }
                         tab.interactive_frame_lines = snapshot_lines;
                         compose_interactive_terminal_lines(tab);
                     }
 
-                    tab.terminal_physical_origin = chunk_first_idx;
-                    tab.terminal_cursor_row = update
-                        .cursor_row
-                        .and_then(|phys| phys.checked_sub(chunk_first_idx))
-                        .map(|row| tab.interactive_history_lines.len() + row);
-                    tab.terminal_cursor_col = update.cursor_col;
-                    if let Some(cursor_row) = tab.terminal_cursor_row {
-                        if cursor_row >= tab.terminal_lines.len() {
-                            tab.terminal_cursor_row = None;
+                    if !restore_previous_resize_frame {
+                        tab.terminal_physical_origin = chunk_first_idx;
+                        tab.terminal_cursor_row = update
+                            .cursor_row
+                            .and_then(|phys| phys.checked_sub(chunk_first_idx))
+                            .map(|row| tab.interactive_history_lines.len() + row);
+                        tab.terminal_cursor_col = update.cursor_col;
+                        if let Some(cursor_row) = tab.terminal_cursor_row {
+                            if cursor_row >= tab.terminal_lines.len() {
+                                tab.terminal_cursor_row = None;
+                            }
                         }
                     }
                     reset_terminal_model_cache(tab);
