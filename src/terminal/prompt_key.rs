@@ -20,9 +20,7 @@ pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -
     let key = normalize_tty_key_token(key);
     
     // 1. 特殊功能鍵優先
-    if (mod_mask & (MOD_CTRL | MOD_ALT | MOD_SHIFT)) == (MOD_CTRL | MOD_ALT)
-        && matches!(key, "r" | "R")
-    {
+    if (mod_mask & (MOD_CTRL | MOD_ALT | MOD_SHIFT)) == MOD_ALT && key == "F1" {
         return PromptKeyAction::ToggleRawInput;
     }
 
@@ -95,17 +93,17 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_alt_r_toggles_raw() {
+    fn alt_f1_toggles_raw() {
         assert_eq!(
-            route_prompt_key(false, m(true, false, true, false), "r", false),
+            route_prompt_key(false, m(false, false, true, false), "F1", false),
             PromptKeyAction::ToggleRawInput
         );
         assert_eq!(
-            route_prompt_key(false, m(true, false, false, false), "r", false),
+            route_prompt_key(false, m(false, false, false, false), "F1", false),
             PromptKeyAction::Reject
         );
         assert_eq!(
-            route_prompt_key(false, m(true, true, false, false), "r", true),
+            route_prompt_key(false, m(true, false, true, false), "F1", false),
             PromptKeyAction::Reject
         );
     }
