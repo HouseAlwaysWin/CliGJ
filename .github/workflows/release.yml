@@ -105,6 +105,7 @@ jobs:
         working-directory: vscode-extension
         run: |
           npm ci
+          npm audit --omit=dev
           npm run compile
           npx @vscode/vsce package --no-yarn
 

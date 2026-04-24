@@ -72,3 +72,9 @@ Run these commands inside `vscode-extension`:
 npm install
 npm run compile
 ```
+
+## Dependency Security Note
+
+- The packaging toolchain uses `@vscode/vsce`.
+- `npm audit` findings may still appear in dev-only transitive dependencies from upstream `vsce`.
+- Release CI enforces `npm audit --omit=dev`, so only runtime production dependencies can block a release.
