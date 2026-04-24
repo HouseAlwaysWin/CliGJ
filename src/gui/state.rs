@@ -97,6 +97,9 @@ pub struct TabState {
     pub(crate) selected_line: i32,
     pub(crate) selected_context: SharedString,
     pub(crate) prompt: SharedString,
+    /// Composer-only undo/redo stack (kept outside Slint TextInput to avoid byte-boundary panic).
+    pub(crate) prompt_undo_stack: Vec<String>,
+    pub(crate) prompt_redo_stack: Vec<String>,
     pub(crate) cmd_type: String,
     pub(crate) terminal_mode: TerminalMode,
     pub(crate) terminal_text: String,
@@ -260,6 +263,8 @@ impl TabState {
             selected_line: 0,
             selected_context: SharedString::new(),
             prompt: SharedString::new(),
+            prompt_undo_stack: Vec::new(),
+            prompt_redo_stack: Vec::new(),
             cmd_type,
             terminal_mode: TerminalMode::Shell,
             terminal_text: String::new(),

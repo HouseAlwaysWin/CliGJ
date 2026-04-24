@@ -63,6 +63,50 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return false;
         };
         let key_str = key.as_str();
+        // App-level prompt undo/redo (prevents Slint TextInput undo-stack panic).
+        if !raw_tty
+            && !ui.get_ws_at_picker_open()
+            && (mod_mask as u32) & MOD_CTRL != 0
+            && matches!(key_str, "z" | "Z")
+            && (mod_mask as u32) & key_encoding::MOD_SHIFT == 0
+        {
+            let mut s = st_keys.borrow_mut();
+            if s.current < s.tabs.len() {
+                let cur = s.current;
+                let tab = &mut s.tabs[cur];
+                if let Some(prev) = tab.prompt_undo_stack.pop() {
+                    let current = tab.prompt.to_string();
+                    tab.prompt_redo_stack.push(current);
+                    tab.prompt = SharedString::from(prev.as_str());
+                    ui.set_ws_prompt(SharedString::from(prev.as_str()));
+                    tab_update_from_ui(tab, &ui);
+                    sync_composer_line_to_conpty(&ui, &mut s);
+                }
+            }
+            return true;
+        }
+        if !raw_tty
+            && !ui.get_ws_at_picker_open()
+            && (mod_mask as u32) & MOD_CTRL != 0
+            && (matches!(key_str, "y" | "Y")
+                || ((mod_mask as u32) & key_encoding::MOD_SHIFT != 0
+                    && matches!(key_str, "z" | "Z")))
+        {
+            let mut s = st_keys.borrow_mut();
+            if s.current < s.tabs.len() {
+                let cur = s.current;
+                let tab = &mut s.tabs[cur];
+                if let Some(next) = tab.prompt_redo_stack.pop() {
+                    let current = tab.prompt.to_string();
+                    tab.prompt_undo_stack.push(current);
+                    tab.prompt = SharedString::from(next.as_str());
+                    ui.set_ws_prompt(SharedString::from(next.as_str()));
+                    tab_update_from_ui(tab, &ui);
+                    sync_composer_line_to_conpty(&ui, &mut s);
+                }
+            }
+            return true;
+        }
         // Composer: Ctrl+V — HDROP paths (images vs files), then raster → temp PNG path.
         if !raw_tty
             && !ui.get_ws_at_picker_open()

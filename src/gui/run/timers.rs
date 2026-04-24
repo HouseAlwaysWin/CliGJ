@@ -1238,6 +1238,7 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
 
     let app_weak = app.as_weak();
     let timer = Timer::default();
+    const PROMPT_UNDO_CAP: usize = 200;
     timer.start(slint::TimerMode::Repeated, Duration::from_millis(20), move || {
         let Some(ui) = app_weak.upgrade() else {
             return;
@@ -1260,6 +1261,17 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
         }
         // Keep tab prompt + attachment chips synchronized on every real composer change.
         let cur = s.current;
+        let old_prompt = s.tabs[cur].prompt.to_string();
+        let new_prompt = key.1.clone();
+        if old_prompt != new_prompt {
+            let tab = &mut s.tabs[cur];
+            tab.prompt_undo_stack.push(old_prompt);
+            if tab.prompt_undo_stack.len() > PROMPT_UNDO_CAP {
+                let overflow = tab.prompt_undo_stack.len() - PROMPT_UNDO_CAP;
+                tab.prompt_undo_stack.drain(0..overflow);
+            }
+            tab.prompt_redo_stack.clear();
+        }
         tab_update_from_ui(&mut s.tabs[cur], &ui);
         
         sync_composer_line_to_conpty(&ui, &mut s);
