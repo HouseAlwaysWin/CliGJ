@@ -135,11 +135,12 @@ export component GjPromptDropZone inherits Rectangle {
                                     }
 
                                     chip_ta := TouchArea {
+                                        mouse-cursor: pointer;
                                         pointer-event(e) => {
                                             if (e.kind == PointerEventKind.up
                                                 && e.button == PointerEventButton.left) {
                                                 if (e.modifiers.control) {
-                                                    root.prompt-path-chip-open-explorer-requested(idx);
+                                                root.prompt-path-chip-open-explorer-requested(idx);
                                                 } else {
                                                     root.prompt-path-chip-open-editor-requested(idx);
                                                 }
@@ -184,7 +185,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 border-color: AppTheme.prompt_chrome_border;
 
                                 Text {
-                                    text: @tr("Ctrl+左鍵：開啟位置");
+                                    text: @tr("點擊：開啟位置");
                                     color: AppTheme.text_muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
@@ -328,10 +329,10 @@ export component GjPromptDropZone inherits Rectangle {
                                                 TouchArea {
                                                     width: parent.width;
                                                     height: parent.height;
+                                                    mouse-cursor: pointer;
                                                     pointer-event(e) => {
                                                         if (e.kind == PointerEventKind.up
-                                                            && e.button == PointerEventButton.left
-                                                            && e.modifiers.control) {
+                                                            && e.button == PointerEventButton.left) {
                                                             root.prompt-image-open-explorer-requested(idx);
                                                         }
                                                     }

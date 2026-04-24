@@ -146,7 +146,7 @@ export component GjPromptImageLightbox inherits Rectangle {
                 width: 100%;
 
                 Text {
-                    text: @tr("Ctrl+左鍵：在檔案總管開啟");
+                    text: @tr("點擊：在檔案總管開啟");
                     color: AppTheme.text_muted;
                     font-size: 11px;
                     horizontal-alignment: center;
@@ -178,10 +178,10 @@ export component GjPromptImageLightbox inherits Rectangle {
             TouchArea {
                 width: parent.width;
                 height: parent.height;
+                mouse-cursor: pointer;
                 pointer-event(e) => {
                     if (e.kind == PointerEventKind.up
-                        && e.button == PointerEventButton.left
-                        && e.modifiers.control) {
+                        && e.button == PointerEventButton.left) {
                         root.open-explorer-for-image-requested(root.zoom-index);
                     }
                 }
