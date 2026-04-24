@@ -9,6 +9,23 @@ export component GjPromptImageLightbox inherits Rectangle {
 
     in-out property <int> zoom-index;
     in property <[PromptImageChip]> prompt-images;
+    private property <length> panel-width: min(root.width - 48px, 900px);
+    private property <length> panel-height: min(root.height - 104px, 720px);
+    private property <length> nav-button-size: 42px;
+    private property <bool> can-go-prev: root.zoom-index > 0;
+    private property <bool> can-go-next: root.zoom-index + 1 < root.prompt-images.length;
+
+    function show-prev() {
+        if (root.zoom-index > 0) {
+            root.zoom-index -= 1;
+        }
+    }
+
+    function show-next() {
+        if (root.zoom-index + 1 < root.prompt-images.length) {
+            root.zoom-index += 1;
+        }
+    }
 
     TouchArea {
         width: 100%;
@@ -16,35 +33,114 @@ export component GjPromptImageLightbox inherits Rectangle {
         clicked => {
             root.zoom-index = -1;
         }
+    }
 
-        VerticalLayout {
-            alignment: center;
-            padding: 24px;
-            spacing: 10px;
+    VerticalLayout {
+        z: 1;
+        alignment: center;
+        padding: 24px;
+        spacing: 10px;
 
-            Rectangle {
-                width: min(parent.width - 48px, 900px);
-                height: min(parent.height - 80px, 720px);
+        Rectangle {
+            width: root.panel-width;
+            height: root.panel-height;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 12px;
+            background: #14161c;
+            clip: true;
+
+            TouchArea {
+                width: 100%;
+                height: 100%;
+            }
+
+            Image {
+                source: root.prompt-images[root.zoom-index].thumb;
+                width: 100%;
+                height: 100%;
+                image-fit: contain;
+            }
+
+            if root.prompt-images.length > 1 : Rectangle {
+                x: 16px;
+                y: (parent.height - root.nav-button-size) / 2;
+                width: root.nav-button-size;
+                height: root.nav-button-size;
                 border-width: 1px;
-                border-color: AppTheme.prompt_chrome_border;
-                border-radius: 12px;
-                background: #14161c;
-                clip: true;
+                border-color: root.can-go-prev ? #4f5563 : #343841;
+                border-radius: root.nav-button-size / 2;
+                background: root.can-go-prev
+                    ? (prev-ta.has-hover ? #2a2f39e6 : #1b1f28d8)
+                    : #12151cc8;
 
-                Image {
-                    source: root.prompt-images[root.zoom-index].thumb;
+                Text {
+                    text: "<";
                     width: 100%;
                     height: 100%;
-                    image-fit: contain;
+                    color: root.can-go-prev ? #f3f5f8 : #656b78;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-size: 22px;
+                    font-weight: 700;
+                }
+
+                prev-ta := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    enabled: root.can-go-prev;
+                    clicked => {
+                        root.show-prev();
+                    }
                 }
             }
 
-            Text {
-                text: @tr("點擊任意處關閉");
-                color: AppTheme.text_muted;
-                font-size: 12px;
-                horizontal-alignment: center;
+            if root.prompt-images.length > 1 : Rectangle {
+                x: parent.width - self.width - 16px;
+                y: (parent.height - root.nav-button-size) / 2;
+                width: root.nav-button-size;
+                height: root.nav-button-size;
+                border-width: 1px;
+                border-color: root.can-go-next ? #4f5563 : #343841;
+                border-radius: root.nav-button-size / 2;
+                background: root.can-go-next
+                    ? (next-ta.has-hover ? #2a2f39e6 : #1b1f28d8)
+                    : #12151cc8;
+
+                Text {
+                    text: ">";
+                    width: 100%;
+                    height: 100%;
+                    color: root.can-go-next ? #f3f5f8 : #656b78;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                    font-size: 22px;
+                    font-weight: 700;
+                }
+
+                next-ta := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    enabled: root.can-go-next;
+                    clicked => {
+                        root.show-next();
+                    }
+                }
             }
+        }
+
+        Text {
+            text: "\{root.zoom-index + 1} / \{root.prompt-images.length}";
+            color: #f3f5f8;
+            font-size: 12px;
+            horizontal-alignment: center;
+        }
+
+        Text {
+            text: @tr("點擊任意處關閉");
+            color: AppTheme.text_muted;
+            font-size: 12px;
+            horizontal-alignment: center;
         }
     }
 }
