@@ -1,12 +1,13 @@
 import { AppTheme } from "../theme.slint";
 import { InteractiveCmdEditorRow } from "../term_types.slint";
-import { GjChromeButton } from "gj_chrome_button.slint";
+import { GjChromeButton } from "../components/gj_chrome_button.slint";
 import { ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
 
 /// Full-window shell settings: startup defaults + command profile editor.
 export component GjShellManagePanel inherits Rectangle {
-    width: 100%;
-    height: 100%;
+    // Avoid relative `%` sizing in standalone component analysis; real size is set by `app.slint`.
+    preferred-width: 800px;
+    preferred-height: 600px;
     background: AppTheme.bg;
     z: 107;
 

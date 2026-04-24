@@ -1,5 +1,5 @@
 import { AppTheme } from "../theme.slint";
-import { GjChromeButton } from "gj_chrome_button.slint";
+import { GjChromeButton } from "../components/gj_chrome_button.slint";
 
 export component GjAboutDialog inherits Rectangle {
     // Avoid relative `%` sizing in standalone component analysis; real size is set by `app.slint`.
@@ -94,6 +94,7 @@ export component GjAboutDialog inherits Rectangle {
                 }
 
                 TouchArea {
+                    mouse-cursor: pointer;
                     clicked => {
                         root.open-github-requested(root.github-url);
                     }
