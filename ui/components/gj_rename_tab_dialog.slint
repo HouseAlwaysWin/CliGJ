@@ -1,4 +1,5 @@
 import { AppTheme } from "../theme.slint";
+import { GjChromeButton } from "gj_chrome_button.slint";
 import { TextEdit } from "std-widgets.slint";
 
 export component GjRenameTabDialog inherits Rectangle {
@@ -55,42 +56,23 @@ export component GjRenameTabDialog inherits Rectangle {
                 spacing: 8px;
                 Rectangle { horizontal-stretch: 1; background: #00000000; }
 
-                Rectangle {
-                    min-width: 72px;
-                    height: 28px;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: #00000000;
-                    Text {
-                        text: @tr("取消");
-                        color: AppTheme.text_muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                    }
-                    TouchArea {
-                        clicked => { root.rename-cancel(); }
+                GjChromeButton {
+                    label: @tr("取消");
+                    min-button-width: 72px;
+                    button-height: 28px;
+                    preset: "close";
+                    clicked => {
+                        root.rename-cancel();
                     }
                 }
 
-                Rectangle {
-                    min-width: 72px;
-                    height: 28px;
-                    border-width: 1px;
-                    border-color: AppTheme.accent;
-                    border-radius: 8px;
-                    background: AppTheme.accent;
-                    Text {
-                        text: @tr("確定");
-                        color: AppTheme.text;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                        font-weight: 700;
-                    }
-                    TouchArea {
-                        clicked => { root.rename-commit(root.rename-index, root.rename-text); }
+                GjChromeButton {
+                    label: @tr("確定");
+                    min-button-width: 72px;
+                    button-height: 28px;
+                    preset: "save";
+                    clicked => {
+                        root.rename-commit(root.rename-index, root.rename-text);
                     }
                 }
             }

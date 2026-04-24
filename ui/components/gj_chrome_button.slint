@@ -1,0 +1,65 @@
+import { AppTheme } from "../theme.slint";
+
+/// App-wide text pill: outline / filled / toggle / danger, with hover (settings, dialogs, editors).
+export component GjChromeButton inherits Rectangle {
+    in property <string> label;
+    in property <length> min-button-width: 72px;
+    /// When greater than `min-button-width`, caps width (e.g. delete 52px). Otherwise ignored.
+    in property <length> max-button-width: 0px;
+    in property <length> button-height: 26px;
+    in property <length> pill-corner-radius: 8px;
+    in property <length> label-font-size: 12px;
+    /// "close" | "add" | "restore" | "save" | "danger" | "toggle-accent"
+    in property <string> preset: "close";
+    /// For `toggle-accent` only: on = accent fill.
+    in property <bool> active: false;
+    in property <bool> interactive: true;
+    callback clicked;
+
+    min-width: min-button-width;
+    max-width: root.max-button-width > root.min-button-width ? root.max-button-width : 100000px;
+    height: button-height;
+    horizontal-stretch: 0;
+    border-width: 1px;
+    border-radius: pill-corner-radius;
+    border-color: root.preset == "save"
+        ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
+        : root.preset == "danger"
+        ? (btn_ta.has-hover ? #ff8ca8 : #ff4f6d)
+        : root.preset == "toggle-accent"
+        ? (root.active ? (btn_ta.has-hover ? #ff3c55 : AppTheme.accent) : AppTheme.prompt_chrome_border)
+        : AppTheme.prompt_chrome_border;
+    background: root.preset == "save"
+        ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
+        : root.preset == "danger"
+        ? (btn_ta.has-hover ? #ff4f6d33 : #00000000)
+        : root.preset == "toggle-accent"
+        ? (root.active
+            ? (btn_ta.has-hover ? #ff3c55 : AppTheme.accent)
+            : (btn_ta.has-hover ? #ffffff14 : #00000000))
+        : (btn_ta.has-hover ? #ffffff14 : #00000000);
+
+    Text {
+        text: root.label;
+        color: root.preset == "danger"
+            ? #ff8ca8
+            : (root.preset == "save" || (root.preset == "toggle-accent" && root.active))
+            ? AppTheme.text
+            : (root.preset == "add" ? AppTheme.text : AppTheme.text_muted);
+        font-weight: root.preset == "save"
+            ? 700
+            : ((root.preset == "add" || root.preset == "restore") ? 600 : 400);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: root.label-font-size;
+    }
+
+    btn_ta := TouchArea {
+        width: parent.width;
+        height: parent.height;
+        enabled: root.interactive;
+        clicked => {
+            root.clicked();
+        }
+    }
+}

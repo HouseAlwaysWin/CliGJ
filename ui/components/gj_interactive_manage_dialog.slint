@@ -1,6 +1,6 @@
 import { AppTheme } from "../theme.slint";
 import { InteractiveCmdEditorRow } from "../term_types.slint";
-import { GjDialogToolbarButton } from "gj_dialog_toolbar_button.slint";
+import { GjChromeButton } from "gj_chrome_button.slint";
 import { LineEdit, ScrollView } from "std-widgets.slint";
 
 export component GjInteractiveManageDialog inherits Rectangle {
@@ -70,7 +70,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                 spacing: 8px;
                 alignment: start;
 
-                GjDialogToolbarButton {
+                GjChromeButton {
                     label: @tr("新增");
                     min-button-width: 64px;
                     preset: "add";
@@ -79,7 +79,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     }
                 }
 
-                GjDialogToolbarButton {
+                GjChromeButton {
                     label: @tr("回復預設");
                     min-button-width: 88px;
                     preset: "restore";
@@ -88,7 +88,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     }
                 }
 
-                GjDialogToolbarButton {
+                GjChromeButton {
                     label: @tr("關閉");
                     min-button-width: 72px;
                     preset: "close";
@@ -97,7 +97,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     }
                 }
 
-                GjDialogToolbarButton {
+                GjChromeButton {
                     label: @tr("儲存");
                     min-button-width: 72px;
                     preset: "save";
@@ -275,86 +275,44 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             background: #00000000;
                                         }
 
-                                        Rectangle {
-                                            min-width: 82px;
-                                            max-width: 92px;
-                                            height: 24px;
-                                            horizontal-stretch: 0;
-                                            border-width: 1px;
-                                            border-color: row.interactive-cli
-                                                ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                                : AppTheme.prompt_chrome_border;
-                                            border-radius: 6px;
-                                            background: row.interactive-cli
-                                                ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                                : (row_igt_ta.has-hover ? #ffffff14 : #00000000);
-
-                                            Text {
-                                                text: "Interactive";
-                                                color: row.interactive-cli ? AppTheme.text : AppTheme.text_muted;
-                                                font-size: 11px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-
-                                            row_igt_ta := TouchArea {
-                                                clicked => {
-                                                    root.interactive-cli-toggled(key_idx);
-                                                }
+                                        GjChromeButton {
+                                            label: "Interactive";
+                                            min-button-width: 82px;
+                                            max-button-width: 92px;
+                                            button-height: 24px;
+                                            pill-corner-radius: 6px;
+                                            label-font-size: 11px;
+                                            preset: "toggle-accent";
+                                            active: row.interactive-cli;
+                                            clicked => {
+                                                root.interactive-cli-toggled(key_idx);
                                             }
                                         }
 
-                                        Rectangle {
-                                            min-width: 62px;
-                                            max-width: 72px;
-                                            height: 24px;
-                                            horizontal-stretch: 0;
-                                            border-width: 1px;
-                                            border-color: row.archive-repainted-frames
-                                                ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                                : AppTheme.prompt_chrome_border;
-                                            border-radius: 6px;
-                                            background: row.archive-repainted-frames
-                                                ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                                : (row_replay_ta.has-hover ? #ffffff14 : #00000000);
-
-                                            Text {
-                                                text: "Replay";
-                                                color: row.archive-repainted-frames ? AppTheme.text : AppTheme.text_muted;
-                                                font-size: 11px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-
-                                            row_replay_ta := TouchArea {
-                                                clicked => {
-                                                    root.archive-repainted-toggled(key_idx);
-                                                }
+                                        GjChromeButton {
+                                            label: "Replay";
+                                            min-button-width: 62px;
+                                            max-button-width: 72px;
+                                            button-height: 24px;
+                                            pill-corner-radius: 6px;
+                                            label-font-size: 11px;
+                                            preset: "toggle-accent";
+                                            active: row.archive-repainted-frames;
+                                            clicked => {
+                                                root.archive-repainted-toggled(key_idx);
                                             }
                                         }
 
-                                        Rectangle {
-                                            min-width: 44px;
-                                            max-width: 52px;
-                                            height: 24px;
-                                            horizontal-stretch: 0;
-                                            border-width: 1px;
-                                            border-color: row_del_ta.has-hover ? #ff8ca8 : #ff4f6d;
-                                            border-radius: 6px;
-                                            background: row_del_ta.has-hover ? #ff4f6d33 : #00000000;
-
-                                            Text {
-                                                text: @tr("刪除");
-                                                color: #ff8ca8;
-                                                font-size: 11px;
-                                                horizontal-alignment: center;
-                                                vertical-alignment: center;
-                                            }
-
-                                            row_del_ta := TouchArea {
-                                                clicked => {
-                                                    root.remove-row(key_idx);
-                                                }
+                                        GjChromeButton {
+                                            label: @tr("刪除");
+                                            min-button-width: 44px;
+                                            max-button-width: 52px;
+                                            button-height: 24px;
+                                            pill-corner-radius: 6px;
+                                            label-font-size: 11px;
+                                            preset: "danger";
+                                            clicked => {
+                                                root.remove-row(key_idx);
                                             }
                                         }
                                     }

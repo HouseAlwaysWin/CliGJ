@@ -1,5 +1,6 @@
 import { AppTheme } from "../theme.slint";
 import { InteractiveCmdEditorRow } from "../term_types.slint";
+import { GjChromeButton } from "gj_chrome_button.slint";
 import { ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
 
 /// Full-window shell settings: startup defaults + command profile editor.
@@ -47,27 +48,13 @@ export component GjShellManagePanel inherits Rectangle {
                 padding: 10px;
                 spacing: 8px;
 
-                Rectangle {
-                    min-width: 64px;
-                    height: 28px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: #00000000;
-
-                    Text {
-                        text: @tr("返回");
-                        color: AppTheme.text_muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                    }
-
-                    TouchArea {
-                        clicked => {
-                            root.close-requested();
-                        }
+                GjChromeButton {
+                    label: @tr("返回");
+                    min-button-width: 64px;
+                    button-height: 28px;
+                    preset: "close";
+                    clicked => {
+                        root.close-requested();
                     }
                 }
 
@@ -79,7 +66,9 @@ export component GjShellManagePanel inherits Rectangle {
                 Rectangle {
                     height: 30px;
                     border-radius: 6px;
-                    background: root.settings-nav == "startup" ? #2d2d30 : #00000000;
+                    background: root.settings-nav == "startup"
+                        ? #2d2d30
+                        : (startup_nav_ta.has-hover ? #2a2a32 : #00000000);
 
                     Text {
                         text: @tr("啟動");
@@ -91,7 +80,9 @@ export component GjShellManagePanel inherits Rectangle {
                         overflow: elide;
                     }
 
-                    TouchArea {
+                    startup_nav_ta := TouchArea {
+                        width: parent.width;
+                        height: parent.height;
                         clicked => {
                             root.settings-nav = "startup";
                             root.manage-saved-hint = false;
@@ -102,7 +93,9 @@ export component GjShellManagePanel inherits Rectangle {
                 Rectangle {
                     height: 30px;
                     border-radius: 6px;
-                    background: root.settings-nav == "shell_cmds" ? #2d2d30 : #00000000;
+                    background: root.settings-nav == "shell_cmds"
+                        ? #2d2d30
+                        : (shell_cmds_nav_ta.has-hover ? #2a2a32 : #00000000);
 
                     Text {
                         text: @tr("命令提示設定");
@@ -114,7 +107,9 @@ export component GjShellManagePanel inherits Rectangle {
                         overflow: elide;
                     }
 
-                    TouchArea {
+                    shell_cmds_nav_ta := TouchArea {
+                        width: parent.width;
+                        height: parent.height;
                         clicked => {
                             root.settings-nav = "shell_cmds";
                             root.manage-saved-hint = false;
@@ -392,28 +387,12 @@ export component GjShellManagePanel inherits Rectangle {
                         spacing: 8px;
                         alignment: end;
 
-                        Rectangle {
-                            min-width: 64px;
-                            height: 26px;
-                            horizontal-stretch: 0;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            border-radius: 8px;
-                            background: #00000000;
-
-                            Text {
-                                text: @tr("新增");
-                                color: AppTheme.text;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                font-size: 12px;
-                                font-weight: 600;
-                            }
-
-                            TouchArea {
-                                clicked => {
-                                    root.add-shell-row();
-                                }
+                        GjChromeButton {
+                            label: @tr("新增");
+                            min-button-width: 64px;
+                            preset: "add";
+                            clicked => {
+                                root.add-shell-row();
                             }
                         }
                     }
@@ -530,29 +509,17 @@ export component GjShellManagePanel inherits Rectangle {
                                                 }
                                             }
 
-                                            Rectangle {
-                                                min-width: 44px;
-                                                max-width: 52px;
-                                                height: 24px;
-                                                horizontal-stretch: 0;
-                                                border-width: 1px;
-                                                border-color: #ff4f6d;
-                                                border-radius: 6px;
-                                                background: #00000000;
-
-                                                Text {
-                                                    text: @tr("刪除");
-                                                    color: #ff8ca8;
-                                                    font-size: 11px;
-                                                    horizontal-alignment: center;
-                                                    vertical-alignment: center;
-                                                }
-
-                                                TouchArea {
-                                                    enabled: !row.key-locked;
-                                                    clicked => {
-                                                        root.remove-shell-row(key_idx);
-                                                    }
+                                            GjChromeButton {
+                                                label: @tr("刪除");
+                                                min-button-width: 44px;
+                                                max-button-width: 52px;
+                                                button-height: 24px;
+                                                pill-corner-radius: 6px;
+                                                label-font-size: 11px;
+                                                preset: "danger";
+                                                interactive: !row.key-locked;
+                                                clicked => {
+                                                    root.remove-shell-row(key_idx);
                                                 }
                                             }
                                         }
@@ -582,28 +549,13 @@ export component GjShellManagePanel inherits Rectangle {
                                                     }
                                                 }
 
-                                                Rectangle {
-                                                    min-width: 88px;
-                                                    height: 28px;
-                                                    horizontal-stretch: 0;
-                                                    border-width: 1px;
-                                                    border-color: AppTheme.prompt_chrome_border;
-                                                    border-radius: 8px;
-                                                    background: #00000000;
-
-                                                    Text {
-                                                        text: @tr("選擇資料夾");
-                                                        color: AppTheme.text;
-                                                        horizontal-alignment: center;
-                                                        vertical-alignment: center;
-                                                        font-size: 12px;
-                                                        font-weight: 600;
-                                                    }
-
-                                                    TouchArea {
-                                                        clicked => {
-                                                            root.shell-workspace-pick-folder(key_idx);
-                                                        }
+                                                GjChromeButton {
+                                                    label: @tr("選擇資料夾");
+                                                    min-button-width: 88px;
+                                                    button-height: 28px;
+                                                    preset: "add";
+                                                    clicked => {
+                                                        root.shell-workspace-pick-folder(key_idx);
                                                     }
                                                 }
                                             }
@@ -633,31 +585,16 @@ export component GjShellManagePanel inherits Rectangle {
                         horizontal-stretch: 1;
                     }
 
-                    Rectangle {
-                        min-width: 72px;
-                        height: 28px;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: AppTheme.accent;
-                        border-radius: 8px;
-                        background: AppTheme.accent;
-
-                        Text {
-                            text: @tr("儲存");
-                            color: AppTheme.text;
-                            horizontal-alignment: center;
-                            vertical-alignment: center;
-                            font-size: 12px;
-                            font-weight: 700;
-                        }
-
-                        TouchArea {
-                            clicked => {
-                                if root.settings-nav == "startup" {
-                                    root.save-startup-settings();
-                                } else if root.settings-nav == "shell_cmds" {
-                                    root.save-shell-manage();
-                                }
+                    GjChromeButton {
+                        label: @tr("儲存");
+                        min-button-width: 72px;
+                        button-height: 28px;
+                        preset: "save";
+                        clicked => {
+                            if root.settings-nav == "startup" {
+                                root.save-startup-settings();
+                            } else if root.settings-nav == "shell_cmds" {
+                                root.save-shell-manage();
                             }
                         }
                     }
