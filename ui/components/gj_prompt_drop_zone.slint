@@ -1,4 +1,4 @@
-import { TextEdit, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
+import { ComboBox, LineEdit, ScrollView, TextEdit } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 import { LogicalKey } from "../key_labels.slint";
 import { PromptImageChip } from "../term_types.slint";
@@ -32,6 +32,9 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-image-zoom-requested(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    /// Ctrl + 滑鼠左鍵：在檔案總管顯示該路徑（依 chip 索引對應 Rust 端的絕對路徑）。
+    callback prompt-path-chip-open-explorer-requested(int);
+    callback prompt-image-open-explorer-requested(int);
     callback interactive-command-selected(string);
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
@@ -115,7 +118,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 }
                                 Text {
                                     text: chip;
-                                    color: #f3f5f8;
+                                    color: AppTheme.prompt_submit_bg;
                                     vertical-alignment: center;
                                     font-size: 12px;
                                     font-weight: 600;
@@ -128,9 +131,35 @@ export component GjPromptDropZone inherits Rectangle {
                                 }
                             }
 
-                            TouchArea {
-                                clicked => {
-                                    root.prompt-chip-remove-requested(idx);
+                            chip_ta := TouchArea {
+                                pointer-event(e) => {
+                                    if (e.kind == PointerEventKind.up
+                                        && e.button == PointerEventButton.left) {
+                                        if (e.modifiers.control) {
+                                            root.prompt-path-chip-open-explorer-requested(idx);
+                                        } else {
+                                            root.prompt-chip-remove-requested(idx);
+                                        }
+                                    }
+                                }
+                            }
+
+                            if chip_ta.has-hover: Rectangle {
+                                y: -22px;
+                                x: 0px;
+                                width: 140px;
+                                height: 18px;
+                                border-radius: 4px;
+                                background: #20232b;
+                                border-width: 1px;
+                                border-color: AppTheme.prompt_chrome_border;
+
+                                Text {
+                                    text: @tr("Ctrl+左鍵：開啟位置");
+                                    color: AppTheme.text_muted;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                    font-size: 9px;
                                 }
                             }
                         }
@@ -236,13 +265,48 @@ export component GjPromptDropZone inherits Rectangle {
                                                 }
                                             }
 
-                                            Text {
-                                                text: row.label;
-                                                color: #f3f5f8;
-                                                vertical-alignment: center;
-                                                font-size: 11px;
-                                                font-weight: 600;
-                                                overflow: elide;
+                                            Rectangle {
+                                                horizontal-stretch: 1;
+                                                min-width: 0px;
+                                                height: parent.height;
+
+                                                VerticalLayout {
+                                                    alignment: start;
+                                                    spacing: 0px;
+                                                    y: max(0px, (parent.height - self.preferred-height) / 2);
+                                                    horizontal-stretch: 1;
+                                                    min-width: 0px;
+
+                                                    Text {
+                                                        text: row.label;
+                                                        color: AppTheme.prompt_submit_bg;
+                                                        vertical-alignment: center;
+                                                        font-size: 11px;
+                                                        font-weight: 600;
+                                                        overflow: elide;
+                                                        horizontal-stretch: 1;
+                                                        min-width: 0px;
+                                                    }
+
+                                                    Rectangle {
+                                                        height: 1px;
+                                                        horizontal-stretch: 1;
+                                                        min-width: 0px;
+                                                        background: AppTheme.prompt_submit_bg;
+                                                    }
+                                                }
+
+                                                TouchArea {
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    pointer-event(e) => {
+                                                        if (e.kind == PointerEventKind.up
+                                                            && e.button == PointerEventButton.left
+                                                            && e.modifiers.control) {
+                                                            root.prompt-image-open-explorer-requested(idx);
+                                                        }
+                                                    }
+                                                }
                                             }
 
                                             Rectangle {

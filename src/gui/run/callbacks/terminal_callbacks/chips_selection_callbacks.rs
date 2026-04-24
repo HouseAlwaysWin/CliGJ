@@ -3,6 +3,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, SharedString};
 
+use crate::gui::reveal_in_explorer::reveal_path_in_file_manager;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::load_tab_to_ui;
@@ -48,6 +49,40 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         s.tabs[current].prompt_picked_files_abs.clear();
         s.tabs[current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(&ui, &mut s.tabs[current]);
+    });
+
+    let st_path_explorer = Rc::clone(&state);
+    app.on_prompt_path_chip_open_explorer_requested(move |index| {
+        if index < 0 {
+            return;
+        }
+        let idx = index as usize;
+        let s = st_path_explorer.borrow();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let Some(path) = s.tabs[current].prompt_picked_files_abs.get(idx) else {
+            return;
+        };
+        reveal_path_in_file_manager(path);
+    });
+
+    let st_img_explorer = Rc::clone(&state);
+    app.on_prompt_image_open_explorer_requested(move |index| {
+        if index < 0 {
+            return;
+        }
+        let idx = index as usize;
+        let s = st_img_explorer.borrow();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let Some(img) = s.tabs[current].prompt_picked_images.get(idx) else {
+            return;
+        };
+        reveal_path_in_file_manager(&img.abs_path);
     });
 }
 

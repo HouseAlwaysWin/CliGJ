@@ -537,6 +537,7 @@ pub(crate) fn sync_prompt_image_chips_to_ui(ui: &AppWindow, tab: &TabState) {
         .map(|p| PromptImageChip {
             label: SharedString::from(workspace_files::file_name_label(&p.abs_path).as_str()),
             thumb: p.preview.clone(),
+            abs_path: SharedString::from(p.abs_path.as_str()),
         })
         .collect();
     ui.set_ws_prompt_images(ModelRc::new(VecModel::from(img_chips)));

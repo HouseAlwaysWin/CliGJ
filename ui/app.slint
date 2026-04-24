@@ -119,6 +119,8 @@ export component AppWindow inherits Window {
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    callback prompt-path-chip-open-explorer-requested(int);
+    callback prompt-image-open-explorer-requested(int);
     callback terminal-selection-committed(int, int, int, int);
     callback terminal-viewport-changed;
     callback terminal-resize-requested(int, int);
@@ -365,6 +367,12 @@ export component AppWindow inherits Window {
                         }
                         prompt-chip-clear-requested => {
                             root.prompt-chip-clear-requested();
+                        }
+                        prompt-path-chip-open-explorer-requested(idx) => {
+                            root.prompt-path-chip-open-explorer-requested(idx);
+                        }
+                        prompt-image-open-explorer-requested(idx) => {
+                            root.prompt-image-open-explorer-requested(idx);
                         }
                         terminal-selection-committed(sr, sc, er, ec) => {
                             root.terminal-selection-committed(sr, sc, er, ec);
@@ -806,6 +814,9 @@ export component AppWindow inherits Window {
             && root.ws-image-zoom-index < root.ws-prompt-images.length: GjPromptImageLightbox {
         zoom-index <=> root.ws-image-zoom-index;
         prompt-images: root.ws-prompt-images;
+        open-explorer-for-image-requested(idx) => {
+            root.prompt-image-open-explorer-requested(idx);
+        }
     }
 
     if root.ws-file-drop-visible : GjFileDropOverlay {}

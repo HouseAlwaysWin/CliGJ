@@ -1140,7 +1140,6 @@ fn handle_ipc_gui_command(
                 };
                 ui.set_ws_prompt(SharedString::from(merged_prompt.as_str()));
                 s.tabs[cur].prompt = SharedString::from(merged_prompt.as_str());
-
                 for payload in selection_payloads {
                     if !s.tabs[cur].prompt_picked_selections.iter().any(|p| p == &payload) {
                         s.tabs[cur].prompt_picked_selections.push(payload);

@@ -7,10 +7,11 @@ export struct TermSpan {
     font-family: string,
 }
 
-/// One attached image in the composer (thumbnail + label; path is kept in Rust for submit).
+/// One attached image in the composer (thumbnail + label + absolute path for UI / Explorer).
 export struct PromptImageChip {
     label: string,
     thumb: image,
+    abs-path: string,
 }
 
 /// One row in the interactive-command editor (launcher name + shell command).

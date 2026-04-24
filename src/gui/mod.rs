@@ -8,6 +8,7 @@ mod i18n;
 mod ipc;
 mod interactive_commands;
 mod prompt_attachments;
+mod reveal_in_explorer;
 mod shell_profiles;
 mod gui_state;
 mod run;

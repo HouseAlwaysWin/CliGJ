@@ -9,6 +9,7 @@ export component GjPromptImageLightbox inherits Rectangle {
 
     in-out property <int> zoom-index;
     in property <[PromptImageChip]> prompt-images;
+    callback open-explorer-for-image-requested(int);
     private property <length> panel-width: min(root.width - 48px, 900px);
     private property <length> panel-height: min(root.height - 104px, 720px);
     private property <length> nav-button-size: 42px;
@@ -134,6 +135,57 @@ export component GjPromptImageLightbox inherits Rectangle {
             color: #f3f5f8;
             font-size: 12px;
             horizontal-alignment: center;
+        }
+
+        Rectangle {
+            width: min(root.panel-width - 32px, root.width - 80px);
+            min-height: 44px;
+
+            VerticalLayout {
+                spacing: 4px;
+                width: 100%;
+
+                Text {
+                    text: @tr("Ctrl+左鍵：在檔案總管開啟");
+                    color: AppTheme.text_muted;
+                    font-size: 11px;
+                    horizontal-alignment: center;
+                    width: 100%;
+                }
+
+                VerticalLayout {
+                    spacing: 0px;
+                    width: 100%;
+
+                    Text {
+                        text: root.prompt-images[root.zoom-index].abs-path;
+                        color: AppTheme.prompt_submit_bg;
+                        font-size: 11px;
+                        horizontal-alignment: center;
+                        overflow: elide;
+                        wrap: no-wrap;
+                        width: 100%;
+                    }
+
+                    Rectangle {
+                        height: 1px;
+                        width: 100%;
+                        background: AppTheme.prompt_submit_bg;
+                    }
+                }
+            }
+
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+                pointer-event(e) => {
+                    if (e.kind == PointerEventKind.up
+                        && e.button == PointerEventButton.left
+                        && e.modifiers.control) {
+                        root.open-explorer-for-image-requested(root.zoom-index);
+                    }
+                }
+            }
         }
 
         Text {
