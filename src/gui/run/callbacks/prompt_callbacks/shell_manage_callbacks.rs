@@ -288,9 +288,48 @@ fn extract_release_zip_to_temp(zip_path: &Path, version: &str) -> Result<PathBuf
 }
 
 #[cfg(target_os = "windows")]
-fn launch_windows_self_replace_updater(downloaded_exe: &Path) -> Result<(), String> {
+fn is_temp_update_path(path: &Path) -> bool {
+    let p = path.to_string_lossy().to_ascii_lowercase().replace('\\', "/");
+    p.contains("/temp/cligj-updates/")
+}
+
+#[cfg(target_os = "windows")]
+fn resolve_update_target_exe_path() -> Result<PathBuf, String> {
     let current_exe =
         std::env::current_exe().map_err(|e| format!("resolve current executable failed: {e}"))?;
+    let configured = AppConfig::load_or_default()
+        .ok()
+        .and_then(|cfg| cfg.get_value("ui.stable_exe_path").ok().flatten())
+        .map(PathBuf::from)
+        .filter(|p| p.exists());
+    if is_temp_update_path(current_exe.as_path()) {
+        if let Some(stable) = configured {
+            return Ok(stable);
+        }
+        return Err(
+            "Current app is running from a temporary update path and no stable executable path is recorded yet. Please launch CliGJ from your normal install location once, then try update again."
+                .to_string(),
+        );
+    }
+    Ok(current_exe)
+}
+
+#[cfg(target_os = "windows")]
+fn persist_stable_exe_path(path: &Path) {
+    if is_temp_update_path(path) {
+        return;
+    }
+    if let Ok(mut cfg) = AppConfig::load_or_default() {
+        let _ = cfg.set_value(
+            "ui.stable_exe_path",
+            path.to_string_lossy().to_string(),
+        );
+        let _ = cfg.save();
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn launch_windows_self_replace_updater(downloaded_exe: &Path, target_exe: &Path) -> Result<(), String> {
     let updates_root = std::env::temp_dir().join("cligj-updates");
     fs::create_dir_all(&updates_root).map_err(|e| format!("create temp folder failed: {e}"))?;
     let stamp = std::time::SystemTime::now()
@@ -299,7 +338,7 @@ fn launch_windows_self_replace_updater(downloaded_exe: &Path) -> Result<(), Stri
         .as_millis();
     let script_path = updates_root.join(format!("apply-update-{stamp}.cmd"));
     let src = downloaded_exe.display().to_string();
-    let dst = current_exe.display().to_string();
+    let dst = target_exe.display().to_string();
     let script = format!(
         r#"@echo off
 setlocal
@@ -469,7 +508,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                                 launch_msg.as_str(),
                             ));
                         });
-                        launch_windows_self_replace_updater(extracted_exe.as_path())
+                        let target_exe = resolve_update_target_exe_path()?;
+                        launch_windows_self_replace_updater(extracted_exe.as_path(), target_exe.as_path())
                     });
                 let app_weak_for_quit = app_weak_download.clone();
                 let _ = app_weak_download.upgrade_in_event_loop(move |ui| match resolved {
@@ -499,6 +539,13 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             }
         });
     });
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(current) = std::env::current_exe() {
+            persist_stable_exe_path(current.as_path());
+        }
+    }
 
     let app_weak = app.as_weak();
     app.on_close_update_dialog(move || {
