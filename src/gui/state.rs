@@ -119,6 +119,8 @@ pub struct TabState {
     pub(crate) prompt_picked_files_abs: Vec<String>,
     /// Per-file origin metadata for jump-back to the editor instance that attached the file.
     pub(crate) prompt_picked_file_origins: Vec<Option<PromptFileOrigin>>,
+    /// Last known editor origin seen from IPC payloads on this tab (fallback for local-only file chips).
+    pub(crate) prompt_last_file_origin: Option<PromptFileOrigin>,
     /// Hidden payload blocks from IPC tokens like `[[sel1]]`, expanded on submit.
     pub(crate) prompt_picked_selections: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
@@ -284,6 +286,7 @@ impl TabState {
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
             prompt_picked_file_origins: Vec::new(),
+            prompt_last_file_origin: None,
             prompt_picked_selections: Vec::new(),
             terminal_lines: Vec::new(),
             interactive_history_lines: Vec::new(),

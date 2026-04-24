@@ -1124,12 +1124,8 @@ fn handle_ipc_gui_command(
                 return;
             }
             let cur = s.current;
-            if submit {
-                ui.set_ws_prompt(SharedString::from(prompt.as_str()));
-                s.tabs[cur].prompt = SharedString::from(prompt.as_str());
-                s.tabs[cur].prompt_picked_selections = selection_payloads;
-                s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
-                s.tabs[cur].prompt_picked_file_origins = file_origin_payloads
+            let file_origin_payloads_converted: Vec<Option<crate::gui::state::PromptFileOrigin>> =
+                file_origin_payloads
                     .into_iter()
                     .map(|origin| {
                         origin.map(|o| crate::gui::state::PromptFileOrigin {
@@ -1138,6 +1134,21 @@ fn handle_ipc_gui_command(
                         })
                     })
                     .collect();
+            if let Some(origin) = file_origin_payloads_converted
+                .iter()
+                .rev()
+                .filter_map(|origin| origin.as_ref())
+                .find(|origin| !origin.client_id.trim().is_empty() || !origin.uri_scheme.trim().is_empty())
+                .cloned()
+            {
+                s.tabs[cur].prompt_last_file_origin = Some(origin);
+            }
+            if submit {
+                ui.set_ws_prompt(SharedString::from(prompt.as_str()));
+                s.tabs[cur].prompt = SharedString::from(prompt.as_str());
+                s.tabs[cur].prompt_picked_selections = selection_payloads;
+                s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+                s.tabs[cur].prompt_picked_file_origins = file_origin_payloads_converted;
                 while s.tabs[cur].prompt_picked_file_origins.len() < s.tabs[cur].prompt_picked_files_abs.len() {
                     s.tabs[cur].prompt_picked_file_origins.push(None);
                 }
@@ -1160,14 +1171,8 @@ fn handle_ipc_gui_command(
                     }
                 }
                 for (path, origin) in file_path_payloads.into_iter().zip(
-                    file_origin_payloads
+                    file_origin_payloads_converted
                         .into_iter()
-                        .map(|origin| {
-                            origin.map(|o| crate::gui::state::PromptFileOrigin {
-                                client_id: o.client_id,
-                                uri_scheme: o.uri_scheme,
-                            })
-                        })
                         .chain(std::iter::repeat(None)),
                 ) {
                     if !s.tabs[cur].prompt_picked_files_abs.iter().any(|p| p == &path) {

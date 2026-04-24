@@ -64,16 +64,20 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: 
             .prompt_picked_file_origins
             .get(idx)
             .and_then(|origin| origin.as_ref())
-            .cloned();
+            .cloned()
+            .or_else(|| tab.prompt_last_file_origin.clone());
         if let Some(origin) = origin {
             if !origin.client_id.trim().is_empty() {
-                ipc_open_editor.publish_open_editor_location(
-                    origin.client_id.clone(),
-                    target.clone(),
-                    start_line,
-                    end_line,
-                );
-                return;
+                let snap = ipc_open_editor.snapshot();
+                if snap.client_count > 0 {
+                    ipc_open_editor.publish_open_editor_location(
+                        origin.client_id.clone(),
+                        target.clone(),
+                        start_line,
+                        end_line,
+                    );
+                    return;
+                }
             }
             if !origin.uri_scheme.trim().is_empty() {
                 open_path_in_editor(origin.uri_scheme.as_str(), target.as_str(), start_line, end_line);

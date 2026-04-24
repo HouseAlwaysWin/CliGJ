@@ -249,6 +249,95 @@ pub fn strip_attachment_token(prompt: &str, token: &str) -> String {
     out.into_iter().collect()
 }
 
+/// Remove one whitespace-bounded `token` and its optional line-range suffix like `(17)` / `(17-22)`.
+#[must_use]
+pub fn strip_attachment_token_with_line_suffix(prompt: &str, token: &str) -> String {
+    if token.is_empty() {
+        return prompt.to_string();
+    }
+    let tchars: Vec<char> = token.chars().collect();
+    let chars: Vec<char> = prompt.chars().collect();
+    let mut i = 0usize;
+    let mut out: Vec<char> = Vec::new();
+    while i < chars.len() {
+        if i + tchars.len() <= chars.len() && chars[i..i + tchars.len()] == tchars[..] {
+            let before_ok = i == 0 || chars[i - 1].is_whitespace();
+            let after_ok = i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
+            if before_ok && after_ok {
+                while out.last() == Some(&' ') {
+                    out.pop();
+                }
+                let had_pipe_before = out.last() == Some(&'|');
+                if had_pipe_before {
+                    out.pop();
+                    while out.last() == Some(&' ') {
+                        out.pop();
+                    }
+                }
+
+                i += tchars.len();
+                while i < chars.len() && chars[i].is_whitespace() {
+                    i += 1;
+                }
+
+                if let Some(next_i) = parse_line_range_token(&chars, i) {
+                    i = next_i;
+                    while i < chars.len() && chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                }
+
+                if !had_pipe_before && i < chars.len() && chars[i] == '|' {
+                    i += 1;
+                    while i < chars.len() && chars[i].is_whitespace() {
+                        i += 1;
+                    }
+                }
+
+                if i < chars.len()
+                    && out.last().is_some_and(|c| !c.is_whitespace())
+                    && !chars[i].is_whitespace()
+                {
+                    out.push(' ');
+                }
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out.into_iter().collect()
+}
+
+fn parse_line_range_token(chars: &[char], start: usize) -> Option<usize> {
+    if start >= chars.len() || chars[start] != '(' {
+        return None;
+    }
+    let mut i = start + 1;
+    let n0 = i;
+    while i < chars.len() && chars[i].is_ascii_digit() {
+        i += 1;
+    }
+    if i == n0 {
+        return None;
+    }
+    if i < chars.len() && chars[i] == '-' {
+        i += 1;
+        let n1 = i;
+        while i < chars.len() && chars[i].is_ascii_digit() {
+            i += 1;
+        }
+        if i == n1 {
+            return None;
+        }
+    }
+    if i < chars.len() && chars[i] == ')' {
+        Some(i + 1)
+    } else {
+        None
+    }
+}
+
 #[must_use]
 pub fn expand_attachment_tokens(
     prompt: &str,
@@ -363,6 +452,18 @@ mod tests {
         assert_eq!(
             strip_attachment_token("x@a.jpgy", "@a.jpg"),
             "x@a.jpgy"
+        );
+    }
+
+    #[test]
+    fn strip_attachment_with_line_suffix_removes_range() {
+        assert_eq!(
+            strip_attachment_token_with_line_suffix("@a.cs (17-22) | @b.cs (4-5)", "@a.cs"),
+            "@b.cs (4-5)"
+        );
+        assert_eq!(
+            strip_attachment_token_with_line_suffix("ask @a.cs (17) now", "@a.cs"),
+            "ask now"
         );
     }
 

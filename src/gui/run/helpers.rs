@@ -83,6 +83,48 @@ fn filepath_hint_token_for_abs_path(tab: &TabState, abs_path: &str) -> String {
     workspace_files::filepath_hint_token(file_name.as_str(), occurrence.max(1))
 }
 
+fn normalize_path_key(path: &str) -> String {
+    let mut normalized = path.replace('\\', "/");
+    #[cfg(target_os = "windows")]
+    {
+        normalized.make_ascii_lowercase();
+    }
+    normalized
+}
+
+fn extract_selection_attr(header: &str, key: &str) -> Option<String> {
+    let needle = format!(r#"{key}=""#);
+    let start = header.find(needle.as_str())? + needle.len();
+    let tail = &header[start..];
+    let end = tail.find('"')?;
+    Some(tail[..end].to_string())
+}
+
+fn selection_payload_matches_path(payload: &str, abs_path: &str) -> bool {
+    let Some(header) = payload.lines().next() else {
+        return false;
+    };
+    let Some(file_attr) = extract_selection_attr(header, "file") else {
+        return false;
+    };
+    let abs_key = normalize_path_key(abs_path);
+    let file_key = normalize_path_key(file_attr.as_str());
+    if file_key == abs_key {
+        return true;
+    }
+    if abs_key.ends_with(format!("/{file_key}").as_str()) {
+        return true;
+    }
+    let abs_name = workspace_files::file_name_label(abs_path);
+    let file_name = workspace_files::file_name_label(file_attr.as_str());
+    abs_name.eq_ignore_ascii_case(file_name.as_str())
+}
+
+fn remove_selection_payloads_for_file(tab: &mut TabState, abs_path: &str) {
+    tab.prompt_picked_selections
+        .retain(|payload| !selection_payload_matches_path(payload.as_str(), abs_path));
+}
+
 /// Windows: paths from Explorer copy (`CF_HDROP`). `None` if clipboard has no file list or read failed.
 #[cfg(target_os = "windows")]
 pub(crate) fn clipboard_file_paths_hdrop() -> Option<Vec<PathBuf>> {
@@ -287,14 +329,19 @@ pub(crate) fn remove_prompt_file_at(ui: &AppWindow, s: &mut GuiState, index: usi
     }
     let tab = &mut s.tabs[s.current];
     if index < tab.prompt_picked_files_abs.len() {
+        let removed_path = tab.prompt_picked_files_abs[index].clone();
         if let Some(tok) = hint_token_for_file_index(tab, index) {
-            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            let p = workspace_files::strip_attachment_token_with_line_suffix(
+                tab.prompt.as_str(),
+                tok.as_str(),
+            );
             tab.prompt = SharedString::from(p.as_str());
         }
         tab.prompt_picked_files_abs.remove(index);
         if index < tab.prompt_picked_file_origins.len() {
             tab.prompt_picked_file_origins.remove(index);
         }
+        remove_selection_payloads_for_file(tab, removed_path.as_str());
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     }
@@ -306,14 +353,19 @@ pub(crate) fn clear_all_prompt_files(ui: &AppWindow, s: &mut GuiState) {
     }
     let tab = &mut s.tabs[s.current];
     while !tab.prompt_picked_files_abs.is_empty() {
+        let removed_path = tab.prompt_picked_files_abs[0].clone();
         if let Some(tok) = hint_token_for_file_index(tab, 0) {
-            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            let p = workspace_files::strip_attachment_token_with_line_suffix(
+                tab.prompt.as_str(),
+                tok.as_str(),
+            );
             tab.prompt = SharedString::from(p.as_str());
         }
         tab.prompt_picked_files_abs.remove(0);
         if !tab.prompt_picked_file_origins.is_empty() {
             tab.prompt_picked_file_origins.remove(0);
         }
+        remove_selection_payloads_for_file(tab, removed_path.as_str());
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
