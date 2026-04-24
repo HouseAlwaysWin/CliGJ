@@ -545,18 +545,22 @@ pub(crate) fn sync_prompt_image_chips_to_ui(ui: &AppWindow, tab: &TabState) {
     ui.set_ws_prompt_images(ModelRc::new(VecModel::from(img_chips)));
 }
 
+pub(crate) fn sync_prompt_file_chips_to_ui(ui: &AppWindow, tab: &TabState) {
+    let chips: Vec<SharedString> = tab
+        .prompt_picked_files_abs
+        .iter()
+        .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
+        .collect();
+    ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
+}
+
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.file_path = ui.get_ws_file_path().to_string();
     tab.selected_line = ui.get_ws_selected_line();
     tab.selected_context = ui.get_ws_selected_context();
     tab.prompt = ui.get_ws_prompt();
     if prune_prompt_files_not_in_prompt(tab) {
-        let chips: Vec<SharedString> = tab
-            .prompt_picked_files_abs
-            .iter()
-            .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
-            .collect();
-        ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
+        sync_prompt_file_chips_to_ui(ui, tab);
     }
     if prune_prompt_images_not_in_prompt(tab) {
         sync_prompt_image_chips_to_ui(ui, tab);
@@ -586,12 +590,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_selected_line(tab.selected_line);
     ui.set_ws_selected_context(tab.selected_context.clone());
     ui.set_ws_prompt(tab.prompt.clone());
-    let chips: Vec<SharedString> = tab
-        .prompt_picked_files_abs
-        .iter()
-        .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
-        .collect();
-    ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
+    sync_prompt_file_chips_to_ui(ui, tab);
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
     ui.set_ws_terminal_pin_lines(SharedString::from(

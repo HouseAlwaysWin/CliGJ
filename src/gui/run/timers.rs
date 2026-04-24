@@ -1128,6 +1128,7 @@ fn handle_ipc_gui_command(
                 s.tabs[cur].prompt = SharedString::from(prompt.as_str());
                 s.tabs[cur].prompt_picked_selections = selection_payloads;
                 s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+                crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
             } else {
                 let current_prompt = s.tabs[cur].prompt.to_string();
                 let merged_prompt = if prompt.trim().is_empty() {
@@ -1150,6 +1151,7 @@ fn handle_ipc_gui_command(
                         s.tabs[cur].prompt_picked_files_abs.push(path);
                     }
                 }
+                crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
             }
             if submit {
                 if let Err(e) = s.submit_current_prompt(ui) {
