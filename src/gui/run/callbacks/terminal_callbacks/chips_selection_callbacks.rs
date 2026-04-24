@@ -76,6 +76,16 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: 
                         start_line,
                         end_line,
                     );
+                    // Keep IPC for deterministic routing, and also trigger URI open
+                    // to encourage the editor app window to become foreground.
+                    if !origin.uri_scheme.trim().is_empty() {
+                        open_path_in_editor(
+                            origin.uri_scheme.as_str(),
+                            target.as_str(),
+                            start_line,
+                            end_line,
+                        );
+                    }
                     return;
                 }
             }
