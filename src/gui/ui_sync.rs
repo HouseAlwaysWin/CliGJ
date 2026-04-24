@@ -5,7 +5,9 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use unicode_width::UnicodeWidthChar;
 
-use crate::gui::prompt_attachments::prune_prompt_images_not_in_prompt;
+use crate::gui::prompt_attachments::{
+    prune_prompt_files_not_in_prompt, prune_prompt_images_not_in_prompt,
+};
 use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
@@ -548,6 +550,14 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.selected_line = ui.get_ws_selected_line();
     tab.selected_context = ui.get_ws_selected_context();
     tab.prompt = ui.get_ws_prompt();
+    if prune_prompt_files_not_in_prompt(tab) {
+        let chips: Vec<SharedString> = tab
+            .prompt_picked_files_abs
+            .iter()
+            .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
+            .collect();
+        ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
+    }
     if prune_prompt_images_not_in_prompt(tab) {
         sync_prompt_image_chips_to_ui(ui, tab);
     }

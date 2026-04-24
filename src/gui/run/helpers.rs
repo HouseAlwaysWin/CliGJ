@@ -8,7 +8,7 @@ use image::RgbaImage;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 use unicode_width::UnicodeWidthChar;
 
-use crate::gui::prompt_attachments::hint_token_for_image_index;
+use crate::gui::prompt_attachments::{hint_token_for_file_index, hint_token_for_image_index};
 use crate::terminal::key_encoding;
 use crate::terminal::render::ColoredLine;
 use crate::workspace_files;
@@ -278,6 +278,38 @@ pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: us
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     }
+}
+
+pub(crate) fn remove_prompt_file_at(ui: &AppWindow, s: &mut GuiState, index: usize) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let tab = &mut s.tabs[s.current];
+    if index < tab.prompt_picked_files_abs.len() {
+        if let Some(tok) = hint_token_for_file_index(tab, index) {
+            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            tab.prompt = SharedString::from(p.as_str());
+        }
+        tab.prompt_picked_files_abs.remove(index);
+        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    }
+}
+
+pub(crate) fn clear_all_prompt_files(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let tab = &mut s.tabs[s.current];
+    while !tab.prompt_picked_files_abs.is_empty() {
+        if let Some(tok) = hint_token_for_file_index(tab, 0) {
+            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            tab.prompt = SharedString::from(p.as_str());
+        }
+        tab.prompt_picked_files_abs.remove(0);
+    }
+    tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
 }
 
 pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {

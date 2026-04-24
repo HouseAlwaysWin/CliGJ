@@ -6,9 +6,9 @@ use slint::{ComponentHandle, SharedString};
 use crate::gui::reveal_in_explorer::reveal_path_in_file_manager;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::GuiState;
-use crate::gui::ui_sync::load_tab_to_ui;
 use crate::gui::run::helpers::{
-    copy_to_clipboard, selected_text_from_terminal_lines,
+    clear_all_prompt_files, copy_to_clipboard, remove_prompt_file_at,
+    selected_text_from_terminal_lines,
 };
 
 pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -22,17 +22,7 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         }
         let mut s = st_remove.borrow_mut();
-        if s.current >= s.tabs.len() {
-            return;
-        }
-        let current = s.current;
-        let idx = index as usize;
-        if idx >= s.tabs[current].prompt_picked_files_abs.len() {
-            return;
-        }
-        s.tabs[current].prompt_picked_files_abs.remove(idx);
-        s.tabs[current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        load_tab_to_ui(&ui, &mut s.tabs[current]);
+        remove_prompt_file_at(&ui, &mut s, index as usize);
     });
 
     let st_clear = Rc::clone(&state);
@@ -42,13 +32,7 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         let mut s = st_clear.borrow_mut();
-        if s.current >= s.tabs.len() {
-            return;
-        }
-        let current = s.current;
-        s.tabs[current].prompt_picked_files_abs.clear();
-        s.tabs[current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        load_tab_to_ui(&ui, &mut s.tabs[current]);
+        clear_all_prompt_files(&ui, &mut s);
     });
 
     let st_path_explorer = Rc::clone(&state);
