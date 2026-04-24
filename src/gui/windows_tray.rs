@@ -1,13 +1,12 @@
 #[cfg(target_os = "windows")]
-use std::path::Path;
-
-#[cfg(target_os = "windows")]
 use tray_icon::{Icon, MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder, TrayIconEvent};
 
 #[cfg(target_os = "windows")]
 fn load_tray_icon() -> Option<Icon> {
-    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/asset/logo3.png");
-    let image = image::open(path).ok()?.into_rgba8();
+    const TRAY_ICON_PNG: &[u8] = include_bytes!("../asset/logo3.png");
+    let image = image::load_from_memory_with_format(TRAY_ICON_PNG, image::ImageFormat::Png)
+        .ok()?
+        .into_rgba8();
     let (width, height) = image.dimensions();
     Icon::from_rgba(image.into_raw(), width, height).ok()
 }
