@@ -1,0 +1,41 @@
+import { AppTheme } from "../theme.slint";
+
+/// Rounded outline / primary pill used in manage dialogs (label + hover + click).
+export component GjDialogToolbarButton inherits Rectangle {
+    in property <string> label;
+    in property <length> min-button-width: 72px;
+    /// "close" — muted label; "add" — strong label; "restore" — muted semibold; "save" — filled accent.
+    in property <string> preset: "close";
+    callback clicked;
+
+    min-width: min-button-width;
+    height: 26px;
+    horizontal-stretch: 0;
+    border-width: 1px;
+    border-radius: 8px;
+    border-color: root.preset == "save"
+        ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
+        : AppTheme.prompt_chrome_border;
+    background: root.preset == "save"
+        ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
+        : (btn_ta.has-hover ? #ffffff14 : #00000000);
+
+    Text {
+        text: root.label;
+        color: root.preset == "add"
+            ? AppTheme.text
+            : (root.preset == "save" ? AppTheme.text : AppTheme.text_muted);
+        font-weight: root.preset == "save"
+            ? 700
+            : (root.preset == "close" ? 400 : 600);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        font-size: 12px;
+    }
+
+    btn_ta := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}

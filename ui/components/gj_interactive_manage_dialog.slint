@@ -1,5 +1,6 @@
 import { AppTheme } from "../theme.slint";
 import { InteractiveCmdEditorRow } from "../term_types.slint";
+import { GjDialogToolbarButton } from "gj_dialog_toolbar_button.slint";
 import { LineEdit, ScrollView } from "std-widgets.slint";
 
 export component GjInteractiveManageDialog inherits Rectangle {
@@ -69,102 +70,39 @@ export component GjInteractiveManageDialog inherits Rectangle {
                 spacing: 8px;
                 alignment: start;
 
-                Rectangle {
-                    min-width: 64px;
-                    height: 26px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: add_row_ta.has-hover ? #ffffff14 : #00000000;
-
-                    Text {
-                        text: @tr("新增");
-                        color: AppTheme.text;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-
-                    add_row_ta := TouchArea {
-                        clicked => {
-                            root.manage-add-row();
-                        }
+                GjDialogToolbarButton {
+                    label: @tr("新增");
+                    min-button-width: 64px;
+                    preset: "add";
+                    clicked => {
+                        root.manage-add-row();
                     }
                 }
 
-                Rectangle {
-                    min-width: 88px;
-                    height: 26px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: restore_def_ta.has-hover ? #ffffff14 : #00000000;
-
-                    Text {
-                        text: @tr("回復預設");
-                        color: AppTheme.text_muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                        font-weight: 600;
-                    }
-
-                    restore_def_ta := TouchArea {
-                        clicked => {
-                            root.restore-defaults();
-                        }
+                GjDialogToolbarButton {
+                    label: @tr("回復預設");
+                    min-button-width: 88px;
+                    preset: "restore";
+                    clicked => {
+                        root.restore-defaults();
                     }
                 }
 
-                Rectangle {
-                    min-width: 72px;
-                    height: 26px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: AppTheme.prompt_chrome_border;
-                    border-radius: 8px;
-                    background: close_dlg_ta.has-hover ? #ffffff14 : #00000000;
-
-                    Text {
-                        text: @tr("關閉");
-                        color: AppTheme.text_muted;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                    }
-
-                    close_dlg_ta := TouchArea {
-                        clicked => {
-                            root.close();
-                        }
+                GjDialogToolbarButton {
+                    label: @tr("關閉");
+                    min-button-width: 72px;
+                    preset: "close";
+                    clicked => {
+                        root.close();
                     }
                 }
 
-                Rectangle {
-                    min-width: 72px;
-                    height: 26px;
-                    horizontal-stretch: 0;
-                    border-width: 1px;
-                    border-color: save_dlg_ta.has-hover ? #ff2247 : AppTheme.accent;
-                    border-radius: 8px;
-                    background: save_dlg_ta.has-hover ? #ff2247 : AppTheme.accent;
-
-                    Text {
-                        text: @tr("儲存");
-                        color: AppTheme.text;
-                        horizontal-alignment: center;
-                        vertical-alignment: center;
-                        font-size: 12px;
-                        font-weight: 700;
-                    }
-
-                    save_dlg_ta := TouchArea {
-                        clicked => {
-                            root.save();
-                        }
+                GjDialogToolbarButton {
+                    label: @tr("儲存");
+                    min-button-width: 72px;
+                    preset: "save";
+                    clicked => {
+                        root.save();
                     }
                 }
             }
@@ -178,7 +116,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     spacing: 6px;
 
                     for row[key_idx] in root.manage-rows: Rectangle {
-                        min-height: 78px;
+                        min-height: 104px;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
                         border-radius: 6px;
@@ -192,179 +130,232 @@ export component GjInteractiveManageDialog inherits Rectangle {
                             spacing: 6px;
 
                             HorizontalLayout {
-                                spacing: 6px;
+                                spacing: 8px;
                                 alignment: start;
 
-                                if row.key-locked: Rectangle {
+                                VerticalLayout {
+                                    min-width: 100px;
+                                    max-width: 100px;
                                     horizontal-stretch: 0;
-                                    min-width: 96px;
-                                    max-width: 96px;
-                                    min-height: 26px;
-                                    background: #00000020;
-                                    border-radius: 4px;
+                                    vertical-stretch: 1;
+                                    alignment: center;
+                                    spacing: 4px;
 
-                                    Text {
-                                        text: row.name;
-                                        color: AppTheme.text_muted;
+                                    if row.key-locked: Rectangle {
+                                        horizontal-stretch: 1;
+                                        min-height: 26px;
+                                        background: #00000020;
+                                        border-radius: 4px;
+
+                                        Text {
+                                            text: row.name;
+                                            color: AppTheme.text_muted;
+                                            font-size: 12px;
+                                            vertical-alignment: center;
+                                            horizontal-alignment: left;
+                                            overflow: elide;
+                                        }
+                                    }
+
+                                    if !row.key-locked: LineEdit {
+                                        horizontal-stretch: 1;
+                                        min-height: 26px;
                                         font-size: 12px;
-                                        vertical-alignment: center;
-                                        horizontal-alignment: left;
-                                        overflow: elide;
-                                    }
-                                }
-
-                                if !row.key-locked: LineEdit {
-                                    horizontal-stretch: 0;
-                                    min-width: 96px;
-                                    max-width: 96px;
-                                    font-size: 12px;
-                                    text: row.name;
-                                    edited(new_text) => {
-                                        root.name-edited(key_idx, new_text);
-                                    }
-                                }
-
-                                Text {
-                                    text: ">";
-                                    color: AppTheme.text_muted;
-                                    font-size: 12px;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 0;
-                                }
-
-                                LineEdit {
-                                    horizontal-stretch: 0;
-                                    min-width: 220px;
-                                    max-width: 280px;
-                                    font-size: 12px;
-                                    text: row.line;
-                                    edited(new_text) => {
-                                        root.line-edited(key_idx, new_text);
-                                    }
-                                }
-
-                                Rectangle {
-                                    min-width: 82px;
-                                    max-width: 92px;
-                                    height: 24px;
-                                    horizontal-stretch: 0;
-                                    border-width: 1px;
-                                    border-color: row.interactive-cli
-                                        ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                        : AppTheme.prompt_chrome_border;
-                                    border-radius: 6px;
-                                    background: row.interactive-cli
-                                        ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                        : (row_igt_ta.has-hover ? #ffffff14 : #00000000);
-
-                                    Text {
-                                        text: "Interactive";
-                                        color: row.interactive-cli ? AppTheme.text : AppTheme.text_muted;
-                                        font-size: 11px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
-
-                                    row_igt_ta := TouchArea {
-                                        clicked => {
-                                            root.interactive-cli-toggled(key_idx);
+                                        text: row.name;
+                                        edited(new_text) => {
+                                            root.name-edited(key_idx, new_text);
                                         }
                                     }
                                 }
 
-                                Text {
-                                    text: "Pin";
-                                    color: AppTheme.text_muted;
-                                    font-size: 11px;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 0;
-                                }
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    spacing: 6px;
 
-                                LineEdit {
-                                    min-width: 54px;
-                                    max-width: 64px;
-                                    horizontal-stretch: 0;
-                                    font-size: 12px;
-                                    text: row.pinned-footer-lines;
-                                    edited(new_text) => {
-                                        root.pinned-lines-edited(key_idx, new_text);
-                                    }
-                                }
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
 
-                                Rectangle {
-                                    min-width: 44px;
-                                    max-width: 52px;
-                                    height: 24px;
-                                    horizontal-stretch: 0;
-                                    border-width: 1px;
-                                    border-color: row_del_ta.has-hover ? #ff8ca8 : #ff4f6d;
-                                    border-radius: 6px;
-                                    background: row_del_ta.has-hover ? #ff4f6d33 : #00000000;
+                                        Rectangle {
+                                            horizontal-stretch: 0;
+                                            min-width: 76px;
+                                            max-width: 76px;
+                                            min-height: 26px;
+                                            background: #00000000;
 
-                                    Text {
-                                        text: @tr("刪除");
-                                        color: #ff8ca8;
-                                        font-size: 11px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
-                                    }
+                                            Text {
+                                                text: @tr("指令");
+                                                color: AppTheme.text_muted;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: left;
+                                            }
+                                        }
 
-                                    row_del_ta := TouchArea {
-                                        clicked => {
-                                            root.remove-row(key_idx);
+                                        LineEdit {
+                                            horizontal-stretch: 1;
+                                            min-height: 26px;
+                                            font-size: 12px;
+                                            text: row.line;
+                                            edited(new_text) => {
+                                                root.line-edited(key_idx, new_text);
+                                            }
                                         }
                                     }
-                                }
-                            }
 
-                            HorizontalLayout {
-                                spacing: 6px;
-                                alignment: start;
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
 
-                                Text {
-                                    text: "Markers";
-                                    color: AppTheme.text_muted;
-                                    font-size: 11px;
-                                    vertical-alignment: center;
-                                    horizontal-stretch: 0;
-                                }
+                                        Rectangle {
+                                            horizontal-stretch: 0;
+                                            min-width: 76px;
+                                            max-width: 76px;
+                                            min-height: 26px;
+                                            background: #00000000;
 
-                                LineEdit {
-                                    horizontal-stretch: 0;
-                                    min-width: 420px;
-                                    max-width: 520px;
-                                    font-size: 12px;
-                                    text: row.markers;
-                                    edited(new_text) => {
-                                        root.markers-edited(key_idx, new_text);
-                                    }
-                                }
+                                            Text {
+                                                text: @tr("Markers");
+                                                color: AppTheme.text_muted;
+                                                font-size: 11px;
+                                                vertical-alignment: center;
+                                                horizontal-alignment: left;
+                                            }
+                                        }
 
-                                Rectangle {
-                                    min-width: 62px;
-                                    max-width: 72px;
-                                    height: 24px;
-                                    horizontal-stretch: 0;
-                                    border-width: 1px;
-                                    border-color: row.archive-repainted-frames
-                                        ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                        : AppTheme.prompt_chrome_border;
-                                    border-radius: 6px;
-                                    background: row.archive-repainted-frames
-                                        ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
-                                        : (row_replay_ta.has-hover ? #ffffff14 : #00000000);
-
-                                    Text {
-                                        text: "Replay";
-                                        color: row.archive-repainted-frames ? AppTheme.text : AppTheme.text_muted;
-                                        font-size: 11px;
-                                        horizontal-alignment: center;
-                                        vertical-alignment: center;
+                                        LineEdit {
+                                            horizontal-stretch: 1;
+                                            min-height: 26px;
+                                            font-size: 12px;
+                                            text: row.markers;
+                                            edited(new_text) => {
+                                                root.markers-edited(key_idx, new_text);
+                                            }
+                                        }
                                     }
 
-                                    row_replay_ta := TouchArea {
-                                        clicked => {
-                                            root.archive-repainted-toggled(key_idx);
+                                    HorizontalLayout {
+                                        spacing: 8px;
+                                        alignment: start;
+
+                                        Rectangle {
+                                            width: 28px;
+                                            height: 26px;
+                                            horizontal-stretch: 0;
+                                            border-width: 1px;
+                                            border-color: AppTheme.prompt_chrome_border;
+                                            border-radius: 6px;
+                                            background: #00000000;
+
+                                            Image {
+                                                width: 14px;
+                                                height: 14px;
+                                                x: (parent.width - self.width) / 2;
+                                                y: (parent.height - self.height) / 2;
+                                                source: @image-url("../icons/prompt_pin.svg");
+                                                colorize: AppTheme.text_muted;
+                                            }
+                                        }
+
+                                        LineEdit {
+                                            horizontal-stretch: 0;
+                                            min-width: 52px;
+                                            max-width: 72px;
+                                            min-height: 26px;
+                                            font-size: 12px;
+                                            text: row.pinned-footer-lines;
+                                            edited(new_text) => {
+                                                root.pinned-lines-edited(key_idx, new_text);
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            horizontal-stretch: 1;
+                                            min-height: 1px;
+                                            background: #00000000;
+                                        }
+
+                                        Rectangle {
+                                            min-width: 82px;
+                                            max-width: 92px;
+                                            height: 24px;
+                                            horizontal-stretch: 0;
+                                            border-width: 1px;
+                                            border-color: row.interactive-cli
+                                                ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                                : AppTheme.prompt_chrome_border;
+                                            border-radius: 6px;
+                                            background: row.interactive-cli
+                                                ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                                : (row_igt_ta.has-hover ? #ffffff14 : #00000000);
+
+                                            Text {
+                                                text: "Interactive";
+                                                color: row.interactive-cli ? AppTheme.text : AppTheme.text_muted;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            row_igt_ta := TouchArea {
+                                                clicked => {
+                                                    root.interactive-cli-toggled(key_idx);
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            min-width: 62px;
+                                            max-width: 72px;
+                                            height: 24px;
+                                            horizontal-stretch: 0;
+                                            border-width: 1px;
+                                            border-color: row.archive-repainted-frames
+                                                ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                                : AppTheme.prompt_chrome_border;
+                                            border-radius: 6px;
+                                            background: row.archive-repainted-frames
+                                                ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                                : (row_replay_ta.has-hover ? #ffffff14 : #00000000);
+
+                                            Text {
+                                                text: "Replay";
+                                                color: row.archive-repainted-frames ? AppTheme.text : AppTheme.text_muted;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            row_replay_ta := TouchArea {
+                                                clicked => {
+                                                    root.archive-repainted-toggled(key_idx);
+                                                }
+                                            }
+                                        }
+
+                                        Rectangle {
+                                            min-width: 44px;
+                                            max-width: 52px;
+                                            height: 24px;
+                                            horizontal-stretch: 0;
+                                            border-width: 1px;
+                                            border-color: row_del_ta.has-hover ? #ff8ca8 : #ff4f6d;
+                                            border-radius: 6px;
+                                            background: row_del_ta.has-hover ? #ff4f6d33 : #00000000;
+
+                                            Text {
+                                                text: @tr("刪除");
+                                                color: #ff8ca8;
+                                                font-size: 11px;
+                                                horizontal-alignment: center;
+                                                vertical-alignment: center;
+                                            }
+
+                                            row_del_ta := TouchArea {
+                                                clicked => {
+                                                    root.remove-row(key_idx);
+                                                }
+                                            }
                                         }
                                     }
                                 }

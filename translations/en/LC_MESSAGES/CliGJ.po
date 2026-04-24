@@ -69,6 +69,12 @@ msgstr "Press Save to persist settings. Use Restore defaults to bring back the b
 msgid "回復預設"
 msgstr "Restore defaults"
 
+msgid "指令"
+msgstr "Command"
+
+msgid "Markers"
+msgstr "Markers"
+
 msgid "關閉"
 msgstr "Close"
 

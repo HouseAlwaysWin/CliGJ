@@ -69,6 +69,12 @@ msgstr "變更後請按「儲存」寫入設定；「回復預設」可還原內
 msgid "回復預設"
 msgstr "回復預設"
 
+msgid "指令"
+msgstr "指令"
+
+msgid "Markers"
+msgstr "Markers"
+
 msgid "關閉"
 msgstr "關閉"
 
