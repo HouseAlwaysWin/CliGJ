@@ -14,6 +14,14 @@ export component GjChromeButton inherits Rectangle {
     /// For `toggle-accent` only: on = accent fill.
     in property <bool> active: false;
     in property <bool> interactive: true;
+    /// Enables custom colors (used by dialogs that need specific branding).
+    in property <bool> use-custom-colors: false;
+    in property <brush> custom-border-color: AppTheme.prompt_chrome_border;
+    in property <brush> custom-border-hover-color: AppTheme.prompt_chrome_border;
+    in property <brush> custom-background-color: #00000000;
+    in property <brush> custom-background-hover-color: #ffffff14;
+    in property <brush> custom-text-color: AppTheme.text_muted;
+    in property <brush> custom-text-hover-color: AppTheme.text_muted;
     callback clicked;
 
     min-width: min-button-width;
@@ -22,14 +30,18 @@ export component GjChromeButton inherits Rectangle {
     horizontal-stretch: 0;
     border-width: 1px;
     border-radius: pill-corner-radius;
-    border-color: root.preset == "save"
+    border-color: root.use-custom-colors
+        ? (btn_ta.has-hover ? root.custom-border-hover-color : root.custom-border-color)
+        : root.preset == "save"
         ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
         : root.preset == "danger"
         ? (btn_ta.has-hover ? #ff8ca8 : #ff4f6d)
         : root.preset == "toggle-accent"
         ? (root.active ? (btn_ta.has-hover ? #ff3c55 : AppTheme.accent) : AppTheme.prompt_chrome_border)
         : AppTheme.prompt_chrome_border;
-    background: root.preset == "save"
+    background: root.use-custom-colors
+        ? (btn_ta.has-hover ? root.custom-background-hover-color : root.custom-background-color)
+        : root.preset == "save"
         ? (btn_ta.has-hover ? #ff2247 : AppTheme.accent)
         : root.preset == "danger"
         ? (btn_ta.has-hover ? #ff4f6d33 : #00000000)
@@ -41,7 +53,9 @@ export component GjChromeButton inherits Rectangle {
 
     Text {
         text: root.label;
-        color: root.preset == "danger"
+        color: root.use-custom-colors
+            ? (btn_ta.has-hover ? root.custom-text-hover-color : root.custom-text-color)
+            : root.preset == "danger"
             ? #ff8ca8
             : (root.preset == "save" || (root.preset == "toggle-accent" && root.active))
             ? AppTheme.text

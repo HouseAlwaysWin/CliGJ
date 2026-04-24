@@ -1,0 +1,156 @@
+import { AppTheme } from "../theme.slint";
+import { ComboBox } from "std-widgets.slint";
+import { GjChromeButton } from "gj_chrome_button.slint";
+
+export component GjUpdateDialog inherits Rectangle {
+    // Avoid relative `%` sizing in standalone component analysis; real size is set by `app.slint`.
+    preferred-width: 800px;
+    preferred-height: 600px;
+    z: 40;
+    background: #00000099;
+
+    in-out property <[string]> versions: [];
+    in-out property <string> current-version: "";
+    in-out property <string> selected-version: "";
+    in-out property <string> status-text: "";
+    in-out property <bool> confirm-open: false;
+
+    callback close-requested;
+    callback refresh-requested;
+    callback version-selected(string);
+    callback apply-version-requested(string);
+
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        clicked => {
+            root.confirm-open = false;
+            root.close-requested();
+        }
+    }
+
+    Rectangle {
+        width: min(parent.width - 32px, 430px);
+        height: min(parent.height - 32px, 320px);
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        background: AppTheme.panel_alt;
+        border-width: 1px;
+        border-color: AppTheme.prompt_chrome_border;
+        border-radius: 12px;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 2px;
+
+            Text {
+                text: @tr("檢查更新");
+                color: AppTheme.text;
+                font-size: 18px;
+                font-weight: 700;
+            }
+
+            Text {
+                text: @tr("目前版本：") + root.current-version;
+                color: AppTheme.text_muted;
+                font-size: 12px;
+            }
+
+            Rectangle {
+                height: 1px;
+                background: AppTheme.prompt_chrome_border;
+            }
+
+            Text {
+                text: @tr("可用版本");
+                color: AppTheme.text;
+                font-size: 13px;
+                font-weight: 600;
+            }
+
+            Rectangle {
+                height: 34px;
+                border-width: 1px;
+                border-color: AppTheme.prompt_chrome_border;
+                border-radius: 8px;
+                background: #00000000;
+
+                ComboBox {
+                    width: parent.width;
+                    model: root.versions;
+                    current-value <=> root.selected-version;
+                    selected(ver) => {
+                        root.confirm-open = false;
+                        root.selected-version = ver;
+                        root.version-selected(ver);
+                    }
+                }
+            }
+
+            Text {
+                text: root.confirm-open
+                    ? (@tr("已選擇版本：") + root.selected-version + @tr("。按下「確認切換」後將下載新版並關閉目前視窗。"))
+                    : root.status-text;
+                color: AppTheme.text_muted;
+                font-size: 12px;
+                wrap: word-wrap;
+                min-height: 24px;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+
+                Rectangle { horizontal-stretch: 1; background: #00000000; }
+
+                GjChromeButton {
+                    label: @tr("重新整理");
+                    min-button-width: 84px;
+                    button-height: 30px;
+                    pill-corner-radius: 15px;
+                    preset: "close";
+                    clicked => {
+                        root.refresh-requested();
+                        root.confirm-open = false;
+                    }
+                }
+
+                GjChromeButton {
+                    label: root.confirm-open ? @tr("確認切換") : @tr("切換版本");
+                    min-button-width: 84px;
+                    button-height: 30px;
+                    pill-corner-radius: 15px;
+                    use-custom-colors: true;
+                    custom-border-color: AppTheme.accent;
+                    custom-border-hover-color: AppTheme.accent;
+                    custom-background-color: #234171;
+                    custom-background-hover-color: #35548a;
+                    custom-text-color: #ffffff;
+                    custom-text-hover-color: #ffffff;
+                    clicked => {
+                        if !root.confirm-open {
+                            root.confirm-open = true;
+                            root.status-text = @tr("再次按下「確認切換」開始更新，或按「關閉」取消。");
+                        } else {
+                            root.confirm-open = false;
+                            root.apply-version-requested(root.selected-version);
+                        }
+                    }
+                }
+
+                GjChromeButton {
+                    label: @tr("關閉");
+                    min-button-width: 68px;
+                    button-height: 30px;
+                    pill-corner-radius: 15px;
+                    preset: "close";
+                    clicked => {
+                        root.confirm-open = false;
+                        root.close-requested();
+                    }
+                }
+            }
+        }
+    }
+}
