@@ -1,4 +1,4 @@
-import { TextEdit, ComboBox, LineEdit } from "std-widgets.slint";
+import { TextEdit, ComboBox, LineEdit, ScrollView } from "std-widgets.slint";
 import { AppTheme } from "../theme.slint";
 import { LogicalKey } from "../key_labels.slint";
 import { PromptImageChip } from "../term_types.slint";
@@ -36,6 +36,16 @@ export component GjPromptDropZone inherits Rectangle {
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
     forward-focus: prompt-input;
+    private property <length> image-chip-width: 120px;
+    private property <length> image-chip-gap: 8px;
+    private property <length> image-row-height: 52px;
+    private property <length> image-strip-extra-height: 60px;
+    private property <length> image-clear-button-width: 92px;
+    private property <length> image-clear-button-height: 22px;
+    private property <length> image-strip-content-width: root.prompt-images.length > 0
+        ? root.prompt-images.length * root.image-chip-width
+            + (root.prompt-images.length - 1) * root.image-chip-gap
+        : 0px;
 
     function pty_mod(event: KeyEvent) -> int {
         (event.modifiers.control ? 1 : 0)
@@ -48,10 +58,10 @@ export component GjPromptDropZone inherits Rectangle {
     // Base 116px; +28px file chip strip; +60px image strip (thumbnails row).
     min-height: 116px
         + (root.prompt-path-chips.length > 0 ? 28px : 0px)
-        + (root.prompt-images.length > 0 ? 60px : 0px);
+        + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
     max-height: 116px
         + (root.prompt-path-chips.length > 0 ? 28px : 0px)
-        + (root.prompt-images.length > 0 ? 60px : 0px);
+        + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
     background: AppTheme.bg;
     border-width: 0px;
 
@@ -155,115 +165,150 @@ export component GjPromptDropZone inherits Rectangle {
                 }
 
                 if root.prompt-images.length > 0 : Rectangle {
-                    min-height: 52px;
-                    max-height: 52px;
+                    min-height: root.image-row-height;
+                    max-height: root.image-row-height;
                     background: #00000000;
-                    HorizontalLayout {
-                        spacing: 8px;
-                        alignment: start;
+                    property <length> image-strip-viewport-width:
+                        max(0px, self.width - root.image-clear-button-width - root.image-chip-gap);
 
-                        HorizontalLayout {
-                            horizontal-stretch: 1;
-                            spacing: 8px;
-                            alignment: start;
+                    Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.image-strip-viewport-width;
+                        height: root.image-row-height;
+                        background: #00000000;
+                        clip: true;
 
-                            for row[idx] in root.prompt-images: Rectangle {
-                                    width: 120px;
-                                    height: 52px;
-                                    border-width: 1px;
-                                    border-color: #4a9eff;
-                                    border-radius: 10px;
-                                    background: #14161c;
-                                    clip: true;
+                        image-strip-ta := TouchArea {
+                            width: parent.width;
+                            height: parent.height;
 
-                                    HorizontalLayout {
-                                        padding-left: 6px;
-                                        padding-right: 6px;
-                                        spacing: 6px;
+                            image-scroll := ScrollView {
+                                width: parent.width;
+                                height: root.image-row-height;
+                                viewport-width: root.image-strip-content-width;
+                                viewport-height: root.image-row-height;
+                                horizontal-scrollbar-policy: as-needed;
+                                vertical-scrollbar-policy: always-off;
+                                mouse-drag-pan-enabled: true;
 
-                                        Rectangle {
-                                            width: 40px;
-                                            height: 40px;
-                                            border-radius: 6px;
-                                            clip: true;
-                                            y: (parent.height - self.height) / 2;
+                                Rectangle {
+                                    width: root.image-strip-content-width;
+                                    height: root.image-row-height;
+                                    background: #00000000;
 
-                                            Image {
-                                                source: row.thumb;
-                                                width: 100%;
-                                                height: 100%;
-                                                image-fit: cover;
-                                            }
+                                    for row[idx] in root.prompt-images: Rectangle {
+                                        x: idx * (root.image-chip-width + root.image-chip-gap);
+                                        y: 0px;
+                                        width: root.image-chip-width;
+                                        height: root.image-row-height;
+                                        border-width: 1px;
+                                        border-color: #4a9eff;
+                                        border-radius: 10px;
+                                        background: #14161c;
+                                        clip: true;
 
-                                            TouchArea {
-                                                width: parent.width;
-                                                height: parent.height;
-                                                clicked => {
-                                                    root.prompt-image-zoom-requested(idx);
+                                        HorizontalLayout {
+                                            padding-left: 6px;
+                                            padding-right: 6px;
+                                            spacing: 6px;
+
+                                            Rectangle {
+                                                width: 40px;
+                                                height: 40px;
+                                                border-radius: 6px;
+                                                clip: true;
+                                                y: (parent.height - self.height) / 2;
+
+                                                Image {
+                                                    source: row.thumb;
+                                                    width: 100%;
+                                                    height: 100%;
+                                                    image-fit: cover;
+                                                }
+
+                                                TouchArea {
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    clicked => {
+                                                        root.prompt-image-zoom-requested(idx);
+                                                    }
                                                 }
                                             }
-                                        }
-
-                                        Text {
-                                            text: row.label;
-                                            color: #f3f5f8;
-                                            vertical-alignment: center;
-                                            font-size: 11px;
-                                            font-weight: 600;
-                                            overflow: elide;
-                                        }
-
-                                        Rectangle {
-                                            width: 18px;
-                                            height: parent.height;
 
                                             Text {
-                                                text: "x";
-                                                color: #ff8ca8;
+                                                text: row.label;
+                                                color: #f3f5f8;
                                                 vertical-alignment: center;
-                                                horizontal-alignment: center;
                                                 font-size: 11px;
-                                                width: 100%;
-                                                height: 100%;
+                                                font-weight: 600;
+                                                overflow: elide;
                                             }
 
-                                            TouchArea {
-                                                width: parent.width;
+                                            Rectangle {
+                                                width: 18px;
                                                 height: parent.height;
-                                                clicked => {
-                                                    root.prompt-image-remove-requested(idx);
+
+                                                Text {
+                                                    text: "x";
+                                                    color: #ff8ca8;
+                                                    vertical-alignment: center;
+                                                    horizontal-alignment: center;
+                                                    font-size: 11px;
+                                                    width: 100%;
+                                                    height: parent.height;
+                                                }
+
+                                                TouchArea {
+                                                    width: parent.width;
+                                                    height: parent.height;
+                                                    clicked => {
+                                                        root.prompt-image-remove-requested(idx);
+                                                    }
                                                 }
                                             }
                                         }
                                     }
                                 }
-                        }
-
-                        Rectangle {
-                            width: self.preferred-width;
-                            height: 22px;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            border-radius: 12px;
-                            background: #00000000;
-                            y: (parent.height - self.height) / 2;
-
-                            HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 6px;
-                                Text {
-                                    text: @tr("清除圖");
-                                    color: AppTheme.text_muted;
-                                    vertical-alignment: center;
-                                    font-size: 11px;
-                                }
                             }
 
-                            TouchArea {
-                                clicked => {
-                                    root.prompt-images-clear-requested();
+                            scroll-event(event) => {
+                                let max-scroll = image-scroll.viewport-width - image-scroll.visible-width;
+                                if (max-scroll <= 0px) {
+                                    return reject;
                                 }
+                                let next = image-scroll.viewport-x - event.delta-y - event.delta-x;
+                                image-scroll.viewport-x = max(-max-scroll, min(0px, next));
+                                return accept;
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        x: parent.width - root.image-clear-button-width;
+                        y: (parent.height - root.image-clear-button-height) / 2;
+                        width: root.image-clear-button-width;
+                        height: root.image-clear-button-height;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 12px;
+                        background: #00000000;
+
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            padding-right: 8px;
+                            spacing: 6px;
+                            Text {
+                                text: @tr("清除圖");
+                                color: AppTheme.text_muted;
+                                vertical-alignment: center;
+                                font-size: 11px;
+                            }
+                        }
+
+                        TouchArea {
+                            clicked => {
+                                root.prompt-images-clear-requested();
                             }
                         }
                     }
