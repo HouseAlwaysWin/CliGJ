@@ -206,6 +206,49 @@ pub fn append_attachment_token(prompt: &str, token: &str) -> String {
     }
 }
 
+/// True if `token` appears as a whole attachment token (whitespace-delimited), not as a substring.
+#[must_use]
+pub fn prompt_has_whitespace_delimited_token(prompt: &str, token: &str) -> bool {
+    prompt.split_whitespace().any(|w| w == token)
+}
+
+/// Remove one whitespace-bounded occurrence of `token` from the composer text.
+#[must_use]
+pub fn strip_attachment_token(prompt: &str, token: &str) -> String {
+    if token.is_empty() {
+        return prompt.to_string();
+    }
+    let tchars: Vec<char> = token.chars().collect();
+    let chars: Vec<char> = prompt.chars().collect();
+    let mut i = 0usize;
+    let mut out: Vec<char> = Vec::new();
+    while i < chars.len() {
+        if i + tchars.len() <= chars.len() && chars[i..i + tchars.len()] == tchars[..] {
+            let before_ok = i == 0 || chars[i - 1].is_whitespace();
+            let after_ok = i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
+            if before_ok && after_ok {
+                if out.last() == Some(&' ') {
+                    out.pop();
+                }
+                i += tchars.len();
+                if i < chars.len() && chars[i] == ' ' {
+                    i += 1;
+                }
+                if i < chars.len()
+                    && out.last().is_some_and(|c| !c.is_whitespace())
+                    && !chars[i].is_whitespace()
+                {
+                    out.push(' ');
+                }
+                continue;
+            }
+        }
+        out.push(chars[i]);
+        i += 1;
+    }
+    out.into_iter().collect()
+}
+
 #[must_use]
 pub fn expand_attachment_tokens(
     prompt: &str,
@@ -303,6 +346,23 @@ mod tests {
         assert_eq!(
             out,
             "ask D:/a.txt D:/a.txt D:/a.txt D:/other/a.txt with D:/p.png D:/p.png and code payload"
+        );
+    }
+
+    #[test]
+    fn strip_attachment_token_removes_whole_token() {
+        assert_eq!(
+            strip_attachment_token("hello @a.jpg world", "@a.jpg"),
+            "hello world"
+        );
+        assert_eq!(strip_attachment_token("@a.jpg", "@a.jpg"), "");
+    }
+
+    #[test]
+    fn strip_attachment_token_skips_substring_inside_word() {
+        assert_eq!(
+            strip_attachment_token("x@a.jpgy", "@a.jpg"),
+            "x@a.jpgy"
         );
     }
 

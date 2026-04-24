@@ -8,6 +8,7 @@ use image::RgbaImage;
 use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 use unicode_width::UnicodeWidthChar;
 
+use crate::gui::prompt_attachments::hint_token_for_image_index;
 use crate::terminal::key_encoding;
 use crate::terminal::render::ColoredLine;
 use crate::workspace_files;
@@ -269,6 +270,10 @@ pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: us
     }
     let tab = &mut s.tabs[s.current];
     if index < tab.prompt_picked_images.len() {
+        if let Some(tok) = hint_token_for_image_index(tab, index) {
+            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            tab.prompt = SharedString::from(p.as_str());
+        }
         tab.prompt_picked_images.remove(index);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
@@ -280,7 +285,13 @@ pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
         return;
     }
     let tab = &mut s.tabs[s.current];
-    tab.prompt_picked_images.clear();
+    while !tab.prompt_picked_images.is_empty() {
+        if let Some(tok) = hint_token_for_image_index(tab, 0) {
+            let p = workspace_files::strip_attachment_token(tab.prompt.as_str(), tok.as_str());
+            tab.prompt = SharedString::from(p.as_str());
+        }
+        tab.prompt_picked_images.remove(0);
+    }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);
 }

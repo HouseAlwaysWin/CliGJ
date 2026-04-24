@@ -7,6 +7,7 @@ mod fonts;
 mod i18n;
 mod ipc;
 mod interactive_commands;
+mod prompt_attachments;
 mod shell_profiles;
 mod gui_state;
 mod run;

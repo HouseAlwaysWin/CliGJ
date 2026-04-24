@@ -1235,6 +1235,7 @@ pub(crate) fn spawn_ipc_bridge_timer(
 pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<GuiState>>) -> Timer {
     use crate::gui::at_picker::sync_at_file_picker;
     use crate::gui::composer_sync::sync_composer_line_to_conpty;
+    use crate::gui::ui_sync::tab_update_from_ui;
 
     let app_weak = app.as_weak();
     let timer = Timer::default();
@@ -1258,6 +1259,9 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
         if !key.1.is_empty() {
             auto_disable_raw_on_cjk_prompt(&ui, &mut s);
         }
+        // Keep tab prompt + attachment chips synchronized on every real composer change.
+        let cur = s.current;
+        tab_update_from_ui(&mut s.tabs[cur], &ui);
         
         sync_composer_line_to_conpty(&ui, &mut s);
         sync_at_file_picker(&ui, &mut s);

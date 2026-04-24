@@ -5,6 +5,7 @@ use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use unicode_width::UnicodeWidthChar;
 
+use crate::gui::prompt_attachments::prune_prompt_images_not_in_prompt;
 use crate::terminal::render::{ColoredLine, ColoredSpan};
 use crate::workspace_files;
 
@@ -529,11 +530,26 @@ pub(crate) fn sync_tab_count(ui: &AppWindow, n: usize) {
     ui.set_tab_count(n as i32);
 }
 
+pub(crate) fn sync_prompt_image_chips_to_ui(ui: &AppWindow, tab: &TabState) {
+    let img_chips: Vec<PromptImageChip> = tab
+        .prompt_picked_images
+        .iter()
+        .map(|p| PromptImageChip {
+            label: SharedString::from(workspace_files::file_name_label(&p.abs_path).as_str()),
+            thumb: p.preview.clone(),
+        })
+        .collect();
+    ui.set_ws_prompt_images(ModelRc::new(VecModel::from(img_chips)));
+}
+
 pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.file_path = ui.get_ws_file_path().to_string();
     tab.selected_line = ui.get_ws_selected_line();
     tab.selected_context = ui.get_ws_selected_context();
     tab.prompt = ui.get_ws_prompt();
+    if prune_prompt_images_not_in_prompt(tab) {
+        sync_prompt_image_chips_to_ui(ui, tab);
+    }
     tab.cmd_type = ui.get_ws_cmd_type().to_string();
     if tab.terminal_lines.is_empty() {
         tab.terminal_text = ui.get_ws_terminal_text().to_string();
@@ -547,15 +563,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     UI_LAYOUT_EPOCH.with(|c| c.set(c.get().wrapping_add(1)));
     ui.set_ws_image_zoom_index(-1);
     ui.set_ws_file_path(SharedString::from(tab.file_path.as_str()));
-    let img_chips: Vec<PromptImageChip> = tab
-        .prompt_picked_images
-        .iter()
-        .map(|p| PromptImageChip {
-            label: SharedString::from(workspace_files::file_name_label(&p.abs_path).as_str()),
-            thumb: p.preview.clone(),
-        })
-        .collect();
-    ui.set_ws_prompt_images(ModelRc::new(VecModel::from(img_chips)));
+    sync_prompt_image_chips_to_ui(ui, tab);
     if tab.terminal_lines.is_empty() {
         ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
     } else {
