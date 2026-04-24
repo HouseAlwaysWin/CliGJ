@@ -3,8 +3,10 @@ import { InteractiveCmdEditorRow } from "../term_types.slint";
 import { LineEdit, ScrollView } from "std-widgets.slint";
 
 export component GjInteractiveManageDialog inherits Rectangle {
-    width: 100%;
-    height: 100%;
+    // Avoid `100%` / `parent.width` here: Slint cannot resolve them when this file is analyzed alone
+    // (LSP: "Cannot find parent property to apply relative length"). Real size comes from `app.slint`.
+    preferred-width: 800px;
+    preferred-height: 600px;
     background: #00000080;
     z: 106;
 
@@ -20,20 +22,27 @@ export component GjInteractiveManageDialog inherits Rectangle {
     callback archive-repainted-toggled(int);
     callback save;
     callback close;
+    callback restore-defaults;
 
-    Rectangle {
-        width: parent.width - 24px;
-        height: parent.height - 24px;
-        x: 12px;
-        y: 12px;
-        background: AppTheme.panel;
-        border-width: 1px;
-        border-color: AppTheme.prompt_chrome_border;
-        border-radius: 10px;
+    VerticalLayout {
+        horizontal-stretch: 1;
+        vertical-stretch: 1;
+        padding: 12px;
+        spacing: 0px;
 
-        VerticalLayout {
-            padding: 12px;
-            spacing: 8px;
+        Rectangle {
+            horizontal-stretch: 1;
+            vertical-stretch: 1;
+            background: AppTheme.panel;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 10px;
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                vertical-stretch: 1;
+                padding: 12px;
+                spacing: 8px;
 
             Text {
                 text: @tr("指令設定");
@@ -43,7 +52,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
             }
 
             Text {
-                text: @tr("內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。");
+                text: @tr("變更後請按「儲存」寫入設定；「回復預設」可還原內建 Gemini / Codex / Claude / Copilot。");
                 color: AppTheme.text_muted;
                 font-size: 11px;
                 wrap: word-wrap;
@@ -67,7 +76,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     border-width: 1px;
                     border-color: AppTheme.prompt_chrome_border;
                     border-radius: 8px;
-                    background: #00000000;
+                    background: add_row_ta.has-hover ? #ffffff14 : #00000000;
 
                     Text {
                         text: @tr("新增");
@@ -78,9 +87,34 @@ export component GjInteractiveManageDialog inherits Rectangle {
                         font-weight: 600;
                     }
 
-                    TouchArea {
+                    add_row_ta := TouchArea {
                         clicked => {
                             root.manage-add-row();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    min-width: 88px;
+                    height: 26px;
+                    horizontal-stretch: 0;
+                    border-width: 1px;
+                    border-color: AppTheme.prompt_chrome_border;
+                    border-radius: 8px;
+                    background: restore_def_ta.has-hover ? #ffffff14 : #00000000;
+
+                    Text {
+                        text: @tr("回復預設");
+                        color: AppTheme.text_muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                        font-size: 12px;
+                        font-weight: 600;
+                    }
+
+                    restore_def_ta := TouchArea {
+                        clicked => {
+                            root.restore-defaults();
                         }
                     }
                 }
@@ -92,7 +126,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     border-width: 1px;
                     border-color: AppTheme.prompt_chrome_border;
                     border-radius: 8px;
-                    background: #00000000;
+                    background: close_dlg_ta.has-hover ? #ffffff14 : #00000000;
 
                     Text {
                         text: @tr("關閉");
@@ -102,7 +136,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                         font-size: 12px;
                     }
 
-                    TouchArea {
+                    close_dlg_ta := TouchArea {
                         clicked => {
                             root.close();
                         }
@@ -114,9 +148,9 @@ export component GjInteractiveManageDialog inherits Rectangle {
                     height: 26px;
                     horizontal-stretch: 0;
                     border-width: 1px;
-                    border-color: AppTheme.accent;
+                    border-color: save_dlg_ta.has-hover ? #ff2247 : AppTheme.accent;
                     border-radius: 8px;
-                    background: AppTheme.accent;
+                    background: save_dlg_ta.has-hover ? #ff2247 : AppTheme.accent;
 
                     Text {
                         text: @tr("儲存");
@@ -127,7 +161,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                         font-weight: 700;
                     }
 
-                    TouchArea {
+                    save_dlg_ta := TouchArea {
                         clicked => {
                             root.save();
                         }
@@ -215,9 +249,13 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                     height: 24px;
                                     horizontal-stretch: 0;
                                     border-width: 1px;
-                                    border-color: row.interactive-cli ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                                    border-color: row.interactive-cli
+                                        ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                        : AppTheme.prompt_chrome_border;
                                     border-radius: 6px;
-                                    background: row.interactive-cli ? AppTheme.accent : #00000000;
+                                    background: row.interactive-cli
+                                        ? (row_igt_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                        : (row_igt_ta.has-hover ? #ffffff14 : #00000000);
 
                                     Text {
                                         text: "Interactive";
@@ -227,7 +265,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         vertical-alignment: center;
                                     }
 
-                                    TouchArea {
+                                    row_igt_ta := TouchArea {
                                         clicked => {
                                             root.interactive-cli-toggled(key_idx);
                                         }
@@ -259,9 +297,9 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                     height: 24px;
                                     horizontal-stretch: 0;
                                     border-width: 1px;
-                                    border-color: #ff4f6d;
+                                    border-color: row_del_ta.has-hover ? #ff8ca8 : #ff4f6d;
                                     border-radius: 6px;
-                                    background: #00000000;
+                                    background: row_del_ta.has-hover ? #ff4f6d33 : #00000000;
 
                                     Text {
                                         text: @tr("刪除");
@@ -271,8 +309,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         vertical-alignment: center;
                                     }
 
-                                    TouchArea {
-                                        enabled: !row.key-locked;
+                                    row_del_ta := TouchArea {
                                         clicked => {
                                             root.remove-row(key_idx);
                                         }
@@ -309,9 +346,13 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                     height: 24px;
                                     horizontal-stretch: 0;
                                     border-width: 1px;
-                                    border-color: row.archive-repainted-frames ? AppTheme.accent : AppTheme.prompt_chrome_border;
+                                    border-color: row.archive-repainted-frames
+                                        ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                        : AppTheme.prompt_chrome_border;
                                     border-radius: 6px;
-                                    background: row.archive-repainted-frames ? AppTheme.accent : #00000000;
+                                    background: row.archive-repainted-frames
+                                        ? (row_replay_ta.has-hover ? #ff3c55 : AppTheme.accent)
+                                        : (row_replay_ta.has-hover ? #ffffff14 : #00000000);
 
                                     Text {
                                         text: "Replay";
@@ -321,18 +362,18 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         vertical-alignment: center;
                                     }
 
-                                    TouchArea {
+                                    row_replay_ta := TouchArea {
                                         clicked => {
                                             root.archive-repainted-toggled(key_idx);
                                         }
                                     }
                                 }
+                            }
                         }
                     }
                 }
             }
-
+            }
         }
     }
-}
 }

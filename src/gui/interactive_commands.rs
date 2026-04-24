@@ -49,10 +49,10 @@ pub(crate) fn sync_interactive_command_choices_to_ui(ui: &AppWindow, gs: &GuiSta
     ui.set_ws_interactive_command_choices(ModelRc::new(VecModel::from(labels)));
 }
 
-/// Load full name/command list into the interactive-command editor modal.
-pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
-    let rows: Vec<InteractiveCmdEditorRow> = gs
-        .interactive_commands
+pub(crate) fn interactive_command_specs_to_editor_rows(
+    specs: &[InteractiveCommandSpec],
+) -> Vec<InteractiveCmdEditorRow> {
+    specs
         .iter()
         .map(|spec| InteractiveCmdEditorRow {
             name: SharedString::from(spec.name.as_str()),
@@ -67,7 +67,12 @@ pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState
             expanded: false,
             workspace_path: SharedString::new(),
         })
-        .collect();
+        .collect()
+}
+
+/// Load full name/command list into the interactive-command editor modal.
+pub(crate) fn sync_interactive_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
+    let rows = interactive_command_specs_to_editor_rows(&gs.interactive_commands);
     ui.set_ws_interactive_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
 

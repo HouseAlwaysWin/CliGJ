@@ -63,8 +63,11 @@ msgstr "點擊任意處關閉"
 msgid "指令設定"
 msgstr "指令設定"
 
-msgid "內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。"
-msgstr "內建 Gemini / Codex / Claude / Copilot 無法刪除；變更後請按儲存。"
+msgid "變更後請按「儲存」寫入設定；「回復預設」可還原內建 Gemini / Codex / Claude / Copilot。"
+msgstr "變更後請按「儲存」寫入設定；「回復預設」可還原內建 Gemini / Codex / Claude / Copilot。"
+
+msgid "回復預設"
+msgstr "回復預設"
 
 msgid "關閉"
 msgstr "關閉"

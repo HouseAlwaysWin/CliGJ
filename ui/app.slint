@@ -147,6 +147,7 @@ export component AppWindow inherits Window {
     callback interactive-manage-archive-repainted-toggled(int);
     callback save-interactive-manage;
     callback close-interactive-manage;
+    callback restore-interactive-manage-defaults;
     callback manage-add-shell-row;
     callback remove-shell-manage-row(int);
     callback shell-manage-name-edited(int, string);
@@ -408,6 +409,10 @@ export component AppWindow inherits Window {
     }
 
     if root.ws-interactive-manage-open : GjInteractiveManageDialog {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
         manage-rows <=> root.ws-interactive-manage-rows;
         manage-add-row => {
             root.manage-add-interactive-row();
@@ -438,6 +443,9 @@ export component AppWindow inherits Window {
         }
         close => {
             root.close-interactive-manage();
+        }
+        restore-defaults => {
+            root.restore-interactive-manage-defaults();
         }
     }
 

@@ -3,7 +3,10 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use crate::gui::interactive_commands::sync_interactive_manage_editor_to_ui;
+use crate::gui::interactive_commands::{
+    default_interactive_command_pairs, interactive_command_specs_to_editor_rows,
+    sync_interactive_manage_editor_to_ui,
+};
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
 
@@ -52,10 +55,19 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         }
         let i = idx as usize;
         let mut rows = model_interactive_editor_rows(&ui.get_ws_interactive_manage_rows());
-        if i >= rows.len() || rows[i].key_locked {
+        if i >= rows.len() {
             return;
         }
         rows.remove(i);
+        set_manage_rows(&ui, rows);
+    });
+
+    let app_weak = app.as_weak();
+    app.on_restore_interactive_manage_defaults(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let rows = interactive_command_specs_to_editor_rows(&default_interactive_command_pairs());
         set_manage_rows(&ui, rows);
     });
 
