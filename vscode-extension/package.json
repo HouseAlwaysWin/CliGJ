@@ -61,6 +61,21 @@
         "title": "CliGJ: Fill File Path (Editable)"
       }
     ],
+    "configuration": {
+      "title": "CliGJ",
+      "properties": {
+        "cligj.autoFocusCliGJOnSend": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically focus CliGJ after sending or filling prompt payloads."
+        },
+        "cligj.showFocusCliGJActionInNotification": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a 'Focus CliGJ' action button in success notifications."
+        }
+      }
+    },
     "menus": {
       "editor/context": [
         {

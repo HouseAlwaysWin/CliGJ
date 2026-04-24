@@ -128,10 +128,33 @@ export function activate(context: vscode.ExtensionContext): void {
   const output = vscode.window.createOutputChannel("CliGJ Bridge");
   context.subscriptions.push(output);
   const clientId = randomUUID();
+  const focusCliGJActionLabel = "Focus CliGJ";
   const currentFileOrigin = (): FileOriginPayload => ({
     clientId,
     uriScheme: vscode.env.uriScheme
   });
+  const shouldAutoFocusCliGJOnSend = (): boolean =>
+    vscode.workspace.getConfiguration("cligj").get<boolean>("autoFocusCliGJOnSend", false);
+  const shouldShowFocusCliGJActionInNotification = (): boolean =>
+    vscode.workspace.getConfiguration("cligj").get<boolean>("showFocusCliGJActionInNotification", true);
+
+  const focusCliGJ = async (source: string): Promise<boolean> => {
+    output.appendLine(`[focus] source=${source} request focusWindow`);
+    try {
+      const resp = await sendRequest("focusWindow");
+      if (!resp.ok) {
+        output.appendLine(`[focus] failed: ${resp.error ?? "unknown error"}`);
+        void vscode.window.showErrorMessage(`CliGJ focus failed: ${resp.error ?? "unknown error"}`);
+        return false;
+      }
+      output.appendLine("[focus] success");
+      return true;
+    } catch (err) {
+      output.appendLine(`[focus] error: ${String(err)}`);
+      void vscode.window.showErrorMessage(`CliGJ focus error: ${String(err)}`);
+      return false;
+    }
+  };
 
   const hasNonEmptySelection = (editor: vscode.TextEditor | undefined): boolean =>
     !!editor && editor.selections.some((selection) => !selection.isEmpty);
@@ -249,9 +272,21 @@ export function activate(context: vscode.ExtensionContext): void {
       }
       if (resp.ok) {
         output.appendLine("[sendPrompt] success");
-        void vscode.window.showInformationMessage(
-          submit ? "Prompt sent to CliGJ" : "Prompt filled to CliGJ input box"
-        );
+        const successMessage = submit ? "Prompt sent to CliGJ" : "Prompt filled to CliGJ input box";
+        if (shouldAutoFocusCliGJOnSend()) {
+          void focusCliGJ("sendPrompt.autoFocusSetting");
+        }
+        if (shouldShowFocusCliGJActionInNotification()) {
+          const picked = await vscode.window.showInformationMessage(
+            successMessage,
+            focusCliGJActionLabel
+          );
+          if (picked === focusCliGJActionLabel) {
+            await focusCliGJ("sendPrompt.notificationAction");
+          }
+        } else {
+          void vscode.window.showInformationMessage(successMessage);
+        }
       } else {
         output.appendLine(`[sendPrompt] failed: ${resp.error ?? "unknown error"}`);
         void vscode.window.showErrorMessage(`sendPrompt failed: ${resp.error ?? "unknown error"}`);
@@ -555,15 +590,9 @@ export function activate(context: vscode.ExtensionContext): void {
   });
 
   const openTab = vscode.commands.registerCommand("cligj.openTab", async () => {
-    try {
-      const resp = await sendRequest("openTab", { focus: true });
-      if (resp.ok) {
-        void vscode.window.showInformationMessage("CliGJ openTab sent");
-      } else {
-        void vscode.window.showErrorMessage(`openTab failed: ${resp.error ?? "unknown error"}`);
-      }
-    } catch (err) {
-      void vscode.window.showErrorMessage(`openTab error: ${String(err)}`);
+    const ok = await focusCliGJ("command.openTab");
+    if (ok) {
+      void vscode.window.showInformationMessage("CliGJ openTab sent");
     }
   });
 

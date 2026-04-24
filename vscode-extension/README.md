@@ -55,6 +55,13 @@ If these shortcuts conflict with your environment, override them in VS Code keyb
 ]
 ```
 
+## Settings
+
+- `cligj.autoFocusCliGJOnSend` (default: `false`)
+  - When enabled, the extension automatically requests CliGJ to focus after successful send/fill operations.
+- `cligj.showFocusCliGJActionInNotification` (default: `true`)
+  - Shows a `Focus CliGJ` button in success notifications; click to jump to CliGJ immediately.
+
 ## Troubleshooting
 
 If you see `command 'cligj.sendPrompt' not found`, the extension usually failed to activate because the compiled entry file does not exist yet.

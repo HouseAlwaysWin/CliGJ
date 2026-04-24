@@ -24,6 +24,10 @@ pub(crate) enum IpcGuiCommand {
         focus: bool,
         response_tx: mpsc::Sender<IpcGuiResponse>,
     },
+    FocusWindow {
+        id: Option<Value>,
+        response_tx: mpsc::Sender<IpcGuiResponse>,
+    },
     SendPrompt {
         id: Option<Value>,
         tab_id: Option<u64>,
@@ -517,6 +521,23 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                 id: req.id.clone(),
                 profile,
                 focus,
+                response_tx: tx,
+            });
+            if send.is_err() {
+                return IpcResponse {
+                    r#type: "response",
+                    id: req.id,
+                    ok: false,
+                    result: json!({}),
+                    error: Some("GUI command channel unavailable".to_string()),
+                };
+            }
+            gui_response_to_wire(req.id, rx.recv_timeout(IPC_REQUEST_TIMEOUT))
+        }
+        "focusWindow" => {
+            let (tx, rx) = mpsc::channel();
+            let send = gui_tx.send(IpcGuiCommand::FocusWindow {
+                id: req.id.clone(),
                 response_tx: tx,
             });
             if send.is_err() {

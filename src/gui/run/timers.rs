@@ -10,6 +10,8 @@ use std::thread;
 use std::time::Duration;
 
 use slint::{ComponentHandle, Model, SharedString, Timer};
+#[cfg(target_os = "windows")]
+use slint::winit_030::WinitWindowAccessor;
 use serde_json::json;
 
 use crate::gui::ipc::{IpcBridge, IpcGuiCommand, IpcGuiResponse};
@@ -1088,6 +1090,34 @@ fn handle_ipc_gui_command(
                     "cmdType": created_cmd_type,
                 }),
                 error: None,
+            });
+        }
+        IpcGuiCommand::FocusWindow { id, response_tx } => {
+            let mut out_id = id;
+            #[cfg(target_os = "windows")]
+            let focused = ui
+                .window()
+                .with_winit_window(|w| {
+                    w.set_visible(true);
+                    w.set_minimized(false);
+                    w.focus_window();
+                    true
+                })
+                .unwrap_or(false);
+            #[cfg(not(target_os = "windows"))]
+            let focused = {
+                ui.window().request_activate();
+                true
+            };
+            let _ = response_tx.send(IpcGuiResponse {
+                id: out_id.take(),
+                ok: focused,
+                result: json!({ "focused": focused }),
+                error: if focused {
+                    None
+                } else {
+                    Some("focusWindow failed".to_string())
+                },
             });
         }
         IpcGuiCommand::SendPrompt {
