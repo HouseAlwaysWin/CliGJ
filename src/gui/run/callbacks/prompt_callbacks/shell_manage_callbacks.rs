@@ -288,15 +288,39 @@ fn extract_release_zip_to_temp(zip_path: &Path, version: &str) -> Result<PathBuf
 }
 
 #[cfg(target_os = "windows")]
-fn launch_downloaded_installer(path: &Path) -> Result<(), String> {
-    let target = path.to_string_lossy().to_string();
-    let status = Command::new("cmd")
-        .args(["/C", "start", "", target.as_str()])
-        .status()
-        .map_err(|e| format!("launch update failed: {e}"))?;
-    if !status.success() {
-        return Err(format!("launch update returned status: {status}"));
-    }
+fn launch_windows_self_replace_updater(downloaded_exe: &Path) -> Result<(), String> {
+    let current_exe =
+        std::env::current_exe().map_err(|e| format!("resolve current executable failed: {e}"))?;
+    let updates_root = std::env::temp_dir().join("cligj-updates");
+    fs::create_dir_all(&updates_root).map_err(|e| format!("create temp folder failed: {e}"))?;
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| format!("clock error: {e}"))?
+        .as_millis();
+    let script_path = updates_root.join(format!("apply-update-{stamp}.cmd"));
+    let src = downloaded_exe.display().to_string();
+    let dst = current_exe.display().to_string();
+    let script = format!(
+        r#"@echo off
+setlocal
+set "SRC={src}"
+set "DST={dst}"
+for /l %%i in (1,1,120) do (
+  copy /Y "%SRC%" "%DST%" >nul 2>&1 && goto copied
+  timeout /t 1 /nobreak >nul
+)
+exit /b 1
+:copied
+start "" "%DST%"
+endlocal
+"#
+    );
+    fs::write(&script_path, script).map_err(|e| format!("write updater script failed: {e}"))?;
+    let script_arg = script_path.to_string_lossy().to_string();
+    Command::new("cmd")
+        .args(["/C", script_arg.as_str()])
+        .spawn()
+        .map_err(|e| format!("launch updater script failed: {e}"))?;
     Ok(())
 }
 
@@ -436,20 +460,23 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         });
                         let extracted_exe =
                             extract_release_zip_to_temp(downloaded_zip.as_path(), selected.as_str())?;
-                        let launch_msg = format!("Launching update from {}", extracted_exe.display());
+                        let launch_msg = format!(
+                            "Scheduling replacement from {}",
+                            extracted_exe.display()
+                        );
                         let _ = app_weak_download.upgrade_in_event_loop(move |ui| {
                             ui.set_ws_update_status_text(SharedString::from(
                                 launch_msg.as_str(),
                             ));
                         });
-                        launch_downloaded_installer(extracted_exe.as_path())
+                        launch_windows_self_replace_updater(extracted_exe.as_path())
                     });
                 let app_weak_for_quit = app_weak_download.clone();
                 let _ = app_weak_download.upgrade_in_event_loop(move |ui| match resolved {
                     Ok(()) => {
                         ui.set_ws_update_status_text(SharedString::from(
                             format!(
-                                "Update package launched. Switching to new window now. If needed, rollback by running: {rollback_path}"
+                                "Update replacement scheduled. App will close and restart on the selected version. If needed, rollback by running: {rollback_path}"
                             )
                             .as_str(),
                         ));
