@@ -1097,6 +1097,7 @@ fn handle_ipc_gui_command(
             submit,
             selection_payloads,
             file_path_payloads,
+            file_origin_payloads,
             response_tx,
         } => {
             let mut out_id = id;
@@ -1128,6 +1129,18 @@ fn handle_ipc_gui_command(
                 s.tabs[cur].prompt = SharedString::from(prompt.as_str());
                 s.tabs[cur].prompt_picked_selections = selection_payloads;
                 s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+                s.tabs[cur].prompt_picked_file_origins = file_origin_payloads
+                    .into_iter()
+                    .map(|origin| {
+                        origin.map(|o| crate::gui::state::PromptFileOrigin {
+                            client_id: o.client_id,
+                            uri_scheme: o.uri_scheme,
+                        })
+                    })
+                    .collect();
+                while s.tabs[cur].prompt_picked_file_origins.len() < s.tabs[cur].prompt_picked_files_abs.len() {
+                    s.tabs[cur].prompt_picked_file_origins.push(None);
+                }
                 crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
             } else {
                 let current_prompt = s.tabs[cur].prompt.to_string();
@@ -1146,9 +1159,20 @@ fn handle_ipc_gui_command(
                         s.tabs[cur].prompt_picked_selections.push(payload);
                     }
                 }
-                for path in file_path_payloads {
+                for (path, origin) in file_path_payloads.into_iter().zip(
+                    file_origin_payloads
+                        .into_iter()
+                        .map(|origin| {
+                            origin.map(|o| crate::gui::state::PromptFileOrigin {
+                                client_id: o.client_id,
+                                uri_scheme: o.uri_scheme,
+                            })
+                        })
+                        .chain(std::iter::repeat(None)),
+                ) {
                     if !s.tabs[cur].prompt_picked_files_abs.iter().any(|p| p == &path) {
                         s.tabs[cur].prompt_picked_files_abs.push(path);
+                        s.tabs[cur].prompt_picked_file_origins.push(origin);
                     }
                 }
                 crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);

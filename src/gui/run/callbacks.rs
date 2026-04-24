@@ -78,7 +78,7 @@ pub(crate) fn connect(
         Rc::clone(&history_refresh_on_tab_change),
     );
     prompt_callbacks::connect_prompt_and_picker(app, Rc::clone(&state));
-    terminal_callbacks::connect_chips(app, Rc::clone(&state));
+    terminal_callbacks::connect_chips(app, Rc::clone(&state), ipc.clone());
     terminal_callbacks::connect_terminal_selection(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_viewport(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_resize(app, Rc::clone(&state));

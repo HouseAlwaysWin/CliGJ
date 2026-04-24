@@ -48,6 +48,7 @@ pub(crate) fn inject_paths_into_current(
         }
         if !tab.prompt_picked_files_abs.contains(&abs_path) {
             tab.prompt_picked_files_abs.push(abs_path.clone());
+            tab.prompt_picked_file_origins.push(None);
             let token = filepath_hint_token_for_abs_path(tab, abs_path.as_str());
             let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
             tab.prompt = SharedString::from(next.as_str());
@@ -291,6 +292,9 @@ pub(crate) fn remove_prompt_file_at(ui: &AppWindow, s: &mut GuiState, index: usi
             tab.prompt = SharedString::from(p.as_str());
         }
         tab.prompt_picked_files_abs.remove(index);
+        if index < tab.prompt_picked_file_origins.len() {
+            tab.prompt_picked_file_origins.remove(index);
+        }
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         crate::gui::ui_sync::load_tab_to_ui(ui, tab);
     }
@@ -307,6 +311,9 @@ pub(crate) fn clear_all_prompt_files(ui: &AppWindow, s: &mut GuiState) {
             tab.prompt = SharedString::from(p.as_str());
         }
         tab.prompt_picked_files_abs.remove(0);
+        if !tab.prompt_picked_file_origins.is_empty() {
+            tab.prompt_picked_file_origins.remove(0);
+        }
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     crate::gui::ui_sync::load_tab_to_ui(ui, tab);

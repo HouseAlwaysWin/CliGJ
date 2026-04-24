@@ -62,6 +62,9 @@ pub(crate) fn prune_prompt_files_not_in_prompt(tab: &mut TabState) -> bool {
             i += 1;
         } else {
             tab.prompt_picked_files_abs.remove(i);
+            if i < tab.prompt_picked_file_origins.len() {
+                tab.prompt_picked_file_origins.remove(i);
+            }
             changed = true;
         }
     }

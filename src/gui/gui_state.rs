@@ -202,6 +202,7 @@ impl GuiState {
             }
             tab.prompt = SharedString::new();
             tab.prompt_picked_files_abs.clear();
+            tab.prompt_picked_file_origins.clear();
             tab.prompt_picked_images.clear();
             tab.prompt_picked_selections.clear();
         }
@@ -468,6 +469,7 @@ impl GuiState {
         let tab = &mut self.tabs[self.current];
         tab.prompt = SharedString::new();
         tab.prompt_picked_files_abs.clear();
+        tab.prompt_picked_file_origins.clear();
         tab.prompt_picked_images.clear();
         tab.prompt_picked_selections.clear();
         tab.composer_pty_mirror.clear();

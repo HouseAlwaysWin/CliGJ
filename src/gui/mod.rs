@@ -7,6 +7,7 @@ mod fonts;
 mod i18n;
 mod ipc;
 mod interactive_commands;
+mod open_in_vscode;
 mod prompt_attachments;
 mod reveal_in_explorer;
 mod shell_profiles;

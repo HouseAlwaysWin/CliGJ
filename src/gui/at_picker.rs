@@ -119,6 +119,7 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
     ui.set_ws_prompt(SharedString::from(new_p.as_str()));
     if !s.tabs[s.current].prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
         s.tabs[s.current].prompt_picked_files_abs.push(abs_path);
+        s.tabs[s.current].prompt_picked_file_origins.push(None);
     }
     let chips: Vec<SharedString> = s.tabs[s.current]
         .prompt_picked_files_abs

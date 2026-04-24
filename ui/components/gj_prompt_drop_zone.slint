@@ -33,6 +33,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     /// Ctrl + 滑鼠左鍵：在檔案總管顯示該路徑（依 chip 索引對應 Rust 端的絕對路徑）。
+    callback prompt-path-chip-open-editor-requested(int);
     callback prompt-path-chip-open-explorer-requested(int);
     callback prompt-image-open-explorer-requested(int);
     callback interactive-command-selected(string);
@@ -107,37 +108,65 @@ export component GjPromptDropZone inherits Rectangle {
 
                             HorizontalLayout {
                                 padding-left: 8px;
-                                padding-right: 8px;
+                                padding-right: 4px;
                                 spacing: 8px;
 
-                                Text {
-                                    text: "file";
-                                    color: #b5bcc8;
-                                    vertical-alignment: center;
-                                    font-size: 11px;
-                                }
-                                Text {
-                                    text: chip;
-                                    color: AppTheme.prompt_submit_bg;
-                                    vertical-alignment: center;
-                                    font-size: 12px;
-                                    font-weight: 600;
-                                }
-                                Text {
-                                    text: "x";
-                                    color: #ff8ca8;
-                                    vertical-alignment: center;
-                                    font-size: 11px;
-                                }
-                            }
+                                Rectangle {
+                                    horizontal-stretch: 1;
+                                    height: parent.height;
+                                    background: #00000000;
 
-                            chip_ta := TouchArea {
-                                pointer-event(e) => {
-                                    if (e.kind == PointerEventKind.up
-                                        && e.button == PointerEventButton.left) {
-                                        if (e.modifiers.control) {
-                                            root.prompt-path-chip-open-explorer-requested(idx);
-                                        } else {
+                                    HorizontalLayout {
+                                        spacing: 8px;
+
+                                        Text {
+                                            text: "file";
+                                            color: #b5bcc8;
+                                            vertical-alignment: center;
+                                            font-size: 11px;
+                                        }
+                                        Text {
+                                            text: chip;
+                                            color: AppTheme.prompt_submit_bg;
+                                            vertical-alignment: center;
+                                            font-size: 12px;
+                                            font-weight: 600;
+                                        }
+                                    }
+
+                                    chip_ta := TouchArea {
+                                        pointer-event(e) => {
+                                            if (e.kind == PointerEventKind.up
+                                                && e.button == PointerEventButton.left) {
+                                                if (e.modifiers.control) {
+                                                    root.prompt-path-chip-open-explorer-requested(idx);
+                                                } else {
+                                                    root.prompt-path-chip-open-editor-requested(idx);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Rectangle {
+                                    width: 18px;
+                                    height: parent.height;
+                                    background: #00000000;
+
+                                    Text {
+                                        text: "x";
+                                        color: #ff8ca8;
+                                        vertical-alignment: center;
+                                        horizontal-alignment: center;
+                                        font-size: 11px;
+                                        width: 100%;
+                                        height: 100%;
+                                    }
+
+                                    TouchArea {
+                                        width: parent.width;
+                                        height: parent.height;
+                                        clicked => {
                                             root.prompt-chip-remove-requested(idx);
                                         }
                                     }
@@ -147,7 +176,7 @@ export component GjPromptDropZone inherits Rectangle {
                             if chip_ta.has-hover: Rectangle {
                                 y: -22px;
                                 x: 0px;
-                                width: 140px;
+                                width: 214px;
                                 height: 18px;
                                 border-radius: 4px;
                                 background: #20232b;

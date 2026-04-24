@@ -76,6 +76,12 @@ pub(crate) struct PromptImageAttach {
     pub preview: Image,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct PromptFileOrigin {
+    pub client_id: String,
+    pub uri_scheme: String,
+}
+
 pub(crate) fn default_cmd_type() -> &'static str {
     if cfg!(target_os = "windows") {
         "Command Prompt"
@@ -111,6 +117,8 @@ pub struct TabState {
     pub(crate) history_draft: String,
     /// Absolute paths selected from `@` picker; shown as chips, appended on submit.
     pub(crate) prompt_picked_files_abs: Vec<String>,
+    /// Per-file origin metadata for jump-back to the editor instance that attached the file.
+    pub(crate) prompt_picked_file_origins: Vec<Option<PromptFileOrigin>>,
     /// Hidden payload blocks from IPC tokens like `[[sel1]]`, expanded on submit.
     pub(crate) prompt_picked_selections: Vec<String>,
     /// VT-colored screen lines (ConPTY + wezterm-term); empty => plain `TextEdit` fallback.
@@ -275,6 +283,7 @@ impl TabState {
             history_cursor: None,
             history_draft: String::new(),
             prompt_picked_files_abs: Vec::new(),
+            prompt_picked_file_origins: Vec::new(),
             prompt_picked_selections: Vec::new(),
             terminal_lines: Vec::new(),
             interactive_history_lines: Vec::new(),

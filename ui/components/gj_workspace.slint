@@ -46,6 +46,7 @@ export component GjWorkspace inherits Rectangle {
     callback at-picker-choose(int);
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
+    callback prompt-path-chip-open-editor-requested(int);
     callback prompt-path-chip-open-explorer-requested(int);
     callback prompt-image-open-explorer-requested(int);
     callback terminal-selection-committed(int, int, int, int);
@@ -178,6 +179,9 @@ export component GjWorkspace inherits Rectangle {
             }
             prompt-chip-clear-requested => {
                 root.prompt-chip-clear-requested();
+            }
+            prompt-path-chip-open-editor-requested(idx) => {
+                root.prompt-path-chip-open-editor-requested(idx);
             }
             prompt-path-chip-open-explorer-requested(idx) => {
                 root.prompt-path-chip-open-explorer-requested(idx);

@@ -31,8 +31,17 @@ pub(crate) enum IpcGuiCommand {
         submit: bool,
         selection_payloads: Vec<String>,
         file_path_payloads: Vec<String>,
+        file_origin_payloads: Vec<Option<IpcFileOriginPayload>>,
         response_tx: mpsc::Sender<IpcGuiResponse>,
     },
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub(crate) struct IpcFileOriginPayload {
+    #[serde(default, alias = "clientId")]
+    pub(crate) client_id: String,
+    #[serde(default, alias = "uriScheme")]
+    pub(crate) uri_scheme: String,
 }
 
 #[derive(Debug)]
@@ -74,6 +83,12 @@ pub(crate) enum IpcServerEvent {
         tab_id: u64,
         text: String,
         replace: bool,
+    },
+    OpenEditorLocation {
+        client_id: String,
+        path: String,
+        start_line: Option<usize>,
+        end_line: Option<usize>,
     },
 }
 
@@ -216,6 +231,24 @@ impl IpcBridge {
             tab_id,
             text: out,
             replace,
+        });
+    }
+
+    pub(crate) fn publish_open_editor_location(
+        &self,
+        client_id: String,
+        path: String,
+        start_line: Option<usize>,
+        end_line: Option<usize>,
+    ) {
+        if client_id.trim().is_empty() || path.trim().is_empty() {
+            return;
+        }
+        let _ = self.send_event(IpcServerEvent::OpenEditorLocation {
+            client_id,
+            path,
+            start_line,
+            end_line,
         });
     }
 
@@ -461,6 +494,13 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
             result: json!({ "pong": true }),
             error: None,
         },
+        "subscribe" => IpcResponse {
+            r#type: "response",
+            id: req.id,
+            ok: true,
+            result: json!({ "subscribed": true }),
+            error: None,
+        },
         "openTab" => {
             let profile = req
                 .params
@@ -525,6 +565,22 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                         .collect::<Vec<String>>()
                 })
                 .unwrap_or_default();
+            let file_origin_payloads = req
+                .params
+                .get("fileOriginPayloads")
+                .and_then(Value::as_array)
+                .map(|arr| {
+                    arr.iter()
+                        .map(|value| {
+                            if value.is_null() {
+                                None
+                            } else {
+                                serde_json::from_value::<IpcFileOriginPayload>(value.clone()).ok()
+                            }
+                        })
+                        .collect::<Vec<Option<IpcFileOriginPayload>>>()
+                })
+                .unwrap_or_default();
             let (tx, rx) = mpsc::channel();
             let send = gui_tx.send(IpcGuiCommand::SendPrompt {
                 id: req.id.clone(),
@@ -533,6 +589,7 @@ fn handle_request(raw: &str, gui_tx: &mpsc::Sender<IpcGuiCommand>) -> IpcRespons
                 submit,
                 selection_payloads,
                 file_path_payloads,
+                file_origin_payloads,
                 response_tx: tx,
             });
             if send.is_err() {
@@ -614,6 +671,22 @@ fn event_to_json_line(event: IpcServerEvent) -> String {
                 "tabId": tab_id,
                 "text": text,
                 "replace": replace
+            }
+        })
+        .to_string(),
+        IpcServerEvent::OpenEditorLocation {
+            client_id,
+            path,
+            start_line,
+            end_line,
+        } => json!({
+            "type": "event",
+            "event": "openEditorLocation",
+            "data": {
+                "clientId": client_id,
+                "path": path,
+                "startLine": start_line,
+                "endLine": end_line,
             }
         })
         .to_string(),

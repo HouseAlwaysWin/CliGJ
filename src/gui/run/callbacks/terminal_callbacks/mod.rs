@@ -10,8 +10,8 @@ use crate::gui::ipc::IpcBridge;
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 
-pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
-    chips_selection_callbacks::connect_chips(app, state);
+pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
+    chips_selection_callbacks::connect_chips(app, state, ipc);
 }
 
 pub(super) fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
