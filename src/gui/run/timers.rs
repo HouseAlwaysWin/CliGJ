@@ -20,7 +20,7 @@ use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode, TERMINA
 use crate::gui::ui_sync::{
     push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
-use crate::terminal::pty_event::RawPtyEvent;
+use crate::terminal::types::RawPtyEvent;
 use crate::terminal::render::ColoredLine;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
@@ -1313,7 +1313,7 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
         let raw = ui.get_ws_raw_input();
         let key = (s.current, prompt_now, raw);
         
-        if s.timer_prompt_snapshot.as_ref() == Some(&key) {
+        if s.timer_snapshot.as_ref() == Some(&key) {
             return;
         }
 
@@ -1339,7 +1339,7 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
         sync_at_file_picker(&ui, &mut s);
         
         if s.current < s.tabs.len() {
-            s.timer_prompt_snapshot = Some(key);
+            s.timer_snapshot = Some(key);
         }
     });
     timer

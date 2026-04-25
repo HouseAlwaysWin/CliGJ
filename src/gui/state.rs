@@ -7,16 +7,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use slint::{Image, SharedString, VecModel};
 
-use crate::terminal::pty_event::{RawPtyEvent, RawPtyMode};
+use crate::terminal::types::{RawPtyEvent, RawPtyMode, ReaderRenderMode, ControlCommand};
 use crate::terminal::replay::replay_raw_pty_events;
 use crate::terminal::render::ColoredLine;
 use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
-
-#[cfg(target_os = "windows")]
-use crate::terminal::windows_conpty;
-#[cfg(target_os = "windows")]
-use crate::terminal::windows_conpty::ReaderRenderMode;
 
 pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -186,10 +181,9 @@ pub struct TabState {
     pub(crate) last_pty_cols: u16,
     pub(crate) last_pty_rows: u16,
 
-    #[cfg(target_os = "windows")]
-    pub(crate) conpty: Option<windows_conpty::ConptySession>,
-    #[cfg(target_os = "windows")]
-    pub(crate) conpty_control_tx: Option<mpsc::Sender<windows_conpty::ControlCommand>>,
+    pub(crate) pty_process: Option<Box<dyn crate::terminal::pty::PtyProcess>>,
+    pub(crate) pty_writer: Option<Box<dyn crate::terminal::pty::PtyWriter>>,
+    pub(crate) pty_control_tx: Option<mpsc::Sender<ControlCommand>>,
 }
 
 /// Hard cap on VT rows kept client-side; oldest lines are discarded first (see `enforce_scrollback_cap`).
@@ -319,26 +313,26 @@ impl TabState {
             raw_pty_event_bytes: 0,
             last_pty_cols: 120,
             last_pty_rows: 40,
-            #[cfg(target_os = "windows")]
-            conpty: None,
-            #[cfg(target_os = "windows")]
-            conpty_control_tx: None,
+            pty_process: None,
+            pty_writer: None,
+            pty_control_tx: None,
         };
 
         #[cfg(target_os = "windows")]
         {
+            use crate::terminal::windows_conpty;
+            use crate::terminal::session;
+
             if me.cmd_type == "Command Prompt" || me.cmd_type == "PowerShell" {
-                if let Ok(spawn) = windows_conpty::spawn_conpty(
+                if let Ok(pty) = windows_conpty::spawn_conpty(
                     &me.cmd_type,
                     120,
                     40,
                     startup_cwd.as_ref().map(|p| p.as_path()),
                 ) {
                     let tab_id = me.id;
-                    let (control_tx, control_rx) = mpsc::channel();
-                    windows_conpty::start_reader_thread(
-                        spawn.reader,
-                        control_rx,
+                    let (handle, control_tx, process, writer) = session::start_terminal_session(
+                        pty,
                         ReaderRenderMode::Shell,
                         move |render| {
                         let _ = tx.send(TerminalChunk {
@@ -361,8 +355,10 @@ impl TabState {
                             reset_terminal_buffer: render.reset_terminal_buffer,
                         });
                     });
-                    me.conpty = Some(spawn.session);
-                    me.conpty_control_tx = Some(control_tx);
+                    let _ = handle; 
+                    me.pty_process = Some(process);
+                    me.pty_writer = Some(writer);
+                    me.pty_control_tx = Some(control_tx);
                 }
             }
         }
@@ -370,7 +366,6 @@ impl TabState {
         me
     }
 
-    /// Drop oldest lines when the buffer exceeds `TERMINAL_SCROLLBACK_CAP`.
     pub fn enforce_scrollback_cap(&mut self) {
         if self.terminal_lines.len() <= TERMINAL_SCROLLBACK_CAP {
             return;
@@ -666,7 +661,7 @@ pub struct GuiState {
     pub(crate) at_picker_query_snapshot: String,
     pub(crate) at_picker_open_snapshot: bool,
     /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
-    pub(crate) timer_prompt_snapshot: Option<(usize, String, bool)>,
+    pub(crate) timer_snapshot: Option<(usize, String, bool)>,
     /// From config `[[ui.interactive_commands]]`.
     pub(crate) interactive_commands: Vec<InteractiveCommandSpec>,
     /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`: name, command, optional workspace root.

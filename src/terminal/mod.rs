@@ -1,5 +1,7 @@
+pub mod types;
+pub mod pty;
+pub mod session;
 pub mod key_encoding;
-pub mod pty_event;
 pub mod prompt_key;
 pub mod replay;
 pub mod render;

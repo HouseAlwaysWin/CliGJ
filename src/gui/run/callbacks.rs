@@ -113,7 +113,7 @@ fn connect_tabs(
         };
         let switch_ok = {
             let mut s = st_tab.borrow_mut();
-            s.timer_prompt_snapshot = None;
+            s.timer_snapshot = None;
             if let Err(e) = s.switch_tab(new_index as usize, &ui) {
                 eprintln!("CliGJ: tab switch: {e}");
                 false

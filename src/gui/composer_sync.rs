@@ -44,7 +44,7 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
         
         // Only mirror prompt — avoid `tab_update_from_ui` here (it syncs full tab state every tick).
         tab.prompt = ui.get_ws_prompt();
-        let Some(session) = tab.conpty.as_mut() else {
+        let Some(writer) = tab.pty_writer.as_mut() else {
             return;
         };
 
@@ -55,8 +55,8 @@ pub(crate) fn sync_composer_line_to_conpty(ui: &AppWindow, s: &mut GuiState) {
         if bytes.is_empty() {
             return;
         }
-        let _ = session.writer.write_all(&bytes);
-        let _ = session.writer.flush();
+        let _ = writer.write_all(&bytes);
+        let _ = writer.flush();
         tab.composer_pty_mirror = cur;
     }
 }

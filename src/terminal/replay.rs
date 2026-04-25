@@ -6,7 +6,7 @@ use wezterm_term::config::TerminalConfiguration;
 use wezterm_term::color::ColorPalette;
 use wezterm_term::{Line, Terminal, TerminalSize};
 
-use crate::terminal::pty_event::{RawPtyEvent, RawPtyMode};
+use crate::terminal::types::{RawPtyEvent, RawPtyMode};
 
 #[derive(Debug)]
 struct ReplayTermConfig;

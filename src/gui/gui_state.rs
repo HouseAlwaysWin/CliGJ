@@ -3,10 +3,7 @@ use std::time::Duration;
 
 use slint::{Model, SharedString};
 
-#[cfg(target_os = "windows")]
-use crate::terminal::windows_conpty;
-#[cfg(target_os = "windows")]
-use crate::terminal::windows_conpty::ReaderRenderMode;
+use crate::terminal::types::{ReaderRenderMode, ControlCommand};
 
 use super::composer_sync::diff_composer_to_conpty;
 use super::interactive_commands::{normalized_program_name, spec_for_program};
@@ -64,14 +61,11 @@ impl GuiState {
         let startup_cmd = resolve_shell_command_line(cmd_type.as_str(), self);
         let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
 
-        #[cfg(target_os = "windows")]
-        {
-            self.tabs[self.current].conpty = None;
-            self.tabs[self.current].conpty_control_tx = None;
-        }
-
         {
             let tab = &mut self.tabs[self.current];
+            tab.pty_process = None;
+            tab.pty_writer = None;
+            tab.pty_control_tx = None;
             // Force next bump_terminal_size → Resize to reach the new PTY (was matching old 120×40).
             tab.last_pty_cols = 0;
             tab.last_pty_rows = 0;
@@ -92,8 +86,9 @@ impl GuiState {
         #[cfg(target_os = "windows")]
         {
             use std::rc::Rc;
-
             use slint::ModelRc;
+            use crate::terminal::windows_conpty;
+            use crate::terminal::session;
 
             if let Some(startup_cmd) = startup_cmd {
                 match windows_conpty::spawn_conpty_command_line(
@@ -102,13 +97,12 @@ impl GuiState {
                     40,
                     startup_cwd.as_deref(),
                 ) {
-                    Ok(spawn) => {
+                    Ok(pty) => {
                         let tab_id = self.tabs[self.current].id;
                         let tx = self.tx.clone();
-                        let (control_tx, control_rx) = std::sync::mpsc::channel();
-                        windows_conpty::start_reader_thread(
-                            spawn.reader,
-                            control_rx,
+                        
+                        let (handle, control_tx, process, writer) = session::start_terminal_session(
+                            pty,
                             ReaderRenderMode::InteractiveAi,
                             move |render| {
                                 let _ = tx.send(TerminalChunk {
@@ -132,9 +126,11 @@ impl GuiState {
                                 });
                             },
                         );
+                        let _ = handle; // Session background thread
                         let tab = &mut self.tabs[self.current];
-                        tab.conpty = Some(spawn.session);
-                        tab.conpty_control_tx = Some(control_tx);
+                        tab.pty_process = Some(process);
+                        tab.pty_writer = Some(writer);
+                        tab.pty_control_tx = Some(control_tx);
                     }
                     Err(e) => eprintln!("CliGJ: spawn_conpty (interactive): {e}"),
                 }
@@ -154,7 +150,6 @@ impl GuiState {
         #[cfg(not(target_os = "windows"))]
         {
             use std::rc::Rc;
-
             use slint::ModelRc;
 
             let tab = &mut self.tabs[self.current];
@@ -193,9 +188,9 @@ impl GuiState {
                 if !prev.is_empty() {
                     let bytes = diff_composer_to_conpty(prev.as_str(), "");
                     if !bytes.is_empty() {
-                        if let Some(session) = tab.conpty.as_mut() {
-                            let _ = session.writer.write_all(&bytes);
-                            let _ = session.writer.flush();
+                        if let Some(writer) = tab.pty_writer.as_mut() {
+                            let _ = writer.write_all(&bytes);
+                            let _ = writer.flush();
                         }
                     }
                 }
@@ -268,33 +263,41 @@ impl GuiState {
             return Err("invalid current tab index");
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
-        self.tabs[self.current].cmd_type = new_cmd_type.to_string();
-        self.tabs[self.current].terminal_mode = TerminalMode::Shell;
-        self.tabs[self.current].terminal_pinned_footer_lines = 0;
-        self.tabs[self.current].interactive_launcher_program.clear();
+        
+        let startup_cmd = resolve_shell_command_line(new_cmd_type, self);
+        let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
+
+        let tab = &mut self.tabs[self.current];
+        tab.cmd_type = new_cmd_type.to_string();
+        tab.terminal_mode = TerminalMode::Shell;
+        tab.terminal_pinned_footer_lines = 0;
+        tab.interactive_launcher_program.clear();
 
         #[cfg(target_os = "windows")]
         {
-            self.tabs[self.current].conpty = None;
-            self.tabs[self.current].conpty_control_tx = None;
-            self.tabs[self.current].terminal_text.clear();
-            self.tabs[self.current].interactive_frame_lines.clear();
-            self.tabs[self.current].auto_scroll = false;
-            self.tabs[self.current].composer_pty_mirror.clear();
-            let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
-            if let Some(startup_cmd) = resolve_shell_command_line(new_cmd_type, self) {
-                if let Ok(spawn) = windows_conpty::spawn_conpty_command_line(
+            use crate::terminal::windows_conpty;
+            use crate::terminal::session;
+
+            tab.pty_process = None;
+            tab.pty_writer = None;
+            tab.pty_control_tx = None;
+            tab.terminal_text.clear();
+            tab.interactive_frame_lines.clear();
+            tab.auto_scroll = false;
+            tab.composer_pty_mirror.clear();
+            
+            if let Some(startup_cmd) = startup_cmd {
+                if let Ok(pty) = windows_conpty::spawn_conpty_command_line(
                     startup_cmd.as_str(),
                     120,
                     40,
                     startup_cwd.as_deref(),
                 ) {
-                    let tab_id = self.tabs[self.current].id;
+                    let tab_id = tab.id;
                     let tx = self.tx.clone();
-                    let (control_tx, control_rx) = std::sync::mpsc::channel();
-                    windows_conpty::start_reader_thread(
-                        spawn.reader,
-                        control_rx,
+                    
+                    let (handle, control_tx, process, writer) = session::start_terminal_session(
+                        pty,
                         ReaderRenderMode::Shell,
                         move |render| {
                         let _ = tx.send(TerminalChunk {
@@ -317,8 +320,11 @@ impl GuiState {
                             reset_terminal_buffer: render.reset_terminal_buffer,
                         });
                     });
-                    self.tabs[self.current].conpty = Some(spawn.session);
-                    self.tabs[self.current].conpty_control_tx = Some(control_tx);
+                    let _ = handle;
+                    let tab = &mut self.tabs[self.current];
+                    tab.pty_process = Some(process);
+                    tab.pty_writer = Some(writer);
+                    tab.pty_control_tx = Some(control_tx);
                 }
             }
         }
@@ -415,19 +421,19 @@ impl GuiState {
             tab.history_cursor = None;
             tab.history_draft.clear();
 
-            if let Some(session) = tab.conpty.as_mut() {
+            if let Some(writer) = tab.pty_writer.as_mut() {
                 use std::io::Write;
                 if expanded_prompt != tab.prompt.as_str() {
                     let bytes = diff_composer_to_conpty(tab.prompt.as_str(), expanded_prompt.as_str());
                     if !bytes.is_empty() {
-                        let _ = session.writer.write_all(&bytes);
-                        let _ = session.writer.flush();
+                        let _ = writer.write_all(&bytes);
+                        let _ = writer.flush();
                         tab.composer_pty_mirror = expanded_prompt.clone();
                     }
                 }
                 if !extra_payload.is_empty() {
-                    let _ = session.writer.write_all(extra_payload.as_bytes());
-                    let _ = session.writer.flush();
+                    let _ = writer.write_all(extra_payload.as_bytes());
+                    let _ = writer.flush();
                 }
                 // Some interactive CLIs on Windows (including Gemini CLI) debounce
                 // rapid input to detect paste. If Enter arrives in the same burst as
@@ -436,14 +442,14 @@ impl GuiState {
                 if !full_command.is_empty() {
                     std::thread::sleep(Duration::from_millis(40));
                 }
-                let _ = session.writer.write_all(b"\r");
-                let _ = session.writer.flush();
+                let _ = writer.write_all(b"\r");
+                let _ = writer.flush();
                 if is_interactive_ai_launch {
-                    if let Some(tx) = &tab.conpty_control_tx {
+                    if let Some(tx) = &tab.pty_control_tx {
                         // Switch the reader after the launch command is fully submitted so
                         // shell-side prompt redraw/paste echo doesn't get archived as repeated
                         // interactive frames.
-                        let _ = tx.send(windows_conpty::ControlCommand::SetRenderMode(
+                        let _ = tx.send(ControlCommand::SetRenderMode(
                             ReaderRenderMode::InteractiveAi,
                         ));
                     }
@@ -481,7 +487,7 @@ impl GuiState {
             tab.interactive_archive_repainted_frames = spec.archive_repainted_frames;
         }
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
-        self.timer_prompt_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
+        self.timer_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())
@@ -561,12 +567,11 @@ impl GuiState {
 
         #[cfg(target_os = "windows")]
         {
-            if let Some(session) = tab.conpty.as_mut() {
-                session
-                    .writer
+            if let Some(writer) = tab.pty_writer.as_mut() {
+                writer
                     .write_all(data)
                     .map_err(|e| e.to_string())?;
-                session.writer.flush().map_err(|e| e.to_string())?;
+                writer.flush().map_err(|e| e.to_string())?;
                 return Ok(());
             }
         }

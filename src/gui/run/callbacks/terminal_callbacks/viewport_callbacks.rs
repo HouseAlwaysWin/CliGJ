@@ -10,7 +10,7 @@ use crate::gui::ui_sync::{
     clamp_saved_scroll_top, push_terminal_view_to_ui, scrollable_terminal_line_count,
     terminal_scroll_top_for_tab, TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH,
 };
-use crate::terminal::windows_conpty;
+use crate::terminal::types::ControlCommand;
 
 const TERMINAL_RESIZE_DEBOUNCE_MS: u64 = 140;
 
@@ -58,15 +58,11 @@ pub(super) fn connect_terminal_resize(app: &AppWindow, state: Rc<RefCell<GuiStat
                 tab.last_pty_cols = cols as u16;
                 tab.last_pty_rows = rows as u16;
 
-                #[cfg(target_os = "windows")]
-                if let Some(conpty) = &tab.conpty {
-                    if let Some(tx) = &tab.conpty_control_tx {
-                        let _ = tx.send(windows_conpty::ControlCommand::Resize {
-                            cols: cols as u16,
-                            rows: rows as u16,
-                        });
-                    }
-                    let _ = conpty.resize(cols as i16, rows as i16);
+                if let Some(tx) = &tab.pty_control_tx {
+                    let _ = tx.send(ControlCommand::Resize {
+                        cols: cols as u16,
+                        rows: rows as u16,
+                    });
                 }
             },
         );
