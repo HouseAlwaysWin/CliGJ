@@ -83,6 +83,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-update-selected-version: "";
     in-out property <string> ws-update-status-text: "";
     in-out property <bool> ws-update-confirm-open: false;
+    in-out property <bool> ws-update-actions-busy: false;
     in-out property <bool> ws-about-open: false;
     in-out property <string> ws-about-version: "";
     in-out property <string> ws-about-author: "";
@@ -516,6 +517,7 @@ export component AppWindow inherits Window {
         selected-version <=> root.ws-update-selected-version;
         status-text <=> root.ws-update-status-text;
         confirm-open <=> root.ws-update-confirm-open;
+        actions-busy <=> root.ws-update-actions-busy;
         close-requested => {
             root.close-update-dialog();
         }

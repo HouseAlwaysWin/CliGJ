@@ -14,6 +14,8 @@ export component GjUpdateDialog inherits Rectangle {
     in-out property <string> selected-version: "";
     in-out property <string> status-text: "";
     in-out property <bool> confirm-open: false;
+    /// True while an update download / apply is in progress; blocks all dialog controls.
+    in-out property <bool> actions-busy: false;
 
     callback close-requested;
     callback refresh-requested;
@@ -80,9 +82,11 @@ export component GjUpdateDialog inherits Rectangle {
                     model: root.versions;
                     current-value <=> root.selected-version;
                     selected(ver) => {
-                        root.confirm-open = false;
-                        root.selected-version = ver;
-                        root.version-selected(ver);
+                        if !root.actions-busy {
+                            root.confirm-open = false;
+                            root.selected-version = ver;
+                            root.version-selected(ver);
+                        }
                     }
                 }
             }
@@ -108,9 +112,12 @@ export component GjUpdateDialog inherits Rectangle {
                     button-height: 30px;
                     pill-corner-radius: 15px;
                     preset: "close";
+                    interactive: !root.actions-busy;
                     clicked => {
-                        root.refresh-requested();
-                        root.confirm-open = false;
+                        if !root.actions-busy {
+                            root.refresh-requested();
+                            root.confirm-open = false;
+                        }
                     }
                 }
 
@@ -126,13 +133,17 @@ export component GjUpdateDialog inherits Rectangle {
                     custom-background-hover-color: #35548a;
                     custom-text-color: #ffffff;
                     custom-text-hover-color: #ffffff;
+                    interactive: !root.actions-busy;
                     clicked => {
-                        if !root.confirm-open {
-                            root.confirm-open = true;
-                            root.status-text = @tr("再次按下「確認切換」開始更新，或按「關閉」取消。");
-                        } else {
-                            root.confirm-open = false;
-                            root.apply-version-requested(root.selected-version);
+                        if !root.actions-busy {
+                            if !root.confirm-open {
+                                root.confirm-open = true;
+                                root.status-text = @tr("再次按下「確認切換」開始更新，或按「關閉」取消。");
+                            } else {
+                                root.actions-busy = true;
+                                root.confirm-open = false;
+                                root.apply-version-requested(root.selected-version);
+                            }
                         }
                     }
                 }
@@ -143,11 +154,29 @@ export component GjUpdateDialog inherits Rectangle {
                     button-height: 30px;
                     pill-corner-radius: 15px;
                     preset: "close";
+                    interactive: !root.actions-busy;
                     clicked => {
-                        root.confirm-open = false;
-                        root.close-requested();
+                        if !root.actions-busy {
+                            root.confirm-open = false;
+                            root.close-requested();
+                        }
                     }
                 }
+            }
+        }
+
+        if root.actions-busy: Rectangle {
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            z: 100;
+            background: #00000000;
+
+            TouchArea {
+                width: 100%;
+                height: 100%;
+                clicked => {}
             }
         }
     }

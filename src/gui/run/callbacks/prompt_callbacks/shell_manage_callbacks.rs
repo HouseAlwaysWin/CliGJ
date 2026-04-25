@@ -406,6 +406,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             .and_then(|cfg| cfg.get_value("ui.preferred_app_version").ok().flatten());
         ui.set_ws_update_current_version(SharedString::from(APP_VERSION));
         ui.set_ws_update_confirm_open(false);
+        ui.set_ws_update_actions_busy(false);
         ui.set_ws_update_open(true);
         refresh_available_versions(app_weak.clone(), preferred);
     });
@@ -438,6 +439,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         let selected = ver.trim().to_string();
         if selected.is_empty() {
+            ui.set_ws_update_actions_busy(false);
             ui.set_ws_update_status_text(SharedString::from("Please select a version first"));
             return;
         }
@@ -452,12 +454,14 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         match AppConfig::load_or_default() {
             Ok(mut cfg) => {
                 if let Err(e) = cfg.set_value("ui.preferred_app_version", selected.clone()) {
+                    ui.set_ws_update_actions_busy(false);
                     ui.set_ws_update_status_text(SharedString::from(
                         format!("Save target version failed: {e}").as_str(),
                     ));
                     return;
                 }
                 if let Err(e) = cfg.save() {
+                    ui.set_ws_update_actions_busy(false);
                     ui.set_ws_update_status_text(SharedString::from(
                         format!("Save config failed: {e}").as_str(),
                     ));
@@ -465,6 +469,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 }
             }
             Err(e) => {
+                ui.set_ws_update_actions_busy(false);
                 ui.set_ws_update_status_text(SharedString::from(
                     format!("Load config failed: {e}").as_str(),
                 ));
@@ -523,6 +528,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         schedule_app_quit(app_weak_for_quit.clone());
                     }
                     Err(e) => {
+                        ui.set_ws_update_actions_busy(false);
                         ui.set_ws_update_status_text(SharedString::from(
                             format!("Update failed: {e}").as_str(),
                         ));
@@ -532,6 +538,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             #[cfg(not(target_os = "windows"))]
             {
                 let _ = app_weak_download.upgrade_in_event_loop(|ui| {
+                    ui.set_ws_update_actions_busy(false);
                     ui.set_ws_update_status_text(SharedString::from(
                         "Auto update is currently implemented for Windows builds only.",
                     ));
@@ -553,6 +560,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             return;
         };
         ui.set_ws_update_confirm_open(false);
+        ui.set_ws_update_actions_busy(false);
         ui.set_ws_update_open(false);
     });
 
