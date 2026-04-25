@@ -16,6 +16,8 @@ export component GjUpdateDialog inherits Rectangle {
     in-out property <bool> confirm-open: false;
     /// True while an update download / apply is in progress; blocks all dialog controls.
     in-out property <bool> actions-busy: false;
+    /// Basic UI guard: exact-match version should not allow switching.
+    in property <bool> can-switch-version: selected-version != "" && selected-version != current-version;
 
     callback close-requested;
     callback refresh-requested;
@@ -133,9 +135,9 @@ export component GjUpdateDialog inherits Rectangle {
                     custom-background-hover-color: #35548a;
                     custom-text-color: #ffffff;
                     custom-text-hover-color: #ffffff;
-                    interactive: !root.actions-busy;
+                    interactive: !root.actions-busy && root.can-switch-version;
                     clicked => {
-                        if !root.actions-busy {
+                        if !root.actions-busy && root.can-switch-version {
                             if !root.confirm-open {
                                 root.confirm-open = true;
                                 root.status-text = @tr("再次按下「確認切換」開始更新，或按「關閉」取消。");

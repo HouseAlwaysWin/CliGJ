@@ -87,7 +87,6 @@ fn open_url_in_browser(url: &str) -> Result<(), String> {
     }
 }
 
-#[cfg(target_os = "windows")]
 fn normalize_version_tag(tag: &str) -> String {
     tag.trim().trim_start_matches('v').to_ascii_lowercase()
 }
@@ -464,9 +463,17 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         ui.set_ws_update_confirm_open(false);
         ui.set_ws_update_selected_version(ver.clone());
-        ui.set_ws_update_status_text(SharedString::from(
-            format!("Selected target version: {}", ver.as_str()).as_str(),
-        ));
+        let selected_norm = normalize_version_tag(ver.as_str());
+        let current_norm = normalize_version_tag(APP_VERSION);
+        if selected_norm == current_norm {
+            ui.set_ws_update_status_text(SharedString::from(
+                "Selected version is already the current version.",
+            ));
+        } else {
+            ui.set_ws_update_status_text(SharedString::from(
+                format!("Selected target version: {}", ver.as_str()).as_str(),
+            ));
+        }
     });
 
     let app_weak = app.as_weak();
@@ -478,6 +485,14 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         if selected.is_empty() {
             ui.set_ws_update_actions_busy(false);
             ui.set_ws_update_status_text(SharedString::from("Please select a version first"));
+            return;
+        }
+        if normalize_version_tag(selected.as_str()) == normalize_version_tag(APP_VERSION) {
+            ui.set_ws_update_actions_busy(false);
+            ui.set_ws_update_confirm_open(false);
+            ui.set_ws_update_status_text(SharedString::from(
+                "Selected version is already the current version.",
+            ));
             return;
         }
         let rollback_path = std::env::current_exe()
