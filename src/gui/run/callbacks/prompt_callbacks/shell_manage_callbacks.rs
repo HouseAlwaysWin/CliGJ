@@ -145,8 +145,20 @@ fn set_update_versions_to_ui(ui: &AppWindow, versions: &[String], preferred: Opt
     let selected = preferred
         .map(str::trim)
         .filter(|s| !s.is_empty())
-        .filter(|s| versions.iter().any(|v| v == s))
-        .map(ToOwned::to_owned)
+        .and_then(|s| {
+            #[cfg(target_os = "windows")]
+            {
+                let wanted = normalize_version_tag(s);
+                versions
+                    .iter()
+                    .find(|v| normalize_version_tag(v.as_str()) == wanted)
+                    .cloned()
+            }
+            #[cfg(not(target_os = "windows"))]
+            {
+                versions.iter().find(|v| v.as_str() == s).cloned()
+            }
+        })
         .or_else(|| versions.first().cloned())
         .unwrap_or_else(|| APP_VERSION.to_string());
     ui.set_ws_update_selected_version(SharedString::from(selected.as_str()));
@@ -241,14 +253,14 @@ fn download_release_asset_to_temp(
 }
 
 #[cfg(target_os = "windows")]
-fn find_first_exe(dir: &Path) -> Option<PathBuf> {
-    let entries = fs::read_dir(dir).ok()?;
+fn collect_exes_recursive(dir: &Path, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
     for entry in entries.flatten() {
         let path = entry.path();
         if path.is_dir() {
-            if let Some(found) = find_first_exe(path.as_path()) {
-                return Some(found);
-            }
+            collect_exes_recursive(path.as_path(), out);
             continue;
         }
         if path
@@ -257,10 +269,35 @@ fn find_first_exe(dir: &Path) -> Option<PathBuf> {
             .map(|s| s.eq_ignore_ascii_case("exe"))
             .unwrap_or(false)
         {
-            return Some(path);
+            out.push(path);
         }
     }
-    None
+}
+
+#[cfg(target_os = "windows")]
+fn find_release_exe(dir: &Path) -> Option<PathBuf> {
+    let mut exes = Vec::<PathBuf>::new();
+    collect_exes_recursive(dir, &mut exes);
+    if exes.is_empty() {
+        return None;
+    }
+
+    // Prefer the main app binary; fallback to a deterministic first entry.
+    if let Some(main) = exes.iter().find(|p| {
+        p.file_name()
+            .and_then(|s| s.to_str())
+            .map(|name| name.eq_ignore_ascii_case("CliGJ.exe"))
+            .unwrap_or(false)
+    }) {
+        return Some(main.clone());
+    }
+
+    exes.sort_by(|a, b| {
+        a.to_string_lossy()
+            .to_ascii_lowercase()
+            .cmp(&b.to_string_lossy().to_ascii_lowercase())
+    });
+    exes.into_iter().next()
 }
 
 #[cfg(target_os = "windows")]
@@ -283,7 +320,7 @@ fn extract_release_zip_to_temp(zip_path: &Path, version: &str) -> Result<PathBuf
     if !status.success() {
         return Err(format!("extract zip returned status: {status}"));
     }
-    find_first_exe(output_dir.as_path())
+    find_release_exe(output_dir.as_path())
         .ok_or_else(|| format!("no .exe found after extracting {}", zip_path.display()))
 }
 
