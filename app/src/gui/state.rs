@@ -674,6 +674,8 @@ pub struct GuiState {
     pub(crate) startup_terminal_font_family: String,
     /// Startup page setting: CJK fallback font used when the main terminal font lacks glyphs.
     pub(crate) startup_terminal_cjk_fallback_font_family: String,
+    /// Last IPC "endpoint occupied" error that already triggered a popup.
+    pub(crate) ipc_last_occupied_error_notified: String,
 }
 
 #[derive(Debug)]

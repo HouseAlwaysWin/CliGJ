@@ -26,6 +26,19 @@ use cligj_terminal::render::ColoredLine;
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
 const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
+fn ipc_error_suggests_endpoint_occupied(err: &str) -> bool {
+    let lower = err.to_ascii_lowercase();
+    // Localized OS messages vary a lot; treat listener creation failure as "likely occupied"
+    // and keep specific phrases as additional signals.
+    lower.contains("create listener")
+        || lower.contains("address in use")
+        || lower.contains("already in use")
+        || lower.contains("already exists")
+        || lower.contains("resource busy")
+        || lower.contains("access is denied")
+        || lower.contains("denied")
+}
+
 fn line_has_visible_text(line: &ColoredLine) -> bool {
     line.spans
         .iter()
@@ -1233,6 +1246,25 @@ pub(crate) fn spawn_ipc_bridge_timer(
             "IPC OFF".to_string()
         };
         ui.set_ws_ipc_status_text(SharedString::from(status_text.as_str()));
+
+        if snap.running {
+            state.borrow_mut().ipc_last_occupied_error_notified.clear();
+        } else if !snap.last_error.trim().is_empty()
+            && ipc_error_suggests_endpoint_occupied(snap.last_error.as_str())
+        {
+            let mut s = state.borrow_mut();
+            if s.ipc_last_occupied_error_notified != snap.last_error {
+                s.ipc_last_occupied_error_notified = snap.last_error.clone();
+                drop(s);
+                let detail = format!(
+                    "偵測到 IPC 端點已被占用。\n\n可能原因：已開啟另一個 CliGJ 視窗。\n建議：關閉其他 CliGJ 實例後再重試。\n\n詳細資訊：{}",
+                    snap.last_error
+                );
+                ui.set_ws_ipc_warning_title(SharedString::from("CliGJ IPC 警告"));
+                ui.set_ws_ipc_warning_message(SharedString::from(detail.as_str()));
+                ui.set_ws_ipc_warning_open(true);
+            }
+        }
 
         let mut pending: Vec<IpcGuiCommand> = Vec::new();
         while let Ok(cmd) = ipc_rx.try_recv() {

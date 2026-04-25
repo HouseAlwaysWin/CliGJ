@@ -134,6 +134,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         startup_default_shell_profile: startup_profile.clone(),
         startup_terminal_font_family: terminal_font_family.clone(),
         startup_terminal_cjk_fallback_font_family: terminal_cjk_fallback_font_family.clone(),
+        ipc_last_occupied_error_notified: String::new(),
     }));
 
     app.set_tab_titles(ModelRc::from(Rc::clone(&titles)));

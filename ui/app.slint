@@ -88,6 +88,9 @@ export component AppWindow inherits Window {
     in-out property <string> ws-about-version: "";
     in-out property <string> ws-about-author: "";
     in-out property <string> ws-about-github-url: "";
+    in-out property <bool> ws-ipc-warning-open: false;
+    in-out property <string> ws-ipc-warning-title: "";
+    in-out property <string> ws-ipc-warning-message: "";
 
     /// `@` workspace file picker (composer only; hidden in Raw TTY).
     in-out property <bool> ws-at-picker-open: false;
@@ -563,6 +566,79 @@ export component AppWindow inherits Window {
     }
 
     if root.ws-file-drop-visible : GjFileDropOverlay {}
+
+    if root.ws-ipc-warning-open : Rectangle {
+        z: 2000;
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #88000000;
+
+        Rectangle {
+            width: 460px;
+            height: 220px;
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            border-radius: 10px;
+            background: AppTheme.panel;
+
+            VerticalLayout {
+                padding: 14px;
+                spacing: 10px;
+
+                Text {
+                    text: root.ws-ipc-warning-title;
+                    color: AppTheme.text;
+                    font-size: 16px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: root.ws-ipc-warning-message;
+                    color: AppTheme.text_muted;
+                    wrap: word-wrap;
+                    vertical-stretch: 1;
+                }
+
+                Rectangle {
+                    height: 36px;
+                    background: #00000000;
+                    HorizontalLayout {
+                        spacing: 0px;
+                        Rectangle { horizontal-stretch: 1; background: #00000000; }
+                        Rectangle {
+                            width: 92px;
+                            height: 32px;
+                            border-width: 1px;
+                            border-color: AppTheme.prompt_chrome_border;
+                            border-radius: 16px;
+                            background: ok_ta.has-hover ? #2d2d30 : #00000000;
+
+                            Text {
+                                text: @tr("確定");
+                                color: AppTheme.text;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                                width: 100%;
+                                height: 100%;
+                            }
+
+                            ok_ta := TouchArea {
+                                width: parent.width;
+                                height: parent.height;
+                                clicked => {
+                                    root.ws-ipc-warning-open = false;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 export component TerminalHistoryWindow inherits Window {
