@@ -8,8 +8,10 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "clap",
+ "cligj-core",
+ "cligj-terminal",
+ "cligj-workspace",
  "clipboard-win",
- "dirs",
  "encoding_rs",
  "ico",
  "image",
@@ -22,12 +24,9 @@ dependencies = [
  "slint-build",
  "sys-locale",
  "tokio",
- "toml 1.1.2+spec-1.1.0",
  "tray-icon",
  "unicode-width",
- "wezterm-term",
  "windows 0.62.2",
- "windows-sys 0.59.0",
  "winres",
 ]
 
@@ -1073,6 +1072,30 @@ name = "clap_lex"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c8d4a3bb8b1e0c1050499d1815f5ab16d04f0959b233085fb31653fbfc9d98f9"
+
+[[package]]
+name = "cligj-core"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "dirs",
+ "tokio",
+ "toml 1.1.2+spec-1.1.0",
+]
+
+[[package]]
+name = "cligj-terminal"
+version = "0.1.0"
+dependencies = [
+ "unicode-width",
+ "wezterm-term",
+ "windows 0.62.2",
+ "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "cligj-workspace"
+version = "0.1.0"
 
 [[package]]
 name = "clipboard-win"
