@@ -13,4 +13,3 @@ pub(super) fn connect_prompt_and_picker(app: &AppWindow, state: Rc<RefCell<GuiSt
     interactive_manage_callbacks::connect(app, Rc::clone(&state));
     shell_manage_callbacks::connect(app, Rc::clone(&state));
 }
-

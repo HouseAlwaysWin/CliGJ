@@ -1,5 +1,5 @@
-use std::fs::File;
 use std::fs;
+use std::fs::File;
 use std::path::{Path, PathBuf};
 
 fn main() {
@@ -65,7 +65,10 @@ fn embed_windows_exe_icon() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let png_path = manifest_dir.join("src/asset/logo3.png");
     if !png_path.is_file() {
-        eprintln!("CliGJ build: skip exe icon — missing {}", png_path.display());
+        eprintln!(
+            "CliGJ build: skip exe icon — missing {}",
+            png_path.display()
+        );
         return;
     }
 
@@ -91,16 +94,10 @@ fn png_to_ico(png_path: &Path, ico_path: &Path) -> Result<(), Box<dyn std::error
         let rgba = if (img.width(), img.height()) == (size, size) {
             img.clone()
         } else {
-            image::imageops::resize(
-                &img,
-                size,
-                size,
-                image::imageops::FilterType::Lanczos3,
-            )
+            image::imageops::resize(&img, size, size, image::imageops::FilterType::Lanczos3)
         };
         let raw = rgba.into_raw();
-        let icon_image =
-            ico::IconImage::from_rgba_data(size as u32, size as u32, raw);
+        let icon_image = ico::IconImage::from_rgba_data(size as u32, size as u32, raw);
         icon_dir.add_entry(ico::IconDirEntry::encode(&icon_image)?);
     }
 

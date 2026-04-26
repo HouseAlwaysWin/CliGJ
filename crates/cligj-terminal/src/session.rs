@@ -1,20 +1,19 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
-use std::io::{Write, Read};
+use std::io::{Read, Write};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, RecvTimeoutError, channel};
 use std::thread;
 use std::time::{Duration, Instant};
-use std::sync::mpsc::{channel, Receiver, RecvTimeoutError};
 
+use wezterm_term::color::ColorPalette;
 use wezterm_term::config::TerminalConfiguration;
 use wezterm_term::{Line, Terminal, TerminalSize};
-use wezterm_term::color::ColorPalette;
 
-use crate::types::{
-    ControlCommand, ReaderRenderMode, RawPtyEvent, TerminalRender,
-};
-use crate::render::{line_to_colored_spans, ColoredLine};
+use crate::ansi::bytes_include_clear_screen_sequence_for_rows;
 use crate::pty::{PtyPair, PtyProcess, PtyReader, PtyWriter};
+use crate::render::{ColoredLine, line_to_colored_spans};
+use crate::types::{ControlCommand, RawPtyEvent, ReaderRenderMode, TerminalRender};
 
 const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
 const CONPTY_RESIZE_SETTLE_MS: u64 = 120;
@@ -48,9 +47,15 @@ pub fn start_terminal_session(
 
     let process_for_loop = Arc::clone(&process_arc);
     let handle = thread::spawn(move || {
-        run_session_loop(reader, process_for_loop, control_rx, initial_render_mode, on_chunk);
+        run_session_loop(
+            reader,
+            process_for_loop,
+            control_rx,
+            initial_render_mode,
+            on_chunk,
+        );
     });
-    
+
     // We return a proxy for PtyProcess that uses the Arc.
     struct PtyProcessProxy(Arc<dyn PtyProcess>);
     impl PtyProcess for PtyProcessProxy {
@@ -59,7 +64,12 @@ pub fn start_terminal_session(
         }
     }
 
-    (handle, control_tx, Box::new(PtyProcessProxy(process_arc)), writer)
+    (
+        handle,
+        control_tx,
+        Box::new(PtyProcessProxy(process_arc)),
+        writer,
+    )
 }
 
 enum InternalEvent {
@@ -74,7 +84,6 @@ fn run_session_loop(
     initial_render_mode: ReaderRenderMode,
     mut on_chunk: impl FnMut(TerminalRender) + Send + 'static,
 ) {
-
     let (event_tx, event_rx) = channel::<InternalEvent>();
 
     // 1. Byte reading thread
@@ -85,7 +94,10 @@ fn run_session_loop(
             match reader.read(&mut buf) {
                 Ok(0) => break,
                 Ok(n) => {
-                    if event_tx_bytes.send(InternalEvent::Bytes(buf[..n].to_vec())).is_err() {
+                    if event_tx_bytes
+                        .send(InternalEvent::Bytes(buf[..n].to_vec()))
+                        .is_err()
+                    {
                         break;
                     }
                 }
@@ -126,17 +138,25 @@ fn run_session_loop(
     let mut render_mode = initial_render_mode;
     let mut last_alt_screen_active = false;
     let mut interactive_snapshot_floor = 0usize;
-    
+
     #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-    enum InteractiveFloorReset { ModeStart, Viewport }
-    let mut pending_interactive_floor_reset =
-        (initial_render_mode == ReaderRenderMode::InteractiveAi)
-            .then_some(InteractiveFloorReset::ModeStart);
+    enum InteractiveFloorReset {
+        ModeStart,
+        Viewport,
+    }
+    let mut pending_interactive_floor_reset = (initial_render_mode
+        == ReaderRenderMode::InteractiveAi)
+        .then_some(InteractiveFloorReset::ModeStart);
 
     let mut resize_settle_deadline: Option<Instant> = None;
     let mut pending_raw_pty_events = vec![
-        RawPtyEvent::RenderMode { mode: initial_render_mode.into() },
-        RawPtyEvent::Resize { cols: term_cols as u16, rows: term_rows as u16 },
+        RawPtyEvent::RenderMode {
+            mode: initial_render_mode.into(),
+        },
+        RawPtyEvent::Resize {
+            cols: term_cols as u16,
+            rows: term_rows as u16,
+        },
     ];
 
     loop {
@@ -162,12 +182,22 @@ fn run_session_loop(
         if let Some(event) = event {
             match event {
                 InternalEvent::Bytes(bytes) => {
+                    let clear_screen = render_mode == ReaderRenderMode::InteractiveAi
+                        && bytes_include_clear_screen_sequence_for_rows(&bytes, term_rows);
                     term.advance_bytes(&bytes);
                     pending_raw_pty_events.push(RawPtyEvent::Bytes(bytes));
+                    if clear_screen {
+                        line_cache.clear();
+                        last_snapshot_fp = None;
+                        pending_reset = true;
+                        if pending_interactive_floor_reset != Some(InteractiveFloorReset::ModeStart)
+                        {
+                            pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
+                        }
+                    }
                     if resize_settle_deadline.is_some() {
-                        resize_settle_deadline = Some(
-                            Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS),
-                        );
+                        resize_settle_deadline =
+                            Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
                     }
                 }
                 InternalEvent::Control(ControlCommand::Resize { cols, rows }) => {
@@ -190,21 +220,26 @@ fn run_session_loop(
                     if size_changed {
                         pending_reset = true;
                         if render_mode == ReaderRenderMode::InteractiveAi
-                            && pending_interactive_floor_reset != Some(InteractiveFloorReset::ModeStart)
+                            && pending_interactive_floor_reset
+                                != Some(InteractiveFloorReset::ModeStart)
                         {
                             pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
                         }
-                        resize_settle_deadline = Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
+                        resize_settle_deadline =
+                            Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
                     }
                 }
                 InternalEvent::Control(ControlCommand::SetRenderMode(new_mode)) => {
-                    pending_raw_pty_events.push(RawPtyEvent::RenderMode { mode: new_mode.into() });
+                    pending_raw_pty_events.push(RawPtyEvent::RenderMode {
+                        mode: new_mode.into(),
+                    });
                     if render_mode != new_mode {
                         render_mode = new_mode;
                         line_cache.clear();
                         last_snapshot_fp = None;
                         pending_reset = true;
-                        pending_interactive_floor_reset = (render_mode == ReaderRenderMode::InteractiveAi)
+                        pending_interactive_floor_reset = (render_mode
+                            == ReaderRenderMode::InteractiveAi)
                             .then_some(InteractiveFloorReset::ModeStart);
                     }
                 }
@@ -227,7 +262,10 @@ fn run_session_loop(
 
         let screen = term.screen();
         let total = screen.scrollback_rows();
-        let snapshot_cap = term_rows.saturating_mul(4).min(CONPTY_SNAPSHOT_MAX_LINES).max(term_rows);
+        let snapshot_cap = term_rows
+            .saturating_mul(4)
+            .min(CONPTY_SNAPSHOT_MAX_LINES)
+            .max(term_rows);
 
         if let Some(reset) = pending_interactive_floor_reset.take() {
             if render_mode == ReaderRenderMode::InteractiveAi {
@@ -259,10 +297,18 @@ fn run_session_loop(
         let line_refs: Vec<&Line> = lines.iter().collect();
         let cursor = term.cursor_pos();
         let cursor_phys_row = screen.phys_row(cursor.y);
-        let cursor_local_row = cursor_phys_row.checked_sub(start).filter(|row| *row < line_refs.len());
+        let cursor_local_row = cursor_phys_row
+            .checked_sub(start)
+            .filter(|row| *row < line_refs.len());
         let cursor_col = Some(cursor.x);
 
-        let fp = snapshot_content_fingerprint(total_for_render, &line_refs, &palette, cursor_local_row, cursor_col);
+        let fp = snapshot_content_fingerprint(
+            total_for_render,
+            &line_refs,
+            &palette,
+            cursor_local_row,
+            cursor_col,
+        );
         if last_snapshot_fp == Some(fp) && pending_raw_pty_events.is_empty() {
             continue;
         }
@@ -312,7 +358,11 @@ fn snapshot_content_fingerprint(
     cursor_local_row.hash(&mut h);
     cursor_col.hash(&mut h);
     for (i, line) in lines.iter().enumerate() {
-        let active_cursor_col = if cursor_local_row == Some(i) { cursor_col } else { None };
+        let active_cursor_col = if cursor_local_row == Some(i) {
+            cursor_col
+        } else {
+            None
+        };
         let built = line_to_colored_spans(line, palette, active_cursor_col);
         built.blank.hash(&mut h);
         built.spans.len().hash(&mut h);
@@ -359,7 +409,11 @@ fn terminal_render_from_lines_cached(
 
     for i in 0..num_lines {
         let global_idx = cache_base_idx + i;
-        let active_cursor_col = if cursor_local_row == Some(i) { cursor_col } else { None };
+        let active_cursor_col = if cursor_local_row == Some(i) {
+            cursor_col
+        } else {
+            None
+        };
         let built = line_to_colored_spans(lines[i], palette, None);
         let fp = colored_line_fingerprint(&built, active_cursor_col);
         if cache[global_idx].0 != fp {
@@ -368,7 +422,10 @@ fn terminal_render_from_lines_cached(
         }
     }
 
-    let changed_lines: Vec<ColoredLine> = changed_indices.iter().map(|&i| cache[cache_base_idx + i].1.clone()).collect();
+    let changed_lines: Vec<ColoredLine> = changed_indices
+        .iter()
+        .map(|&i| cache[cache_base_idx + i].1.clone())
+        .collect();
 
     TerminalRender {
         render_mode,
@@ -396,7 +453,10 @@ fn terminal_render_from_lines_full(
     cursor_local_row: Option<usize>,
     cursor_col: Option<usize>,
 ) -> TerminalRender {
-    let full_lines: Vec<ColoredLine> = lines.iter().map(|line| line_to_colored_spans(line, palette, None)).collect();
+    let full_lines: Vec<ColoredLine> = lines
+        .iter()
+        .map(|line| line_to_colored_spans(line, palette, None))
+        .collect();
     let render_window_len = full_lines.len();
 
     TerminalRender {

@@ -1,17 +1,17 @@
+use std::collections::{HashMap, HashSet};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::mpsc;
-use std::collections::{HashMap, HashSet};
-use std::io::Write;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use slint::{Image, SharedString, VecModel};
 
-use cligj_terminal::types::{RawPtyEvent, RawPtyMode, ReaderRenderMode, ControlCommand};
-use cligj_terminal::replay::replay_raw_pty_events;
-use cligj_terminal::render::ColoredLine;
 use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
+use cligj_terminal::render::ColoredLine;
+use cligj_terminal::replay::replay_raw_pty_events;
+use cligj_terminal::types::{ControlCommand, RawPtyEvent, RawPtyMode, ReaderRenderMode};
 
 pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -250,7 +250,9 @@ fn live_visible_plain_text(tab: &TabState) -> String {
         return colored_lines_plain_text(&tab.terminal_lines);
     }
     let first = tab.last_window_first.min(tab.terminal_lines.len());
-    let last = tab.last_window_last.min(tab.terminal_lines.len().saturating_sub(1));
+    let last = tab
+        .last_window_last
+        .min(tab.terminal_lines.len().saturating_sub(1));
     if first > last || first >= tab.terminal_lines.len() {
         return String::new();
     }
@@ -320,8 +322,8 @@ impl TabState {
 
         #[cfg(target_os = "windows")]
         {
-            use cligj_terminal::windows_conpty;
             use cligj_terminal::session;
+            use cligj_terminal::windows_conpty;
 
             if me.cmd_type == "Command Prompt" || me.cmd_type == "PowerShell" {
                 if let Ok(pty) = windows_conpty::spawn_conpty(
@@ -335,27 +337,28 @@ impl TabState {
                         pty,
                         ReaderRenderMode::Shell,
                         move |render| {
-                        let _ = tx.send(TerminalChunk {
-                            tab_id,
-                            terminal_mode: match render.render_mode {
-                                ReaderRenderMode::Shell => TerminalMode::Shell,
-                                ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
-                            },
-                            raw_pty_events: render.raw_pty_events,
-                            text: render.text,
-                            lines: render.lines,
-                            snapshot_len: render.snapshot_len,
-                            full_len: render.full_len,
-                            first_line_idx: render.first_line_idx,
-                            cursor_row: render.cursor_row,
-                            cursor_col: render.cursor_col,
-                            replace: true,
-                            set_auto_scroll: if render.filled { Some(true) } else { None },
-                            changed_indices: render.changed_indices,
-                            reset_terminal_buffer: render.reset_terminal_buffer,
-                        });
-                    });
-                    let _ = handle; 
+                            let _ = tx.send(TerminalChunk {
+                                tab_id,
+                                terminal_mode: match render.render_mode {
+                                    ReaderRenderMode::Shell => TerminalMode::Shell,
+                                    ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                                },
+                                raw_pty_events: render.raw_pty_events,
+                                text: render.text,
+                                lines: render.lines,
+                                snapshot_len: render.snapshot_len,
+                                full_len: render.full_len,
+                                first_line_idx: render.first_line_idx,
+                                cursor_row: render.cursor_row,
+                                cursor_col: render.cursor_col,
+                                replace: true,
+                                set_auto_scroll: if render.filled { Some(true) } else { None },
+                                changed_indices: render.changed_indices,
+                                reset_terminal_buffer: render.reset_terminal_buffer,
+                            });
+                        },
+                    );
+                    let _ = handle;
                     me.pty_process = Some(process);
                     me.pty_writer = Some(writer);
                     me.pty_control_tx = Some(control_tx);
@@ -383,13 +386,9 @@ impl TabState {
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
-        self.terminal_cursor_row = self.terminal_cursor_row.and_then(|c| {
-            if c >= excess {
-                Some(c - excess)
-            } else {
-                None
-            }
-        });
+        self.terminal_cursor_row = self
+            .terminal_cursor_row
+            .and_then(|c| if c >= excess { Some(c - excess) } else { None });
     }
 
     pub fn append_terminal(&mut self, chunk: &str) {
@@ -434,8 +433,7 @@ impl TabState {
                 break;
             }
             let removed = self.raw_pty_events.remove(0);
-            self.raw_pty_event_bytes =
-                self.raw_pty_event_bytes.saturating_sub(removed.byte_len());
+            self.raw_pty_event_bytes = self.raw_pty_event_bytes.saturating_sub(removed.byte_len());
         }
     }
 
@@ -499,8 +497,11 @@ impl TabState {
                     });
                     writeln!(index_file, "{line}")
                         .map_err(|e| format!("write index resize event: {e}"))?;
-                    writeln!(escaped_file, "\n--- event {idx}: resize cols={cols} rows={rows} ---")
-                        .map_err(|e| format!("write escaped resize event: {e}"))?;
+                    writeln!(
+                        escaped_file,
+                        "\n--- event {idx}: resize cols={cols} rows={rows} ---"
+                    )
+                    .map_err(|e| format!("write escaped resize event: {e}"))?;
                 }
                 RawPtyEvent::RenderMode { mode } => {
                     let mode = match mode {
@@ -514,8 +515,11 @@ impl TabState {
                     });
                     writeln!(index_file, "{line}")
                         .map_err(|e| format!("write index render mode event: {e}"))?;
-                    writeln!(escaped_file, "\n--- event {idx}: render_mode mode={mode} ---")
-                        .map_err(|e| format!("write escaped render mode event: {e}"))?;
+                    writeln!(
+                        escaped_file,
+                        "\n--- event {idx}: render_mode mode={mode} ---"
+                    )
+                    .map_err(|e| format!("write escaped render mode event: {e}"))?;
                 }
             }
         }
@@ -562,7 +566,10 @@ impl TabState {
         })
     }
 
-    pub fn dump_debug_replay(&self, dir: Option<PathBuf>) -> Result<RawPtyReplayDumpResult, String> {
+    pub fn dump_debug_replay(
+        &self,
+        dir: Option<PathBuf>,
+    ) -> Result<RawPtyReplayDumpResult, String> {
         let dir = dir.unwrap_or_else(|| {
             std::env::current_dir()
                 .unwrap_or_else(|_| PathBuf::from("."))
@@ -600,8 +607,11 @@ impl TabState {
             .map_err(|e| format!("write replay visible dump: {e}"))?;
         std::fs::write(&replay_tail_2x_path, replay.tail_2x_text.as_str())
             .map_err(|e| format!("write replay tail 2x dump: {e}"))?;
-        std::fs::write(&replay_active_viewport_path, replay.active_viewport_text.as_str())
-            .map_err(|e| format!("write replay active viewport dump: {e}"))?;
+        std::fs::write(
+            &replay_active_viewport_path,
+            replay.active_viewport_text.as_str(),
+        )
+        .map_err(|e| format!("write replay active viewport dump: {e}"))?;
         std::fs::write(&replay_full_path, replay.full_text.as_str())
             .map_err(|e| format!("write replay full dump: {e}"))?;
 

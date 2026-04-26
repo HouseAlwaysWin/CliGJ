@@ -29,9 +29,13 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         .unwrap_or("")
         .to_string();
     let qtrim = query.trim();
-    let mut hint_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut hint_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     let tab_for_hints = &s.tabs[s.current];
-    let file_hints = tab_for_hints.prompt_picked_files_abs.iter().map(|p| p.as_str());
+    let file_hints = tab_for_hints
+        .prompt_picked_files_abs
+        .iter()
+        .map(|p| p.as_str());
     let image_hints = tab_for_hints
         .prompt_picked_images
         .iter()
@@ -86,11 +90,7 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
     ui.set_ws_at_choices(ModelRc::new(VecModel::from(model)));
     ui.set_ws_at_picker_open(true);
     let sel = ui.get_ws_at_selected();
-    let clamped = if n <= 0 {
-        0
-    } else {
-        sel.max(0).min(n - 1)
-    };
+    let clamped = if n <= 0 { 0 } else { sel.max(0).min(n - 1) };
     ui.set_ws_at_selected(clamped);
     ui.invoke_ws_scroll_at_picker_into_view();
     let total_in_tree = s.workspace_file_cache.len();
@@ -115,9 +115,14 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
     };
     let prompt = ui.get_ws_prompt().to_string();
     let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
-    let (new_p, abs_path) = workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
+    let (new_p, abs_path) =
+        workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
     ui.set_ws_prompt(SharedString::from(new_p.as_str()));
-    if !s.tabs[s.current].prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
+    if !s.tabs[s.current]
+        .prompt_picked_files_abs
+        .iter()
+        .any(|p| p == &abs_path)
+    {
         s.tabs[s.current].prompt_picked_files_abs.push(abs_path);
         s.tabs[s.current].prompt_picked_file_origins.push(None);
     }

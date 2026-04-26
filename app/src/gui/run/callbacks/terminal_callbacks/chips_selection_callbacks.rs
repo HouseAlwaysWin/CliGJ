@@ -8,8 +8,8 @@ use crate::gui::ipc::IpcBridge;
 use crate::gui::open_in_vscode::open_path_in_editor;
 use crate::gui::reveal_in_explorer::reveal_path_in_file_manager;
 use crate::gui::run::helpers::{
-    clear_all_prompt_files, copy_to_clipboard, remove_prompt_file_at, selected_text_from_terminal_lines,
-    terminal_history_plain_text,
+    clear_all_prompt_files, copy_to_clipboard, remove_prompt_file_at,
+    selected_text_from_terminal_lines, terminal_history_plain_text,
 };
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, workspace_root_for_tab_with_profile};
@@ -90,7 +90,12 @@ pub(super) fn connect_chips(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: 
                 }
             }
             if !origin.uri_scheme.trim().is_empty() {
-                open_path_in_editor(origin.uri_scheme.as_str(), target.as_str(), start_line, end_line);
+                open_path_in_editor(
+                    origin.uri_scheme.as_str(),
+                    target.as_str(),
+                    start_line,
+                    end_line,
+                );
                 return;
             }
         }
@@ -263,7 +268,9 @@ fn extract_selection_attr(header: &str, key: &str) -> Option<String> {
 
 fn parse_selection_range(raw: &str) -> Option<(usize, usize)> {
     let trimmed = raw.trim();
-    let single = trimmed.strip_prefix('L').and_then(|v| v.parse::<usize>().ok());
+    let single = trimmed
+        .strip_prefix('L')
+        .and_then(|v| v.parse::<usize>().ok());
     if let Some(line) = single {
         return Some((line, line));
     }
@@ -291,4 +298,3 @@ fn normalize_path_key(path: &Path) -> String {
     }
     normalized
 }
-

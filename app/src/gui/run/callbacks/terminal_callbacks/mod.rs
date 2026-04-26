@@ -61,4 +61,3 @@ pub(super) fn connect_rename(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
 pub(super) fn connect_move_inject(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     tab_actions_callbacks::connect_move_inject(app, state);
 }
-

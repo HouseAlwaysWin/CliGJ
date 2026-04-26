@@ -136,7 +136,7 @@ fn encode_named_or_text(mod_mask: u32, key: &str) -> Option<Vec<u8>> {
             } else {
                 Some(format!("\x1b[3;{}~", m).into_bytes())
             }
-        },
+        }
         "Home" => {
             let m = xterm_mod_param(mod_mask);
             if m == 1 {
@@ -144,7 +144,7 @@ fn encode_named_or_text(mod_mask: u32, key: &str) -> Option<Vec<u8>> {
             } else {
                 Some(format!("\x1b[1;{}H", m).into_bytes())
             }
-        },
+        }
         "End" => {
             let m = xterm_mod_param(mod_mask);
             if m == 1 {
@@ -152,7 +152,7 @@ fn encode_named_or_text(mod_mask: u32, key: &str) -> Option<Vec<u8>> {
             } else {
                 Some(format!("\x1b[1;{}F", m).into_bytes())
             }
-        },
+        }
         "PageUp" => page_key(mod_mask, b'5'),
         "PageDown" => page_key(mod_mask, b'6'),
         "UpArrow" => arrow(mod_mask, b'A'),
@@ -182,9 +182,14 @@ fn xterm_mod_param(mod_mask: u32) -> u8 {
         (true, false, true, false) => 6,  // Ctrl+Shift
         (true, true, false, false) => 7,  // Ctrl+Alt
         (true, true, true, false) => 8,   // Ctrl+Alt+Shift
-        (false, false, false, true) | (false, false, true, true) | (false, true, false, true)
-        | (false, true, true, true) | (true, false, false, true) | (true, false, true, true)
-        | (true, true, false, true) | (true, true, true, true) => 9, // Meta (best-effort)
+        (false, false, false, true)
+        | (false, false, true, true)
+        | (false, true, false, true)
+        | (false, true, true, true)
+        | (true, false, false, true)
+        | (true, false, true, true)
+        | (true, true, false, true)
+        | (true, true, true, true) => 9, // Meta (best-effort)
     }
 }
 
@@ -232,7 +237,10 @@ mod tests {
     fn unicode_arrow_glyph_same_as_up_arrow_token() {
         let expected = encode_for_pty(0, "UpArrow").unwrap();
         assert_eq!(encode_for_pty(0, "\u{2191}").unwrap(), expected);
-        assert_eq!(encode_for_pty(0, "\u{2193}").unwrap(), encode_for_pty(0, "DownArrow").unwrap());
+        assert_eq!(
+            encode_for_pty(0, "\u{2193}").unwrap(),
+            encode_for_pty(0, "DownArrow").unwrap()
+        );
     }
 
     #[test]

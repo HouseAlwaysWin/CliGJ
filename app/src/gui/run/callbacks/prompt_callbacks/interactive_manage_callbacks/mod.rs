@@ -11,4 +11,3 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     editor_callbacks::connect(app, Rc::clone(&state));
     save_callbacks::connect(app, Rc::clone(&state));
 }
-

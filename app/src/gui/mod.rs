@@ -1,18 +1,18 @@
 //! Slint UI shell: tab/workspace, ConPTY, composer, `@` file picker.
 
 mod at_picker;
-mod font_assets;
 mod composer_sync;
+mod font_assets;
 mod fonts;
+mod gui_state;
 mod i18n;
-mod ipc;
 mod interactive_commands;
+mod ipc;
 mod open_in_vscode;
 mod prompt_attachments;
 mod reveal_in_explorer;
-mod shell_profiles;
-mod gui_state;
 mod run;
+mod shell_profiles;
 mod slint_ui;
 mod state;
 mod ui_sync;
@@ -20,4 +20,3 @@ mod ui_sync;
 mod windows_tray;
 
 pub use run::run_gui;
-

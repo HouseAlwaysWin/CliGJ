@@ -60,7 +60,10 @@ fn build_editor_uri(
     );
 
     if let Some(start) = start_line.filter(|line| *line > 0) {
-        let end = end_line.filter(|line| *line > 0).unwrap_or(start).max(start);
+        let end = end_line
+            .filter(|line| *line > 0)
+            .unwrap_or(start)
+            .max(start);
         uri.push_str("&startLine=");
         uri.push_str(start.to_string().as_str());
         uri.push_str("&endLine=");
@@ -84,4 +87,3 @@ fn encode_uri_component(input: &str) -> String {
     }
     out
 }
-

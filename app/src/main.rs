@@ -1,12 +1,15 @@
-#![cfg_attr(all(target_os = "windows", not(debug_assertions)), windows_subsystem = "windows")]
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
 mod gui;
 
+use clap::Parser;
 use cligj_core::cli::{Cli, Commands, ConfigCommand};
 use cligj_core::config::AppConfig;
 use cligj_core::error::Result;
 use cligj_core::runner;
-use clap::Parser;
 
 #[tokio::main]
 async fn main() {
@@ -61,4 +64,3 @@ async fn dispatch(cli: Cli) -> Result<()> {
 
     Ok(())
 }
-

@@ -1,23 +1,24 @@
 use std::ffi::OsStr;
-use std::path::Path;
 use std::os::windows::ffi::OsStrExt;
 use std::os::windows::io::FromRawHandle;
+use std::path::Path;
 
 use crate::pty::{PtyPair, PtyProcess, PtyReader, PtyWriter};
 
-use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
 use windows::Win32::System::Console::{
-    ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
+    COORD, ClosePseudoConsole, CreatePseudoConsole, HPCON, ResizePseudoConsole,
 };
-#[cfg(windows)]
-use windows_sys::Win32::System::Console::{SetConsoleCP, SetConsoleOutputCP};
 use windows::Win32::System::Pipes::CreatePipe;
 use windows::Win32::System::Threading::{
-    CreateProcessW, DeleteProcThreadAttributeList, InitializeProcThreadAttributeList,
-    UpdateProcThreadAttribute, EXTENDED_STARTUPINFO_PRESENT, LPPROC_THREAD_ATTRIBUTE_LIST,
-    PROCESS_INFORMATION, PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, STARTUPINFOEXW,
+    CreateProcessW, DeleteProcThreadAttributeList, EXTENDED_STARTUPINFO_PRESENT,
+    InitializeProcThreadAttributeList, LPPROC_THREAD_ATTRIBUTE_LIST,
+    PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE, PROCESS_INFORMATION, STARTUPINFOEXW,
+    UpdateProcThreadAttribute,
 };
+use windows::core::{PCWSTR, PWSTR};
+#[cfg(windows)]
+use windows_sys::Win32::System::Console::{SetConsoleCP, SetConsoleOutputCP};
 
 pub struct WindowsPtyProcess {
     pub _child_process: HANDLE,
@@ -33,8 +34,14 @@ unsafe impl Sync for WindowsPtyProcess {}
 impl PtyProcess for WindowsPtyProcess {
     fn resize(&self, cols: u16, rows: u16) -> Result<(), String> {
         unsafe {
-            ResizePseudoConsole(self.hpc, COORD { X: cols as i16, Y: rows as i16 })
-                .map_err(|e| format!("ResizePseudoConsole: {e}"))
+            ResizePseudoConsole(
+                self.hpc,
+                COORD {
+                    X: cols as i16,
+                    Y: rows as i16,
+                },
+            )
+            .map_err(|e| format!("ResizePseudoConsole: {e}"))
         }
     }
 }
@@ -46,7 +53,9 @@ impl Drop for WindowsPtyProcess {
             let _ = CloseHandle(self._child_process);
             ClosePseudoConsole(self.hpc);
             if !self._attr_list_ptr.is_null() {
-                DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST(self._attr_list_ptr as *mut _));
+                DeleteProcThreadAttributeList(LPPROC_THREAD_ATTRIBUTE_LIST(
+                    self._attr_list_ptr as *mut _,
+                ));
             }
         }
     }
@@ -71,7 +80,12 @@ impl std::io::Write for WindowsPtyWriter {
 }
 impl PtyWriter for WindowsPtyWriter {}
 
-pub fn spawn_conpty(shell: &str, cols: u16, rows: u16, current_dir: Option<&Path>) -> Result<PtyPair, String> {
+pub fn spawn_conpty(
+    shell: &str,
+    cols: u16,
+    rows: u16,
+    current_dir: Option<&Path>,
+) -> Result<PtyPair, String> {
     let (_, cmdline) = build_shell_command(shell);
     spawn_conpty_command_line(cmdline.as_str(), cols, rows, current_dir)
 }
@@ -99,7 +113,10 @@ pub fn spawn_conpty_command_line(
             .map_err(|e| format!("CreatePipe(out): {e}"))?;
 
         let hpc = CreatePseudoConsole(
-            COORD { X: cols as i16, Y: rows as i16 },
+            COORD {
+                X: cols as i16,
+                Y: rows as i16,
+            },
             in_read,
             out_write,
             0,

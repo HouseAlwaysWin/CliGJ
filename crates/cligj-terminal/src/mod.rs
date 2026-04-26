@@ -1,3 +1,5 @@
+mod ansi;
+
 pub mod types;
 pub mod pty;
 pub mod session;

@@ -2,9 +2,9 @@
 
 use slint::{ModelRc, SharedString, VecModel};
 
-use cligj_core::config::{AppConfig, InteractiveCommandConfig};
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
+use cligj_core::config::{AppConfig, InteractiveCommandConfig};
 
 pub(crate) type InteractiveCommandSpec = InteractiveCommandConfig;
 
@@ -58,9 +58,7 @@ pub(crate) fn interactive_command_specs_to_editor_rows(
             name: SharedString::from(spec.name.as_str()),
             line: SharedString::from(spec.command.as_str()),
             interactive_cli: spec.interactive_cli,
-            pinned_footer_lines: SharedString::from(
-                spec.pinned_footer_lines.to_string().as_str(),
-            ),
+            pinned_footer_lines: SharedString::from(spec.pinned_footer_lines.to_string().as_str()),
             markers: SharedString::from(spec.markers.join(", ").as_str()),
             archive_repainted_frames: spec.archive_repainted_frames,
             key_locked: is_reserved_preset_display_name(spec.name.as_str()),
@@ -110,17 +108,15 @@ pub(crate) fn spec_for_program_in_specs<'a>(
     if needle.is_empty() {
         return None;
     }
-    specs
-        .iter()
-        .find(|spec| {
-            normalized_program_name(spec.name.as_str()) == needle
-                || spec
-                    .command
-                    .split_whitespace()
-                    .next()
-                    .map(normalized_program_name)
-                    .is_some_and(|candidate| candidate == needle)
-        })
+    specs.iter().find(|spec| {
+        normalized_program_name(spec.name.as_str()) == needle
+            || spec
+                .command
+                .split_whitespace()
+                .next()
+                .map(normalized_program_name)
+                .is_some_and(|candidate| candidate == needle)
+    })
 }
 
 pub(crate) fn spec_for_label(line_label: &str, gs: &GuiState) -> Option<InteractiveCommandSpec> {
@@ -144,6 +140,7 @@ pub(crate) fn is_reserved_preset_display_name(name: &str) -> bool {
 pub(crate) fn normalized_program_name(text: &str) -> String {
     let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
     let leaf = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed);
-    leaf.strip_suffix(".exe").unwrap_or(leaf).to_ascii_lowercase()
+    leaf.strip_suffix(".exe")
+        .unwrap_or(leaf)
+        .to_ascii_lowercase()
 }
-

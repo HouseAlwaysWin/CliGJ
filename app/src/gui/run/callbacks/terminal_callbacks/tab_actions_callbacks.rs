@@ -38,7 +38,10 @@ pub(super) fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc
                     let s = st_pin.borrow();
                     if s.current < s.tabs.len() {
                         ui.set_ws_terminal_pin_lines(SharedString::from(
-                            s.tabs[s.current].terminal_pinned_footer_lines.to_string().as_str(),
+                            s.tabs[s.current]
+                                .terminal_pinned_footer_lines
+                                .to_string()
+                                .as_str(),
                         ));
                     }
                     return;
@@ -146,7 +149,9 @@ pub(super) fn connect_move_inject(app: &AppWindow, state: Rc<RefCell<GuiState>>)
             return;
         };
         let mut s = st_inj.borrow_mut();
-        if let Err(e) = crate::gui::run::helpers::inject_path_into_current(&ui, &mut s, path.as_path()) {
+        if let Err(e) =
+            crate::gui::run::helpers::inject_path_into_current(&ui, &mut s, path.as_path())
+        {
             eprintln!("CliGJ: inject file {}: {e}", path.display());
         }
     });
@@ -222,4 +227,3 @@ pub(super) fn connect_move_inject(app: &AppWindow, state: Rc<RefCell<GuiState>>)
         clear_all_prompt_images(&ui, &mut *s);
     });
 }
-

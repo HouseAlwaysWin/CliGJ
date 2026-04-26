@@ -4,9 +4,9 @@ use std::path::PathBuf;
 
 use slint::{ModelRc, SharedString, VecModel};
 
-use cligj_core::config::AppConfig;
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
+use cligj_core::config::AppConfig;
 
 pub(crate) fn default_shell_profiles() -> Vec<(String, String, String)> {
     vec![
@@ -108,14 +108,17 @@ pub(crate) fn startup_cwd_from_profiles_list(
     name: &str,
     profiles: &[(String, String, String)],
 ) -> Option<PathBuf> {
-    profiles.iter().find(|(n, _, _)| n == name).and_then(|(_, _, w)| {
-        let t = w.trim();
-        if t.is_empty() {
-            return None;
-        }
-        let p = PathBuf::from(t);
-        p.is_dir().then_some(p)
-    })
+    profiles
+        .iter()
+        .find(|(n, _, _)| n == name)
+        .and_then(|(_, _, w)| {
+            let t = w.trim();
+            if t.is_empty() {
+                return None;
+            }
+            let p = PathBuf::from(t);
+            p.is_dir().then_some(p)
+        })
 }
 
 pub(crate) fn startup_cwd_for_shell_profile(name: &str, gs: &GuiState) -> Option<PathBuf> {
@@ -156,4 +159,3 @@ pub(crate) fn sync_shell_manage_editor_to_ui(ui: &AppWindow, gs: &GuiState) {
         .collect();
     ui.set_ws_shell_manage_rows(ModelRc::new(VecModel::from(rows)));
 }
-

@@ -4,12 +4,13 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Model, SharedString};
 
-use cligj_core::config::{AppConfig, InteractiveCommandConfig};
 use crate::gui::interactive_commands::{
-    pinned_footer_lines_for_specs, spec_for_program_in_specs, sync_interactive_command_choices_to_ui,
+    pinned_footer_lines_for_specs, spec_for_program_in_specs,
+    sync_interactive_command_choices_to_ui,
 };
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
+use cligj_core::config::{AppConfig, InteractiveCommandConfig};
 
 use super::super::super::refresh_terminal_tab_view;
 
@@ -139,4 +140,3 @@ fn parse_marker_editor_text(text: &str) -> Vec<String> {
         .map(ToString::to_string)
         .collect()
 }
-

@@ -36,11 +36,7 @@ pub fn line_to_colored_spans(
         if s.is_empty() {
             return;
         }
-        out.push(ColoredSpan {
-            text: s,
-            fg,
-            bg,
-        });
+        out.push(ColoredSpan { text: s, fg, bg });
     };
 
     for col in 0..line.len() {
@@ -136,9 +132,7 @@ fn is_padding_only_line(spans: &[ColoredSpan], line_had_reverse: bool, has_curso
     let Some(first) = spans.first() else {
         return true;
     };
-    spans
-        .iter()
-        .all(|s| s.fg == first.fg && s.bg == first.bg)
+    spans.iter().all(|s| s.fg == first.fg && s.bg == first.bg)
 }
 
 fn srgba_tuple_to_rgb(t: wezterm_term::color::SrgbaTuple) -> [u8; 3] {

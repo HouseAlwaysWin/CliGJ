@@ -112,9 +112,17 @@ pub fn absolute_path_from_pick(chosen_rel: &str, workspace_root: &Path) -> Strin
 
 /// Replace active `@...` with nothing in the visible prompt and return hidden absolute path.
 #[must_use]
-pub fn apply_at_file_pick_hidden(prompt: &str, chosen_rel: &str, workspace_root: &Path) -> (String, String) {
+pub fn apply_at_file_pick_hidden(
+    prompt: &str,
+    chosen_rel: &str,
+    workspace_root: &Path,
+) -> (String, String) {
     let mut visible = strip_active_at_segment(prompt);
-    let ends_with_ws = visible.chars().last().map(char::is_whitespace).unwrap_or(true);
+    let ends_with_ws = visible
+        .chars()
+        .last()
+        .map(char::is_whitespace)
+        .unwrap_or(true);
     if !visible.is_empty() && !ends_with_ws {
         visible.push(' ');
     }
@@ -225,7 +233,8 @@ pub fn strip_attachment_token(prompt: &str, token: &str) -> String {
     while i < chars.len() {
         if i + tchars.len() <= chars.len() && chars[i..i + tchars.len()] == tchars[..] {
             let before_ok = i == 0 || chars[i - 1].is_whitespace();
-            let after_ok = i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
+            let after_ok =
+                i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
             if before_ok && after_ok {
                 if out.last() == Some(&' ') {
                     out.pop();
@@ -262,7 +271,8 @@ pub fn strip_attachment_token_with_line_suffix(prompt: &str, token: &str) -> Str
     while i < chars.len() {
         if i + tchars.len() <= chars.len() && chars[i..i + tchars.len()] == tchars[..] {
             let before_ok = i == 0 || chars[i - 1].is_whitespace();
-            let after_ok = i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
+            let after_ok =
+                i + tchars.len() >= chars.len() || chars[i + tchars.len()].is_whitespace();
             if before_ok && after_ok {
                 while out.last() == Some(&' ') {
                     out.pop();
@@ -353,7 +363,8 @@ pub fn expand_attachment_tokens(
         replacements.push((token, p.clone()));
         replacements.push((token_new, p.clone()));
     }
-    let mut name_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut name_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for p in file_paths {
         let file_name = file_name_label(p);
         let count = name_counts.entry(file_name.clone()).or_insert(0);
@@ -365,7 +376,8 @@ pub fn expand_attachment_tokens(
         let token = image_attachment_token(i + 1);
         replacements.push((token, p.clone()));
     }
-    let mut image_name_counts: std::collections::HashMap<String, usize> = std::collections::HashMap::new();
+    let mut image_name_counts: std::collections::HashMap<String, usize> =
+        std::collections::HashMap::new();
     for p in image_paths {
         let file_name = file_name_label(p);
         let count = image_name_counts.entry(file_name.clone()).or_insert(0);
@@ -427,7 +439,8 @@ mod tests {
 
     #[test]
     fn token_expand_replaces_file_and_image_tokens() {
-        let prompt = "ask [[file1]] [[filepath_1]] @a.txt @a.txt_2 with [[img1]] @p.png and [[sel1]]";
+        let prompt =
+            "ask [[file1]] [[filepath_1]] @a.txt @a.txt_2 with [[img1]] @p.png and [[sel1]]";
         let files = vec!["D:/a.txt".to_string(), "D:/other/a.txt".to_string()];
         let images = vec!["D:/p.png".to_string()];
         let selections = vec!["code payload".to_string()];
@@ -449,10 +462,7 @@ mod tests {
 
     #[test]
     fn strip_attachment_token_skips_substring_inside_word() {
-        assert_eq!(
-            strip_attachment_token("x@a.jpgy", "@a.jpg"),
-            "x@a.jpgy"
-        );
+        assert_eq!(strip_attachment_token("x@a.jpgy", "@a.jpg"), "x@a.jpgy");
     }
 
     #[test]

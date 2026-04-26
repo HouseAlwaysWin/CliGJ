@@ -1,8 +1,8 @@
-use std::cell::Cell;
-use std::rc::Rc;
 use slint::{Color, ComponentHandle, Model, ModelRc, SharedString, VecModel};
+use std::cell::Cell;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use std::rc::Rc;
 use unicode_width::UnicodeWidthChar;
 
 use crate::gui::prompt_attachments::{
@@ -12,8 +12,8 @@ use cligj_terminal::render::{ColoredLine, ColoredSpan};
 use cligj_workspace as workspace_files;
 
 use super::slint_ui::{AppWindow, PromptImageChip};
-use super::state::{TabState, TerminalMode};
 use super::slint_ui::{TermLine, TermSpan};
+use super::state::{TabState, TerminalMode};
 
 /// Must match `row-height` in `gj_viewer.slint`.
 pub(crate) const TERMINAL_ROW_HEIGHT_PX: f32 = 18.0;
@@ -100,10 +100,7 @@ fn term_bg_for_ui(bg: [u8; 3]) -> Color {
 }
 
 fn is_emoji_char(ch: char) -> bool {
-    matches!(
-        ch as u32,
-        0x1F000..=0x1FAFF | 0xFE0F
-    )
+    matches!(ch as u32, 0x1F000..=0x1FAFF | 0xFE0F)
 }
 
 fn is_symbol_char(ch: char) -> bool {
@@ -354,12 +351,12 @@ pub(crate) fn sync_terminal_model_cache_range(
     }
     let first = first.min(n - 1);
     let last = last.min(n - 1);
-    
+
     for idx in first..=last {
         // 如果該行已知為 dirty，或快取中不存在，則必須重建
-        let needs_rebuild = tab.terminal_model_dirty.contains(&idx) 
+        let needs_rebuild = tab.terminal_model_dirty.contains(&idx)
             || !tab.terminal_model_hashes.contains_key(&idx);
-            
+
         if !needs_rebuild {
             continue;
         }
@@ -371,18 +368,18 @@ pub(crate) fn sync_terminal_model_cache_range(
             base_line.clone()
         };
         let fp = line_fingerprint(&rendered);
-        
+
         // 再次確認指紋，避免不必要的 UI 更新（例如 dirty 標記了但內容其實回滾到跟快取一致）
         let unchanged = tab
             .terminal_model_hashes
             .get(&idx)
             .is_some_and(|cached| *cached == fp);
-            
+
         if unchanged {
             tab.terminal_model_dirty.remove(&idx);
             continue;
         }
-        
+
         let built = build_term_line(&rendered, cjk_fallback_font_family);
         tab.terminal_model_rows.insert(idx, built);
         tab.terminal_model_hashes.insert(idx, fp);
@@ -452,12 +449,8 @@ pub(crate) fn push_terminal_view_to_ui(
     let first = first.min(last);
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != body_n;
-    let content_changed = sync_terminal_model_cache_range(
-        tab,
-        first,
-        last,
-        cjk_fallback_font_family.as_str(),
-    );
+    let content_changed =
+        sync_terminal_model_cache_range(tab, first, last, cjk_fallback_font_family.as_str());
 
     if window_changed {
         ui.set_ws_terminal_line_offset(first as i32);
@@ -476,9 +469,12 @@ pub(crate) fn push_terminal_view_to_ui(
             for model_idx in 0..window_len {
                 let line_idx = first + model_idx;
                 let needs_update = window_changed || tab.terminal_model_dirty.contains(&line_idx);
-                
+
                 if needs_update {
-                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                    let row = tab
+                        .terminal_model_rows
+                        .get(&line_idx)
+                        .cloned()
                         .unwrap_or_else(empty_term_line);
                     model.set_row_data(model_idx, row);
                 }
@@ -490,20 +486,30 @@ pub(crate) fn push_terminal_view_to_ui(
                 // 需要增加行
                 for model_idx in 0..current_count {
                     let line_idx = first + model_idx;
-                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                    let row = tab
+                        .terminal_model_rows
+                        .get(&line_idx)
+                        .cloned()
                         .unwrap_or_else(empty_term_line);
                     model.set_row_data(model_idx, row);
                 }
                 for model_idx in current_count..window_len {
                     let line_idx = first + model_idx;
-                    let row = tab.terminal_model_rows.get(&line_idx).cloned().unwrap_or_else(empty_term_line);
+                    let row = tab
+                        .terminal_model_rows
+                        .get(&line_idx)
+                        .cloned()
+                        .unwrap_or_else(empty_term_line);
                     model.push(row);
                 }
             } else {
                 // 需要減少行
                 for model_idx in 0..window_len {
                     let line_idx = first + model_idx;
-                    let row = tab.terminal_model_rows.get(&line_idx).cloned()
+                    let row = tab
+                        .terminal_model_rows
+                        .get(&line_idx)
+                        .cloned()
                         .unwrap_or_else(empty_term_line);
                     model.set_row_data(model_idx, row);
                 }
@@ -512,7 +518,7 @@ pub(crate) fn push_terminal_view_to_ui(
                 }
             }
         }
-        
+
         if window_changed || total_changed || model.row_count() != window_len {
             ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
         }

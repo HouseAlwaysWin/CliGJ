@@ -42,4 +42,3 @@ pub(crate) fn should_restore_from_event(event: TrayIconEvent) -> bool {
         _ => false,
     }
 }
-

@@ -1,3 +1,5 @@
+mod ansi;
+
 pub mod key_encoding;
 pub mod prompt_key;
 pub mod pty;

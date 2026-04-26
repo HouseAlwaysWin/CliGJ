@@ -184,4 +184,3 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         ui.set_ws_interactive_manage_open(false);
     });
 }
-

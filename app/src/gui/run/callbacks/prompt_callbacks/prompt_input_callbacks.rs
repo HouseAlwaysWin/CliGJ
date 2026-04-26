@@ -13,11 +13,11 @@ use cligj_terminal::key_encoding::{self, MOD_CTRL};
 use cligj_terminal::prompt_key::PromptKeyAction;
 use cligj_workspace as workspace_files;
 
+use super::super::is_pty_enter_key;
 use crate::gui::run::helpers::{
     clipboard_file_paths_hdrop, clipboard_raster_image_file, contains_cjk_char,
     inject_paths_and_images_from_paths, is_local_prompt_edit_key, push_prompt_image,
 };
-use super::super::is_pty_enter_key;
 
 pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_submit = Rc::clone(&state);
@@ -195,12 +195,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 _ => {}
             }
         }
-        match cligj_terminal::prompt_key::route_prompt_key(
-            raw_tty,
-            mod_mask as u32,
-            key_str,
-            shift,
-        ) {
+        match cligj_terminal::prompt_key::route_prompt_key(raw_tty, mod_mask as u32, key_str, shift)
+        {
             PromptKeyAction::Reject => false,
             PromptKeyAction::ToggleRawInput => {
                 let mut s = st_keys.borrow_mut();

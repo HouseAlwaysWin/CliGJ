@@ -23,9 +23,7 @@ impl InteractiveCommandConfig {
         Self {
             interactive_cli: true,
             markers: default_interactive_markers(&name, &command),
-            archive_repainted_frames: default_interactive_archive_repainted_frames(
-                &name, &command,
-            ),
+            archive_repainted_frames: default_interactive_archive_repainted_frames(&name, &command),
             name,
             command,
             pinned_footer_lines,
@@ -146,9 +144,7 @@ impl AppConfig {
                 );
                 t.insert(
                     "pinned_footer_lines".to_string(),
-                    toml::Value::Integer(
-                        spec.pinned_footer_lines.try_into().unwrap_or(i64::MAX),
-                    ),
+                    toml::Value::Integer(spec.pinned_footer_lines.try_into().unwrap_or(i64::MAX)),
                 );
                 t.insert(
                     "markers".to_string(),
@@ -448,7 +444,9 @@ fn interactive_bool_value(value: &toml::Value) -> Option<bool> {
 fn normalize_interactive_program_name(text: &str) -> String {
     let trimmed = text.trim().trim_matches(|c| c == '"' || c == '\'');
     let leaf = trimmed.rsplit(['\\', '/']).next().unwrap_or(trimmed);
-    leaf.strip_suffix(".exe").unwrap_or(leaf).to_ascii_lowercase()
+    leaf.strip_suffix(".exe")
+        .unwrap_or(leaf)
+        .to_ascii_lowercase()
 }
 
 fn interactive_program_name(name: &str, command: &str) -> String {
@@ -599,10 +597,12 @@ mod tests {
         let commands = cfg.interactive_commands();
         assert_eq!(commands.len(), 1);
         assert!(commands[0].interactive_cli);
-        assert!(commands[0]
-            .markers
-            .iter()
-            .any(|marker| marker == "openai codex"));
+        assert!(
+            commands[0]
+                .markers
+                .iter()
+                .any(|marker| marker == "openai codex")
+        );
         assert!(!commands[0].archive_repainted_frames);
     }
 

@@ -2,13 +2,13 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use slint::{spawn_local, ComponentHandle, Timer};
+use slint::{ComponentHandle, Timer, spawn_local};
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::ui_sync::{
-    clamp_saved_scroll_top, push_terminal_view_to_ui, scrollable_terminal_line_count,
-    terminal_scroll_top_for_tab, TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH,
+    TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH, clamp_saved_scroll_top, push_terminal_view_to_ui,
+    scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
 use cligj_terminal::types::ControlCommand;
 
@@ -158,4 +158,3 @@ pub(super) fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiSt
         });
     });
 }
-

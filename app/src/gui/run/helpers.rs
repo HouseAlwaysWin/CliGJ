@@ -50,7 +50,8 @@ pub(crate) fn inject_paths_into_current(
             tab.prompt_picked_files_abs.push(abs_path.clone());
             tab.prompt_picked_file_origins.push(None);
             let token = filepath_hint_token_for_abs_path(tab, abs_path.as_str());
-            let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+            let next =
+                workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
             tab.prompt = SharedString::from(next.as_str());
         }
     }
@@ -227,10 +228,8 @@ pub(crate) fn push_prompt_image(
     if path_has_prompt_attachment(tab, &abs_path) {
         return Ok(());
     }
-    tab.prompt_picked_images.push(PromptImageAttach {
-        abs_path,
-        preview,
-    });
+    tab.prompt_picked_images
+        .push(PromptImageAttach { abs_path, preview });
     let newest = tab
         .prompt_picked_images
         .last()
@@ -278,18 +277,18 @@ pub(crate) fn inject_paths_and_images_from_paths(
                     if path_has_prompt_attachment(tab, &abs_path) {
                         continue;
                     }
-                    tab.prompt_picked_images.push(PromptImageAttach {
-                        abs_path,
-                        preview,
-                    });
+                    tab.prompt_picked_images
+                        .push(PromptImageAttach { abs_path, preview });
                     let newest = tab
                         .prompt_picked_images
                         .last()
                         .map(|x| x.abs_path.as_str())
                         .unwrap_or("");
                     let token = filepath_hint_token_for_abs_path(tab, newest);
-                    let next =
-                        workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+                    let next = workspace_files::append_attachment_token(
+                        tab.prompt.as_str(),
+                        token.as_str(),
+                    );
                     tab.prompt = SharedString::from(next.as_str());
                     continue;
                 }
@@ -525,5 +524,7 @@ pub(crate) fn selected_text_from_terminal_lines(
 
 pub(crate) fn copy_to_clipboard(text: &str) -> Result<(), String> {
     let mut clipboard = Clipboard::new().map_err(|e| e.to_string())?;
-    clipboard.set_text(text.to_string()).map_err(|e| e.to_string())
+    clipboard
+        .set_text(text.to_string())
+        .map_err(|e| e.to_string())
 }

@@ -37,4 +37,3 @@ pub(crate) fn register_embedded_ui_fonts() {
         eprintln!("CliGJ: registered embedded font '{}'", font.file_name);
     }
 }
-

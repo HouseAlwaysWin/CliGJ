@@ -8,7 +8,7 @@ use std::sync::mpsc;
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, VecModel};
 
 #[cfg(target_os = "windows")]
-use slint::winit_030::{winit, EventResult, WinitWindowAccessor};
+use slint::winit_030::{EventResult, WinitWindowAccessor, winit};
 
 use cligj_core::config::AppConfig;
 
@@ -50,9 +50,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     }
 
     let app = AppWindow::new().expect("failed to build app window");
-    let history_window = Rc::new(
-        TerminalHistoryWindow::new().expect("failed to build terminal history window"),
-    );
+    let history_window =
+        Rc::new(TerminalHistoryWindow::new().expect("failed to build terminal history window"));
     #[cfg(target_os = "windows")]
     let tray_icon: Rc<RefCell<Option<tray_icon::TrayIcon>>> = Rc::new(RefCell::new(None));
     #[cfg(target_os = "windows")]
@@ -75,13 +74,10 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     if persist_interactive || persist_shell_profiles {
         let _ = cfg.save();
     }
-    let ui_language = cfg
-        .ui_language()
-        .unwrap_or_else(|| "預設".to_string());
-    let terminal_font_family = normalize_terminal_font_family(
-        cfg.terminal_font_family().as_deref().unwrap_or(""),
-    )
-    .to_string();
+    let ui_language = cfg.ui_language().unwrap_or_else(|| "預設".to_string());
+    let terminal_font_family =
+        normalize_terminal_font_family(cfg.terminal_font_family().as_deref().unwrap_or(""))
+            .to_string();
     let terminal_cjk_fallback_font_family = normalize_terminal_cjk_fallback_font_family(
         cfg.terminal_cjk_fallback_font_family()
             .as_deref()
@@ -230,7 +226,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         app.on_window_chrome_minimize_to_tray(move || {
             let Some(ui) = app_weak.upgrade() else {
                 return;
-            };            
+            };
             {
                 let mut tray = tray_icon_min.borrow_mut();
                 if let Err(e) = super::windows_tray::ensure_tray_icon(&mut *tray) {
@@ -332,17 +328,13 @@ fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let app_weak = app.as_weak();
     let last_cursor: Rc<Cell<Option<(f64, f64)>>> = Rc::new(Cell::new(None));
 
-    app.window().on_winit_window_event(move |slint_window, event| {
-        match event {
+    app.window()
+        .on_winit_window_event(move |slint_window, event| match event {
             winit::event::WindowEvent::CursorMoved { position, .. } => {
                 last_cursor.set(Some((position.x, position.y)));
                 EventResult::Propagate
             }
-            winit::event::WindowEvent::MouseInput {
-                state,
-                button,
-                ..
-            } => {
+            winit::event::WindowEvent::MouseInput { state, button, .. } => {
                 if *state == winit::event::ElementState::Pressed
                     && *button == winit::event::MouseButton::Left
                 {
@@ -421,6 +413,5 @@ fn register_windows_file_drop(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 EventResult::PreventDefault
             }
             _ => EventResult::Propagate,
-        }
-    });
+        });
 }

@@ -27,8 +27,10 @@ pub(crate) fn reveal_path_in_file_manager(path: &str) {
     #[cfg(not(windows))]
     {
         use std::process::Command;
-        let dir = p.parent().filter(|d| !d.as_os_str().is_empty()).unwrap_or_else(|| Path::new("."));
+        let dir = p
+            .parent()
+            .filter(|d| !d.as_os_str().is_empty())
+            .unwrap_or_else(|| Path::new("."));
         let _ = Command::new("xdg-open").arg(dir).spawn();
     }
 }
-

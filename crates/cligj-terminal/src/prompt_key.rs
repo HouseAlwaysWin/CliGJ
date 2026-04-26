@@ -1,6 +1,6 @@
 //! Composer / TTY prompt key routing (formerly `gj_prompt_drop_zone` `key-pressed` rules).
 
-use super::key_encoding::{normalize_tty_key_token, MOD_ALT, MOD_CTRL, MOD_SHIFT};
+use super::key_encoding::{MOD_ALT, MOD_CTRL, MOD_SHIFT, normalize_tty_key_token};
 
 /// What to do for one `TextEdit` `key-pressed` event (`accept` vs `reject` decided in Slint).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -18,7 +18,7 @@ pub enum PromptKeyAction {
 #[must_use]
 pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -> PromptKeyAction {
     let key = normalize_tty_key_token(key);
-    
+
     // 1. 特殊功能鍵優先
     if (mod_mask & (MOD_CTRL | MOD_ALT | MOD_SHIFT)) == MOD_ALT && key == "F1" {
         return PromptKeyAction::ToggleRawInput;

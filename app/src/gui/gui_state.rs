@@ -3,13 +3,13 @@ use std::time::Duration;
 
 use slint::{Model, SharedString};
 
-use cligj_terminal::types::{ReaderRenderMode, ControlCommand};
+use cligj_terminal::types::{ControlCommand, ReaderRenderMode};
 
 use super::composer_sync::diff_composer_to_conpty;
 use super::interactive_commands::{normalized_program_name, spec_for_program};
 use super::shell_profiles::{resolve_shell_command_line, startup_cwd_for_shell_profile};
-use super::state::conpty_startup_cwd;
 use super::slint_ui::AppWindow;
+use super::state::conpty_startup_cwd;
 use super::state::{GuiState, TerminalChunk, TerminalMode};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count, tab_update_from_ui};
 
@@ -85,10 +85,10 @@ impl GuiState {
 
         #[cfg(target_os = "windows")]
         {
-            use std::rc::Rc;
-            use slint::ModelRc;
-            use cligj_terminal::windows_conpty;
             use cligj_terminal::session;
+            use cligj_terminal::windows_conpty;
+            use slint::ModelRc;
+            use std::rc::Rc;
 
             if let Some(startup_cmd) = startup_cmd {
                 match windows_conpty::spawn_conpty_command_line(
@@ -100,7 +100,7 @@ impl GuiState {
                     Ok(pty) => {
                         let tab_id = self.tabs[self.current].id;
                         let tx = self.tx.clone();
-                        
+
                         let (handle, control_tx, process, writer) = session::start_terminal_session(
                             pty,
                             ReaderRenderMode::InteractiveAi,
@@ -109,7 +109,9 @@ impl GuiState {
                                     tab_id,
                                     terminal_mode: match render.render_mode {
                                         ReaderRenderMode::Shell => TerminalMode::Shell,
-                                        ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                                        ReaderRenderMode::InteractiveAi => {
+                                            TerminalMode::InteractiveAi
+                                        }
                                     },
                                     raw_pty_events: render.raw_pty_events,
                                     text: render.text,
@@ -140,25 +142,27 @@ impl GuiState {
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
-                Vec::<crate::gui::slint_ui::TermLine>::new(),
-            )));
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(Vec::<
+                crate::gui::slint_ui::TermLine,
+            >::new(
+            ))));
             ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
             ui.invoke_ws_scroll_terminal_to_top();
         }
 
         #[cfg(not(target_os = "windows"))]
         {
-            use std::rc::Rc;
             use slint::ModelRc;
+            use std::rc::Rc;
 
             let tab = &mut self.tabs[self.current];
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
-                Vec::<crate::gui::slint_ui::TermLine>::new(),
-            )));
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(Vec::<
+                crate::gui::slint_ui::TermLine,
+            >::new(
+            ))));
             ui.set_ws_terminal_lines(ModelRc::from(Rc::clone(&tab.terminal_slint_model)));
             ui.invoke_ws_scroll_terminal_to_top();
         }
@@ -171,10 +175,7 @@ impl GuiState {
         Ok(())
     }
 
-    pub(crate) fn toggle_raw_input_current(
-        &mut self,
-        ui: &AppWindow,
-    ) -> Result<(), &'static str> {
+    pub(crate) fn toggle_raw_input_current(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
         if self.current >= self.tabs.len() {
             return Err("invalid current tab index");
         }
@@ -207,7 +208,11 @@ impl GuiState {
         Ok(())
     }
 
-    pub(crate) fn switch_tab(&mut self, new_index: usize, ui: &AppWindow) -> Result<(), &'static str> {
+    pub(crate) fn switch_tab(
+        &mut self,
+        new_index: usize,
+        ui: &AppWindow,
+    ) -> Result<(), &'static str> {
         if new_index >= self.tabs.len() {
             return Err("invalid tab index");
         }
@@ -263,7 +268,7 @@ impl GuiState {
             return Err("invalid current tab index");
         }
         tab_update_from_ui(&mut self.tabs[self.current], ui);
-        
+
         let startup_cmd = resolve_shell_command_line(new_cmd_type, self);
         let startup_cwd = conpty_startup_cwd(&self.tabs[self.current], self);
 
@@ -275,8 +280,8 @@ impl GuiState {
 
         #[cfg(target_os = "windows")]
         {
-            use cligj_terminal::windows_conpty;
             use cligj_terminal::session;
+            use cligj_terminal::windows_conpty;
 
             tab.pty_process = None;
             tab.pty_writer = None;
@@ -285,7 +290,7 @@ impl GuiState {
             tab.interactive_frame_lines.clear();
             tab.auto_scroll = false;
             tab.composer_pty_mirror.clear();
-            
+
             if let Some(startup_cmd) = startup_cmd {
                 if let Ok(pty) = windows_conpty::spawn_conpty_command_line(
                     startup_cmd.as_str(),
@@ -295,31 +300,32 @@ impl GuiState {
                 ) {
                     let tab_id = tab.id;
                     let tx = self.tx.clone();
-                    
+
                     let (handle, control_tx, process, writer) = session::start_terminal_session(
                         pty,
                         ReaderRenderMode::Shell,
                         move |render| {
-                        let _ = tx.send(TerminalChunk {
-                            tab_id,
-                            terminal_mode: match render.render_mode {
-                                ReaderRenderMode::Shell => TerminalMode::Shell,
-                                ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
-                            },
-                            raw_pty_events: render.raw_pty_events,
-                            text: render.text,
-                            lines: render.lines,
-                            snapshot_len: render.snapshot_len,
-                            full_len: render.full_len,
-                            first_line_idx: render.first_line_idx,
-                            cursor_row: render.cursor_row,
-                            cursor_col: render.cursor_col,
-                            replace: true,
-                            set_auto_scroll: if render.filled { Some(true) } else { None },
-                            changed_indices: render.changed_indices,
-                            reset_terminal_buffer: render.reset_terminal_buffer,
-                        });
-                    });
+                            let _ = tx.send(TerminalChunk {
+                                tab_id,
+                                terminal_mode: match render.render_mode {
+                                    ReaderRenderMode::Shell => TerminalMode::Shell,
+                                    ReaderRenderMode::InteractiveAi => TerminalMode::InteractiveAi,
+                                },
+                                raw_pty_events: render.raw_pty_events,
+                                text: render.text,
+                                lines: render.lines,
+                                snapshot_len: render.snapshot_len,
+                                full_len: render.full_len,
+                                first_line_idx: render.first_line_idx,
+                                cursor_row: render.cursor_row,
+                                cursor_col: render.cursor_col,
+                                replace: true,
+                                set_auto_scroll: if render.filled { Some(true) } else { None },
+                                changed_indices: render.changed_indices,
+                                reset_terminal_buffer: render.reset_terminal_buffer,
+                            });
+                        },
+                    );
                     let _ = handle;
                     let tab = &mut self.tabs[self.current];
                     tab.pty_process = Some(process);
@@ -406,9 +412,10 @@ impl GuiState {
             }
             ui.set_ws_terminal_text(SharedString::new());
             ui.set_ws_terminal_total_lines(0);
-            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(
-                Vec::<crate::gui::slint_ui::TermLine>::new(),
-            )));
+            ui.set_ws_terminal_pinned_lines(slint::ModelRc::new(slint::VecModel::from(Vec::<
+                crate::gui::slint_ui::TermLine,
+            >::new(
+            ))));
         }
 
         #[cfg(target_os = "windows")]
@@ -416,7 +423,7 @@ impl GuiState {
             use crate::gui::composer_sync::sync_composer_line_to_conpty;
             // 提交前補齊鏡像同步
             sync_composer_line_to_conpty(ui, self);
-            
+
             let tab = &mut self.tabs[self.current];
             tab.history_cursor = None;
             tab.history_draft.clear();
@@ -424,7 +431,8 @@ impl GuiState {
             if let Some(writer) = tab.pty_writer.as_mut() {
                 use std::io::Write;
                 if expanded_prompt != tab.prompt.as_str() {
-                    let bytes = diff_composer_to_conpty(tab.prompt.as_str(), expanded_prompt.as_str());
+                    let bytes =
+                        diff_composer_to_conpty(tab.prompt.as_str(), expanded_prompt.as_str());
                     if !bytes.is_empty() {
                         let _ = writer.write_all(&bytes);
                         let _ = writer.flush();
@@ -568,9 +576,7 @@ impl GuiState {
         #[cfg(target_os = "windows")]
         {
             if let Some(writer) = tab.pty_writer.as_mut() {
-                writer
-                    .write_all(data)
-                    .map_err(|e| e.to_string())?;
+                writer.write_all(data).map_err(|e| e.to_string())?;
                 writer.flush().map_err(|e| e.to_string())?;
                 return Ok(());
             }
@@ -593,7 +599,8 @@ impl GuiState {
 
         tab_update_from_ui(&mut self.tabs[self.current], ui);
         if self.current < self.tabs.len() {
-            self.tabs[self.current].terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+            self.tabs[self.current].terminal_saved_scroll_top_px =
+                ui.get_ws_terminal_scroll_top_px();
         }
 
         self.titles.remove(index);
@@ -617,7 +624,12 @@ impl GuiState {
         Ok(())
     }
 
-    pub(crate) fn move_tab(&mut self, from: usize, to: usize, ui: &AppWindow) -> Result<(), &'static str> {
+    pub(crate) fn move_tab(
+        &mut self,
+        from: usize,
+        to: usize,
+        ui: &AppWindow,
+    ) -> Result<(), &'static str> {
         if from >= self.tabs.len() || to >= self.tabs.len() {
             return Err("invalid move index");
         }

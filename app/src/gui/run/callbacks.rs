@@ -19,7 +19,9 @@ fn is_pty_enter_key(k: &str) -> bool {
     matches!(k, "Return" | "\n" | "\r")
 }
 
-fn model_interactive_editor_rows(m: &ModelRc<InteractiveCmdEditorRow>) -> Vec<InteractiveCmdEditorRow> {
+fn model_interactive_editor_rows(
+    m: &ModelRc<InteractiveCmdEditorRow>,
+) -> Vec<InteractiveCmdEditorRow> {
     (0..m.row_count()).filter_map(|i| m.row_data(i)).collect()
 }
 
@@ -35,14 +37,14 @@ fn refresh_terminal_tab_view(ui: &AppWindow, tab: &mut crate::gui::state::TabSta
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     let saved = clamp_saved_scroll_top(tab, vh);
     tab.terminal_saved_scroll_top_px = saved;
-    let scroll = if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output
-    {
-        terminal_scroll_top_for_tab(tab, vh)
-    } else if tab.auto_scroll {
-        terminal_scroll_top_for_tab(tab, vh)
-    } else {
-        saved
-    };
+    let scroll =
+        if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else if tab.auto_scroll {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else {
+            saved
+        };
     ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
     push_terminal_view_to_ui(ui, tab, Some(scroll));
 }
@@ -175,4 +177,3 @@ fn connect_tabs(
         }
     });
 }
-

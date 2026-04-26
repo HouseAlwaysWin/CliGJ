@@ -10,12 +10,8 @@ const TERMINAL_FONT_CHOICES: &[&str] = &[
     "Noto Sans TC",
 ];
 
-const TERMINAL_CJK_FALLBACK_FONT_CHOICES: &[&str] = &[
-    "MingLiU",
-    "Microsoft JhengHei",
-    "Noto Sans TC",
-    "PMingLiU",
-];
+const TERMINAL_CJK_FALLBACK_FONT_CHOICES: &[&str] =
+    &["MingLiU", "Microsoft JhengHei", "Noto Sans TC", "PMingLiU"];
 
 pub(crate) fn terminal_font_choices() -> &'static [&'static str] {
     TERMINAL_FONT_CHOICES
@@ -42,4 +38,3 @@ pub(crate) fn normalize_terminal_cjk_fallback_font_family(value: &str) -> &'stat
         .find(|name| *name == trimmed)
         .unwrap_or(TERMINAL_CJK_FALLBACK_FONT_FAMILY)
 }
-

@@ -1,17 +1,17 @@
 use std::io::{BufRead, BufReader, ErrorKind, Write};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
 use interprocess::TryClone;
 use interprocess::local_socket::{
-    traits::{Listener, Stream as StreamOps},
     GenericFilePath, ListenerOptions, Stream, ToFsName,
+    traits::{Listener, Stream as StreamOps},
 };
 use interprocess::local_socket::{GenericNamespaced, ToNsName};
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const IPC_SERVER_NAME: &str = "cligj-ipc-v1";
 const IPC_REQUEST_TIMEOUT: Duration = Duration::from_secs(8);
@@ -159,18 +159,10 @@ impl IpcBridge {
     pub(crate) fn stop(&self) {
         self.running.store(false, Ordering::Release);
 
-        let event_sender = self
-            .event_tx
-            .lock()
-            .ok()
-            .and_then(|mut slot| slot.take());
+        let event_sender = self.event_tx.lock().ok().and_then(|mut slot| slot.take());
         drop(event_sender);
 
-        let stop = self
-            .stop_tx
-            .lock()
-            .ok()
-            .and_then(|mut slot| slot.take());
+        let stop = self.stop_tx.lock().ok().and_then(|mut slot| slot.take());
         if let Some(tx) = stop {
             let _ = tx.send(());
         }
@@ -202,7 +194,12 @@ impl IpcBridge {
     }
 
     pub(crate) fn snapshot(&self) -> IpcStatus {
-        let mut out = self.status.lock().ok().map(|s| s.clone()).unwrap_or_default();
+        let mut out = self
+            .status
+            .lock()
+            .ok()
+            .map(|s| s.clone())
+            .unwrap_or_default();
         out.running = self.running.load(Ordering::Acquire);
         out.client_count = self.client_count.load(Ordering::Acquire);
         out
@@ -277,7 +274,9 @@ impl IpcBridge {
 }
 
 impl Drop for IpcBridge {
-    fn drop(&mut self) { self.stop(); }
+    fn drop(&mut self) {
+        self.stop();
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -378,33 +377,32 @@ fn run_server(
             .name("cligj-ipc-client".to_string())
             .spawn(move || {
                 let running_for_writer = Arc::clone(&running_client);
-                let writer_handle =
-                    thread::Builder::new()
-                        .name("cligj-ipc-client-writer".to_string())
-                        .spawn(move || {
-                            let mut stream = writer_stream;
-                            loop {
-                                match writer_rx.recv_timeout(Duration::from_millis(40)) {
-                                    Ok(line) => {
-                                        if stream.write_all(line.as_bytes()).is_err() {
-                                            break;
-                                        }
-                                        if stream.write_all(b"\n").is_err() {
-                                            break;
-                                        }
-                                        if stream.flush().is_err() {
-                                            break;
-                                        }
+                let writer_handle = thread::Builder::new()
+                    .name("cligj-ipc-client-writer".to_string())
+                    .spawn(move || {
+                        let mut stream = writer_stream;
+                        loop {
+                            match writer_rx.recv_timeout(Duration::from_millis(40)) {
+                                Ok(line) => {
+                                    if stream.write_all(line.as_bytes()).is_err() {
+                                        break;
                                     }
-                                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                                        if !running_for_writer.load(Ordering::Acquire) {
-                                            break;
-                                        }
+                                    if stream.write_all(b"\n").is_err() {
+                                        break;
                                     }
-                                    Err(mpsc::RecvTimeoutError::Disconnected) => break,
+                                    if stream.flush().is_err() {
+                                        break;
+                                    }
                                 }
+                                Err(mpsc::RecvTimeoutError::Timeout) => {
+                                    if !running_for_writer.load(Ordering::Acquire) {
+                                        break;
+                                    }
+                                }
+                                Err(mpsc::RecvTimeoutError::Disconnected) => break,
                             }
-                        });
+                        }
+                    });
 
                 handle_client_requests(
                     incoming,
@@ -415,7 +413,9 @@ fn run_server(
                 if let Ok(mut list) = peers_on_disconnect.lock() {
                     list.retain(|s| !std::ptr::eq(s, &writer_tx));
                 }
-                let cnt = clients_on_disconnect.fetch_sub(1, Ordering::AcqRel).saturating_sub(1);
+                let cnt = clients_on_disconnect
+                    .fetch_sub(1, Ordering::AcqRel)
+                    .saturating_sub(1);
                 if let Ok(mut s) = status_on_disconnect.lock() {
                     s.client_count = cnt;
                 }
@@ -721,12 +721,14 @@ fn create_listener() -> std::io::Result<interprocess::local_socket::Listener> {
         let mut last_err: Option<std::io::Error> = None;
         // Retry a few times to survive rapid stop->start races.
         for _ in 0..6 {
-            match IPC_SERVER_NAME.to_ns_name::<GenericNamespaced>().and_then(|name| {
-                ListenerOptions::new()
-                    .name(name)
-                    .nonblocking(interprocess::local_socket::ListenerNonblockingMode::Both)
-                    .create_sync()
-            }) {
+            match IPC_SERVER_NAME
+                .to_ns_name::<GenericNamespaced>()
+                .and_then(|name| {
+                    ListenerOptions::new()
+                        .name(name)
+                        .nonblocking(interprocess::local_socket::ListenerNonblockingMode::Both)
+                        .create_sync()
+                }) {
                 Ok(listener) => return Ok(listener),
                 Err(e) => {
                     last_err = Some(e);
@@ -778,4 +780,3 @@ fn endpoint_display_string() -> String {
         format!("/tmp/{IPC_SERVER_NAME}.sock")
     }
 }
-

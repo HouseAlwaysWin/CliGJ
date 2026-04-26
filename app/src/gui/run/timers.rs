@@ -5,23 +5,23 @@ use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
-use slint::{ComponentHandle, Model, SharedString, Timer};
+use serde_json::json;
 #[cfg(target_os = "windows")]
 use slint::winit_030::WinitWindowAccessor;
-use serde_json::json;
+use slint::{ComponentHandle, Model, SharedString, Timer};
 
 use crate::gui::ipc::{IpcBridge, IpcGuiCommand, IpcGuiResponse};
 use crate::gui::slint_ui::AppWindow;
-use crate::gui::state::{GuiState, TabState, TerminalChunk, TerminalMode, TERMINAL_SCROLLBACK_CAP};
+use crate::gui::state::{GuiState, TERMINAL_SCROLLBACK_CAP, TabState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{
     push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
-use cligj_terminal::types::RawPtyEvent;
 use cligj_terminal::render::ColoredLine;
+use cligj_terminal::types::RawPtyEvent;
 
 use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
 
@@ -180,6 +180,25 @@ fn append_interactive_history_block(tab: &mut TabState, lines: &[ColoredLine]) {
     append_interactive_snapshot(tab, lines);
 }
 
+fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
+    if new_origin <= tab.terminal_physical_origin {
+        return;
+    }
+    let dropped_len =
+        (new_origin - tab.terminal_physical_origin).min(tab.interactive_frame_lines.len());
+    if dropped_len == 0 {
+        tab.terminal_physical_origin = new_origin;
+        return;
+    }
+    let dropped: Vec<ColoredLine> = tab
+        .interactive_frame_lines
+        .iter()
+        .take(dropped_len)
+        .cloned()
+        .collect();
+    append_interactive_history_block(tab, &dropped);
+}
+
 fn visible_interactive_lines(lines: &[ColoredLine]) -> Vec<ColoredLine> {
     lines
         .iter()
@@ -242,25 +261,6 @@ fn maybe_archive_repainted_frame_before_replace(tab: &mut TabState, next_frame: 
         let dropped_len = current_visible.len() - viewport_overlap;
         archive_repainted_block_if_new(tab, &current_visible[..dropped_len]);
     }
-}
-
-fn archive_dropped_interactive_prefix(tab: &mut TabState, new_origin: usize) {
-    if new_origin <= tab.terminal_physical_origin {
-        return;
-    }
-    let dropped_len =
-        (new_origin - tab.terminal_physical_origin).min(tab.interactive_frame_lines.len());
-    if dropped_len == 0 {
-        tab.terminal_physical_origin = new_origin;
-        return;
-    }
-    let dropped: Vec<ColoredLine> = tab
-        .interactive_frame_lines
-        .iter()
-        .take(dropped_len)
-        .cloned()
-        .collect();
-    append_interactive_history_block(tab, &dropped);
 }
 
 fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine], markers: &[String]) -> bool {
@@ -429,13 +429,10 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
             entry.changed_indices = indices;
             entry.first_line_idx = Some(chunk.first_line_idx);
         }
-        
+
         entry.full_len = Some(chunk.full_len);
         entry.snapshot_len = Some(chunk.snapshot_len);
-        let keep_text = entry
-            .replace_lines
-            .as_ref()
-            .is_some_and(|l| l.is_empty())
+        let keep_text = entry.replace_lines.as_ref().is_some_and(|l| l.is_empty())
             && entry.changed_indices.is_empty();
         entry.replace_text = if keep_text { Some(chunk.text) } else { None };
         entry.append_text.clear();
@@ -466,9 +463,8 @@ fn apply_pending_updates(
         };
         let tab = &mut state.tabs[tab_idx];
         tab.append_raw_pty_events(std::mem::take(&mut update.raw_pty_events));
-        let stale_shell_update =
-            tab.terminal_mode == TerminalMode::InteractiveAi
-                && update.terminal_mode == Some(TerminalMode::Shell);
+        let stale_shell_update = tab.terminal_mode == TerminalMode::InteractiveAi
+            && update.terminal_mode == Some(TerminalMode::Shell);
         if stale_shell_update {
             // The launcher command is submitted while the reader may still have Shell snapshots
             // queued. Once the UI has switched to InteractiveAi, those Shell frames are stale
@@ -517,8 +513,7 @@ fn apply_pending_updates(
                         .iter()
                         .rposition(line_has_visible_text)
                         .map(|idx| {
-                            (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP)
-                                .min(snapshot_lines.len())
+                            (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP).min(snapshot_lines.len())
                         })
                         .unwrap_or(0);
                     snapshot_lines.truncate(frame_end);
@@ -582,62 +577,153 @@ fn apply_pending_updates(
                     reset_terminal_model_cache(tab);
                     tab.terminal_text.clear();
                 } else {
-                let previous_terminal_lines = if update.reset_terminal_buffer {
-                    Some(tab.terminal_lines.clone())
-                } else {
-                    None
-                };
-                if update.reset_terminal_buffer {
-                    // Resize rewrites/reflows the current screen. Do not archive the old frame;
-                    // the next snapshot is the replacement baseline.
-                    if !tab.interactive_archive_repainted_frames {
-                        tab.interactive_history_lines.clear();
-                        tab.interactive_last_archived_signature.clear();
+                    let previous_terminal_lines = if update.reset_terminal_buffer {
+                        Some(tab.terminal_lines.clone())
+                    } else {
+                        None
+                    };
+                    if update.reset_terminal_buffer {
+                        // Resize rewrites/reflows the current screen. Do not archive the old frame;
+                        // the next snapshot is the replacement baseline.
+                        if !tab.interactive_archive_repainted_frames {
+                            tab.interactive_history_lines.clear();
+                            tab.interactive_last_archived_signature.clear();
+                        }
+                        tab.interactive_frame_lines.clear();
+                        tab.terminal_lines.clear();
+                        tab.terminal_physical_origin = chunk_first_idx;
+                        tab.terminal_cursor_row = None;
+                        tab.terminal_cursor_col = None;
+                        reset_terminal_model_cache(tab);
                     }
-                    tab.interactive_frame_lines.clear();
+
+                    if chunk_first_idx < tab.terminal_physical_origin {
+                        let prepend = tab.terminal_physical_origin - chunk_first_idx;
+                        let mut rebased = vec![ColoredLine::default(); prepend];
+                        rebased.append(&mut tab.interactive_frame_lines);
+                        tab.interactive_frame_lines = rebased;
+                        tab.terminal_physical_origin = chunk_first_idx;
+                        reset_terminal_model_cache(tab);
+                    }
+
+                    let origin = tab.terminal_physical_origin;
+                    let leading = chunk_first_idx.saturating_sub(origin);
+                    if leading > 0 {
+                        let drop_leading = leading.min(tab.interactive_frame_lines.len());
+                        if drop_leading > 0 && !update.reset_terminal_buffer {
+                            let dropped: Vec<ColoredLine> = tab
+                                .interactive_frame_lines
+                                .iter()
+                                .take(drop_leading)
+                                .cloned()
+                                .collect();
+                            append_interactive_history_block(tab, &dropped);
+                        }
+                        tab.interactive_frame_lines.drain(0..drop_leading);
+                        tab.terminal_physical_origin =
+                            tab.terminal_physical_origin.saturating_add(drop_leading);
+                        if leading > drop_leading {
+                            tab.terminal_physical_origin = chunk_first_idx;
+                        }
+                    }
+
+                    let origin = tab.terminal_physical_origin;
+                    let local_len = phys_end.saturating_sub(origin);
+                    if local_len > tab.interactive_frame_lines.len() {
+                        tab.interactive_frame_lines
+                            .resize(local_len, ColoredLine::default());
+                    }
+
+                    let indices = &update.changed_indices;
+                    if indices.is_empty() && !new_lines.is_empty() {
+                        for i in 0..new_lines.len() {
+                            let phys = chunk_first_idx + i;
+                            let Some(local) = phys.checked_sub(origin) else {
+                                continue;
+                            };
+                            if local < tab.interactive_frame_lines.len() {
+                                tab.interactive_frame_lines[local] =
+                                    std::mem::take(&mut new_lines[i]);
+                            }
+                        }
+                    } else {
+                        for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
+                            let phys = chunk_first_idx + snapshot_idx;
+                            let Some(local) = phys.checked_sub(origin) else {
+                                continue;
+                            };
+                            if local < tab.interactive_frame_lines.len()
+                                && delta_idx < new_lines.len()
+                            {
+                                tab.interactive_frame_lines[local] =
+                                    std::mem::take(&mut new_lines[delta_idx]);
+                            }
+                        }
+                    }
+
+                    let tail_keep = phys_end.saturating_sub(origin);
+                    if tab.interactive_frame_lines.len() > tail_keep {
+                        tab.interactive_frame_lines.truncate(tail_keep);
+                    }
+
+                    let history_len = tab.interactive_history_lines.len();
+                    tab.terminal_cursor_row = update.cursor_row.and_then(|phys| {
+                        phys.checked_sub(tab.terminal_physical_origin)
+                            .map(|row| history_len + row)
+                    });
+                    tab.terminal_cursor_col = update.cursor_col;
+                    compose_interactive_terminal_lines(tab);
+                    if tab.terminal_lines.is_empty() {
+                        if let Some(previous_terminal_lines) = previous_terminal_lines {
+                            tab.terminal_lines = previous_terminal_lines;
+                            reset_terminal_model_cache(tab);
+                        }
+                    }
+                    if let Some(cursor_row) = tab.terminal_cursor_row {
+                        if cursor_row >= tab.terminal_lines.len() {
+                            tab.terminal_cursor_row = None;
+                        }
+                    }
+                    tab.terminal_text.clear();
+                }
+            } else {
+                if update.reset_terminal_buffer {
                     tab.terminal_lines.clear();
                     tab.terminal_physical_origin = chunk_first_idx;
                     tab.terminal_cursor_row = None;
                     tab.terminal_cursor_col = None;
-                    reset_terminal_model_cache(tab);
+                    tab.terminal_model_rows.clear();
+                    tab.terminal_model_hashes.clear();
+                    tab.terminal_model_dirty.clear();
+                    tab.last_window_first = usize::MAX;
+                    tab.last_window_last = usize::MAX;
+                    tab.last_window_total = usize::MAX;
                 }
 
                 if chunk_first_idx < tab.terminal_physical_origin {
                     let prepend = tab.terminal_physical_origin - chunk_first_idx;
                     let mut rebased = vec![ColoredLine::default(); prepend];
-                    rebased.append(&mut tab.interactive_frame_lines);
-                    tab.interactive_frame_lines = rebased;
+                    rebased.append(&mut tab.terminal_lines);
+                    tab.terminal_lines = rebased;
                     tab.terminal_physical_origin = chunk_first_idx;
-                    reset_terminal_model_cache(tab);
+                    tab.terminal_model_rows.clear();
+                    tab.terminal_model_hashes.clear();
+                    tab.terminal_model_dirty.clear();
+                    tab.last_window_first = usize::MAX;
+                    tab.last_window_last = usize::MAX;
+                    tab.last_window_total = usize::MAX;
                 }
 
                 let origin = tab.terminal_physical_origin;
-                let leading = chunk_first_idx.saturating_sub(origin);
-                if leading > 0 {
-                    let drop_leading = leading.min(tab.interactive_frame_lines.len());
-                    if drop_leading > 0 && !update.reset_terminal_buffer {
-                        let dropped: Vec<ColoredLine> = tab
-                            .interactive_frame_lines
-                            .iter()
-                            .take(drop_leading)
-                            .cloned()
-                            .collect();
-                        append_interactive_history_block(tab, &dropped);
-                    }
-                    tab.interactive_frame_lines.drain(0..drop_leading);
-                    tab.terminal_physical_origin =
-                        tab.terminal_physical_origin.saturating_add(drop_leading);
-                    if leading > drop_leading {
-                        tab.terminal_physical_origin = chunk_first_idx;
-                    }
-                }
 
-                let origin = tab.terminal_physical_origin;
+                // Dense buffer: index `i` is physical row `origin + i`. Resize to fit through phys_end.
                 let local_len = phys_end.saturating_sub(origin);
-                if local_len > tab.interactive_frame_lines.len() {
-                    tab.interactive_frame_lines
-                        .resize(local_len, ColoredLine::default());
+                if local_len > tab.terminal_lines.len() {
+                    tab.terminal_lines.resize(local_len, ColoredLine::default());
                 }
+
+                // Rows before `chunk_first_idx` are outside this snapshot; previously we filled them with
+                // blanks (see `compact_terminal_lines_after_snapshot` doc). Merge first, then drop.
 
                 let indices = &update.changed_indices;
                 if indices.is_empty() && !new_lines.is_empty() {
@@ -646,8 +732,11 @@ fn apply_pending_updates(
                         let Some(local) = phys.checked_sub(origin) else {
                             continue;
                         };
-                        if local < tab.interactive_frame_lines.len() {
-                            tab.interactive_frame_lines[local] = std::mem::take(&mut new_lines[i]);
+                        if local < tab.terminal_lines.len() {
+                            tab.terminal_lines[local] = std::mem::take(&mut new_lines[i]);
+                            tab.terminal_model_rows.remove(&local);
+                            tab.terminal_model_hashes.remove(&local);
+                            tab.terminal_model_dirty.insert(local);
                         }
                     }
                 } else {
@@ -656,30 +745,58 @@ fn apply_pending_updates(
                         let Some(local) = phys.checked_sub(origin) else {
                             continue;
                         };
-                        if local < tab.interactive_frame_lines.len() && delta_idx < new_lines.len()
-                        {
-                            tab.interactive_frame_lines[local] =
-                                std::mem::take(&mut new_lines[delta_idx]);
+                        if local < tab.terminal_lines.len() && delta_idx < new_lines.len() {
+                            tab.terminal_lines[local] = std::mem::take(&mut new_lines[delta_idx]);
+                            tab.terminal_model_rows.remove(&local);
+                            tab.terminal_model_hashes.remove(&local);
+                            tab.terminal_model_dirty.insert(local);
                         }
                     }
                 }
 
                 let tail_keep = phys_end.saturating_sub(origin);
-                if tab.interactive_frame_lines.len() > tail_keep {
-                    tab.interactive_frame_lines.truncate(tail_keep);
+                if tab.terminal_lines.len() > tail_keep {
+                    tab.terminal_lines.truncate(tail_keep);
+                    tab.terminal_model_rows.retain(|k, _| *k < tail_keep);
+                    tab.terminal_model_hashes.retain(|k, _| *k < tail_keep);
+                    tab.terminal_model_dirty.retain(|k| *k < tail_keep);
                 }
 
-                let history_len = tab.interactive_history_lines.len();
-                tab.terminal_cursor_row = update.cursor_row.and_then(|phys| {
-                    phys.checked_sub(tab.terminal_physical_origin)
-                        .map(|row| history_len + row)
-                });
+                let leading = chunk_first_idx.saturating_sub(origin);
+                let drop_snapshot_prefix = update.reset_terminal_buffer
+                    && tab.terminal_mode == TerminalMode::InteractiveAi;
+                compact_terminal_lines_after_snapshot(tab, leading, drop_snapshot_prefix);
+
+                tab.terminal_cursor_row = update
+                    .cursor_row
+                    .and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
                 tab.terminal_cursor_col = update.cursor_col;
-                compose_interactive_terminal_lines(tab);
-                if tab.terminal_lines.is_empty() {
-                    if let Some(previous_terminal_lines) = previous_terminal_lines {
-                        tab.terminal_lines = previous_terminal_lines;
-                        reset_terminal_model_cache(tab);
+
+                // 裁掉游標以下的尾端空白行（PTY screen 的空白填充），
+                // 避免 terminal_total_lines 過大導致新分頁出現不必要的滾輪。
+                let cursor_local_end = tab.terminal_cursor_row.map(|r| r + 1).unwrap_or(0);
+                let interactive_tail_end = tab
+                    .terminal_lines
+                    .iter()
+                    .rposition(line_has_visible_text)
+                    .map(|idx| {
+                        (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP).min(tab.terminal_lines.len())
+                    })
+                    .unwrap_or(0);
+                let trim_floor = if tab.terminal_mode == TerminalMode::InteractiveAi {
+                    interactive_tail_end
+                } else {
+                    cursor_local_end
+                };
+                while tab.terminal_lines.len() > trim_floor {
+                    if tab
+                        .terminal_lines
+                        .last()
+                        .is_some_and(|line| !line_has_visible_text(line))
+                    {
+                        tab.terminal_lines.pop();
+                    } else {
+                        break;
                     }
                 }
                 if let Some(cursor_row) = tab.terminal_cursor_row {
@@ -687,128 +804,10 @@ fn apply_pending_updates(
                         tab.terminal_cursor_row = None;
                     }
                 }
+
+                tab.enforce_scrollback_cap();
                 tab.terminal_text.clear();
-                }
-            } else {
-                if update.reset_terminal_buffer {
-                tab.terminal_lines.clear();
-                tab.terminal_physical_origin = chunk_first_idx;
-                tab.terminal_cursor_row = None;
-                tab.terminal_cursor_col = None;
-                tab.terminal_model_rows.clear();
-                tab.terminal_model_hashes.clear();
-                tab.terminal_model_dirty.clear();
-                tab.last_window_first = usize::MAX;
-                tab.last_window_last = usize::MAX;
-                tab.last_window_total = usize::MAX;
             }
-
-            if chunk_first_idx < tab.terminal_physical_origin {
-                let prepend = tab.terminal_physical_origin - chunk_first_idx;
-                let mut rebased = vec![ColoredLine::default(); prepend];
-                rebased.append(&mut tab.terminal_lines);
-                tab.terminal_lines = rebased;
-                tab.terminal_physical_origin = chunk_first_idx;
-                tab.terminal_model_rows.clear();
-                tab.terminal_model_hashes.clear();
-                tab.terminal_model_dirty.clear();
-                tab.last_window_first = usize::MAX;
-                tab.last_window_last = usize::MAX;
-                tab.last_window_total = usize::MAX;
-            }
-
-            let origin = tab.terminal_physical_origin;
-
-            // Dense buffer: index `i` is physical row `origin + i`. Resize to fit through phys_end.
-            let local_len = phys_end.saturating_sub(origin);
-            if local_len > tab.terminal_lines.len() {
-                tab.terminal_lines.resize(local_len, ColoredLine::default());
-            }
-
-            // Rows before `chunk_first_idx` are outside this snapshot; previously we filled them with
-            // blanks (see `compact_terminal_lines_after_snapshot` doc). Merge first, then drop.
-
-            let indices = &update.changed_indices;
-            if indices.is_empty() && !new_lines.is_empty() {
-                for i in 0..new_lines.len() {
-                    let phys = chunk_first_idx + i;
-                    let Some(local) = phys.checked_sub(origin) else {
-                        continue;
-                    };
-                    if local < tab.terminal_lines.len() {
-                        tab.terminal_lines[local] = std::mem::take(&mut new_lines[i]);
-                        tab.terminal_model_rows.remove(&local);
-                        tab.terminal_model_hashes.remove(&local);
-                        tab.terminal_model_dirty.insert(local);
-                    }
-                }
-            } else {
-                for (delta_idx, &snapshot_idx) in indices.iter().enumerate() {
-                    let phys = chunk_first_idx + snapshot_idx;
-                    let Some(local) = phys.checked_sub(origin) else {
-                        continue;
-                    };
-                    if local < tab.terminal_lines.len() && delta_idx < new_lines.len() {
-                        tab.terminal_lines[local] = std::mem::take(&mut new_lines[delta_idx]);
-                        tab.terminal_model_rows.remove(&local);
-                        tab.terminal_model_hashes.remove(&local);
-                        tab.terminal_model_dirty.insert(local);
-                    }
-                }
-            }
-
-            let tail_keep = phys_end.saturating_sub(origin);
-            if tab.terminal_lines.len() > tail_keep {
-                tab.terminal_lines.truncate(tail_keep);
-                tab.terminal_model_rows.retain(|k, _| *k < tail_keep);
-                tab.terminal_model_hashes.retain(|k, _| *k < tail_keep);
-                tab.terminal_model_dirty.retain(|k| *k < tail_keep);
-            }
-
-            let leading = chunk_first_idx.saturating_sub(origin);
-            let drop_snapshot_prefix =
-                update.reset_terminal_buffer && tab.terminal_mode == TerminalMode::InteractiveAi;
-            compact_terminal_lines_after_snapshot(tab, leading, drop_snapshot_prefix);
-
-            tab.terminal_cursor_row = update
-                .cursor_row
-                .and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
-            tab.terminal_cursor_col = update.cursor_col;
-
-            // 裁掉游標以下的尾端空白行（PTY screen 的空白填充），
-            // 避免 terminal_total_lines 過大導致新分頁出現不必要的滾輪。
-            let cursor_local_end = tab.terminal_cursor_row.map(|r| r + 1).unwrap_or(0);
-            let interactive_tail_end = tab
-                .terminal_lines
-                .iter()
-                .rposition(line_has_visible_text)
-                .map(|idx| (idx + 1 + INTERACTIVE_TRAILING_BLANK_KEEP).min(tab.terminal_lines.len()))
-                .unwrap_or(0);
-            let trim_floor = if tab.terminal_mode == TerminalMode::InteractiveAi {
-                interactive_tail_end
-            } else {
-                cursor_local_end
-            };
-            while tab.terminal_lines.len() > trim_floor {
-                if tab
-                    .terminal_lines
-                    .last()
-                    .is_some_and(|line| !line_has_visible_text(line))
-                {
-                    tab.terminal_lines.pop();
-                } else {
-                    break;
-                }
-            }
-            if let Some(cursor_row) = tab.terminal_cursor_row {
-                if cursor_row >= tab.terminal_lines.len() {
-                    tab.terminal_cursor_row = None;
-                }
-            }
-
-            tab.enforce_scrollback_cap();
-            tab.terminal_text.clear();
-                }
         }
 
         if !update.append_text.is_empty() && !replaced_with_vt_lines {
@@ -999,12 +998,7 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
     })
 }
 
-fn handle_ipc_gui_command(
-    ui: &AppWindow,
-    s: &mut GuiState,
-    ipc: &IpcBridge,
-    cmd: IpcGuiCommand,
-) {
+fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd: IpcGuiCommand) {
     match cmd {
         IpcGuiCommand::OpenTab {
             id,
@@ -1141,7 +1135,9 @@ fn handle_ipc_gui_command(
                 .iter()
                 .rev()
                 .filter_map(|origin| origin.as_ref())
-                .find(|origin| !origin.client_id.trim().is_empty() || !origin.uri_scheme.trim().is_empty())
+                .find(|origin| {
+                    !origin.client_id.trim().is_empty() || !origin.uri_scheme.trim().is_empty()
+                })
                 .cloned()
             {
                 s.tabs[cur].prompt_last_file_origin = Some(origin);
@@ -1152,7 +1148,9 @@ fn handle_ipc_gui_command(
                 s.tabs[cur].prompt_picked_selections = selection_payloads;
                 s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
                 s.tabs[cur].prompt_picked_file_origins = file_origin_payloads_converted;
-                while s.tabs[cur].prompt_picked_file_origins.len() < s.tabs[cur].prompt_picked_files_abs.len() {
+                while s.tabs[cur].prompt_picked_file_origins.len()
+                    < s.tabs[cur].prompt_picked_files_abs.len()
+                {
                     s.tabs[cur].prompt_picked_file_origins.push(None);
                 }
                 crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
@@ -1169,7 +1167,11 @@ fn handle_ipc_gui_command(
                 ui.set_ws_prompt(SharedString::from(merged_prompt.as_str()));
                 s.tabs[cur].prompt = SharedString::from(merged_prompt.as_str());
                 for payload in selection_payloads {
-                    if !s.tabs[cur].prompt_picked_selections.iter().any(|p| p == &payload) {
+                    if !s.tabs[cur]
+                        .prompt_picked_selections
+                        .iter()
+                        .any(|p| p == &payload)
+                    {
                         s.tabs[cur].prompt_picked_selections.push(payload);
                     }
                 }
@@ -1178,7 +1180,11 @@ fn handle_ipc_gui_command(
                         .into_iter()
                         .chain(std::iter::repeat(None)),
                 ) {
-                    if !s.tabs[cur].prompt_picked_files_abs.iter().any(|p| p == &path) {
+                    if !s.tabs[cur]
+                        .prompt_picked_files_abs
+                        .iter()
+                        .any(|p| p == &path)
+                    {
                         s.tabs[cur].prompt_picked_files_abs.push(path);
                         s.tabs[cur].prompt_picked_file_origins.push(origin);
                     }
@@ -1292,48 +1298,52 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
     let app_weak = app.as_weak();
     let timer = Timer::default();
     const PROMPT_UNDO_CAP: usize = 200;
-    timer.start(slint::TimerMode::Repeated, Duration::from_millis(20), move || {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = state.borrow_mut();
-        if s.current >= s.tabs.len() {
-            return;
-        }
-        
-        let prompt_now = ui.get_ws_prompt().to_string();
-        let raw = ui.get_ws_raw_input();
-        let key = (s.current, prompt_now, raw);
-        
-        if s.timer_snapshot.as_ref() == Some(&key) {
-            return;
-        }
-
-        if !key.1.is_empty() {
-            auto_disable_raw_on_cjk_prompt(&ui, &mut s);
-        }
-        // Keep tab prompt + attachment chips synchronized on every real composer change.
-        let cur = s.current;
-        let old_prompt = s.tabs[cur].prompt.to_string();
-        let new_prompt = key.1.clone();
-        if old_prompt != new_prompt {
-            let tab = &mut s.tabs[cur];
-            tab.prompt_undo_stack.push(old_prompt);
-            if tab.prompt_undo_stack.len() > PROMPT_UNDO_CAP {
-                let overflow = tab.prompt_undo_stack.len() - PROMPT_UNDO_CAP;
-                tab.prompt_undo_stack.drain(0..overflow);
+    timer.start(
+        slint::TimerMode::Repeated,
+        Duration::from_millis(20),
+        move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if s.current >= s.tabs.len() {
+                return;
             }
-            tab.prompt_redo_stack.clear();
-        }
-        tab_update_from_ui(&mut s.tabs[cur], &ui);
-        
-        sync_composer_line_to_conpty(&ui, &mut s);
-        sync_at_file_picker(&ui, &mut s);
-        
-        if s.current < s.tabs.len() {
-            s.timer_snapshot = Some(key);
-        }
-    });
+
+            let prompt_now = ui.get_ws_prompt().to_string();
+            let raw = ui.get_ws_raw_input();
+            let key = (s.current, prompt_now, raw);
+
+            if s.timer_snapshot.as_ref() == Some(&key) {
+                return;
+            }
+
+            if !key.1.is_empty() {
+                auto_disable_raw_on_cjk_prompt(&ui, &mut s);
+            }
+            // Keep tab prompt + attachment chips synchronized on every real composer change.
+            let cur = s.current;
+            let old_prompt = s.tabs[cur].prompt.to_string();
+            let new_prompt = key.1.clone();
+            if old_prompt != new_prompt {
+                let tab = &mut s.tabs[cur];
+                tab.prompt_undo_stack.push(old_prompt);
+                if tab.prompt_undo_stack.len() > PROMPT_UNDO_CAP {
+                    let overflow = tab.prompt_undo_stack.len() - PROMPT_UNDO_CAP;
+                    tab.prompt_undo_stack.drain(0..overflow);
+                }
+                tab.prompt_redo_stack.clear();
+            }
+            tab_update_from_ui(&mut s.tabs[cur], &ui);
+
+            sync_composer_line_to_conpty(&ui, &mut s);
+            sync_at_file_picker(&ui, &mut s);
+
+            if s.current < s.tabs.len() {
+                s.timer_snapshot = Some(key);
+            }
+        },
+    );
     timer
 }
 
@@ -1344,15 +1354,19 @@ pub(crate) fn spawn_inject_startup_timer(
 ) -> Timer {
     let app_weak = app.as_weak();
     let timer = Timer::default();
-    timer.start(slint::TimerMode::SingleShot, Duration::from_millis(500), move || {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = state.borrow_mut();
-        if let Err(e) = inject_path_into_current(&ui, &mut s, path.as_path()) {
-            eprintln!("CliGJ: --inject-file {}: {e}", path.display());
-        }
-    });
+    timer.start(
+        slint::TimerMode::SingleShot,
+        Duration::from_millis(500),
+        move || {
+            let Some(ui) = app_weak.upgrade() else {
+                return;
+            };
+            let mut s = state.borrow_mut();
+            if let Err(e) = inject_path_into_current(&ui, &mut s, path.as_path()) {
+                eprintln!("CliGJ: --inject-file {}: {e}", path.display());
+            }
+        },
+    );
     timer
 }
 
@@ -1383,10 +1397,7 @@ mod tests {
         ];
         let markers = vec!["openai codex".to_string(), "/model to change".to_string()];
 
-        assert!(!trim_or_drop_shell_preamble_snapshot(
-            &mut lines,
-            &markers
-        ));
+        assert!(!trim_or_drop_shell_preamble_snapshot(&mut lines, &markers));
         assert_eq!(line_plain_text(&lines[0]), ">_ OpenAI Codex (v0.123.0)");
     }
 
@@ -1422,14 +1433,9 @@ mod tests {
         tab.terminal_mode = TerminalMode::InteractiveAi;
         tab.interactive_launcher_program = "codex".to_string();
         tab.interactive_archive_repainted_frames = true;
-        tab.interactive_frame_lines = vec![
-            line("│  >_ OpenAI Codex       │"),
-            line("\u{203a} /st"),
-        ];
-        let next = vec![
-            line("│  >_ OpenAI Codex       │"),
-            line("\u{203a} /sta"),
-        ];
+        tab.interactive_frame_lines =
+            vec![line("│  >_ OpenAI Codex       │"), line("\u{203a} /st")];
+        let next = vec![line("│  >_ OpenAI Codex       │"), line("\u{203a} /sta")];
 
         maybe_archive_repainted_frame_before_replace(&mut tab, &next);
         assert!(tab.interactive_history_lines.is_empty());

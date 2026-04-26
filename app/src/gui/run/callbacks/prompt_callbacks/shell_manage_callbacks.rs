@@ -11,7 +11,6 @@ use std::time::Duration;
 use serde::Deserialize;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 
-use cligj_core::config::AppConfig;
 use crate::gui::fonts::{
     normalize_terminal_cjk_fallback_font_family, normalize_terminal_font_family,
 };
@@ -22,12 +21,14 @@ use crate::gui::shell_profiles::{
 };
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
 use crate::gui::state::GuiState;
+use cligj_core::config::AppConfig;
 
 use super::super::{model_interactive_editor_rows, set_shell_manage_rows};
 
 const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
 const APP_AUTHOR: &str = "HouseAlwaysWin";
-const RELEASES_API_URL: &str = "https://api.github.com/repos/HouseAlwaysWin/CliGJ/releases?per_page=20";
+const RELEASES_API_URL: &str =
+    "https://api.github.com/repos/HouseAlwaysWin/CliGJ/releases?per_page=20";
 const MAX_UPDATE_VERSIONS: usize = 10;
 const APP_VERSION: &str = match option_env!("CLIGJ_APP_VERSION") {
     Some(v) => v,
@@ -245,8 +246,7 @@ fn download_release_asset_to_temp(
     if !resp.status().is_success() {
         return Err(format!("download failed: HTTP {}", resp.status()));
     }
-    let mut out =
-        File::create(&target_path).map_err(|e| format!("create file failed: {e}"))?;
+    let mut out = File::create(&target_path).map_err(|e| format!("create file failed: {e}"))?;
     copy(&mut resp, &mut out).map_err(|e| format!("write file failed: {e}"))?;
     Ok(target_path)
 }
@@ -325,7 +325,10 @@ fn extract_release_zip_to_temp(zip_path: &Path, version: &str) -> Result<PathBuf
 
 #[cfg(target_os = "windows")]
 fn is_temp_update_path(path: &Path) -> bool {
-    let p = path.to_string_lossy().to_ascii_lowercase().replace('\\', "/");
+    let p = path
+        .to_string_lossy()
+        .to_ascii_lowercase()
+        .replace('\\', "/");
     p.contains("/temp/cligj-updates/")
 }
 
@@ -356,16 +359,16 @@ fn persist_stable_exe_path(path: &Path) {
         return;
     }
     if let Ok(mut cfg) = AppConfig::load_or_default() {
-        let _ = cfg.set_value(
-            "ui.stable_exe_path",
-            path.to_string_lossy().to_string(),
-        );
+        let _ = cfg.set_value("ui.stable_exe_path", path.to_string_lossy().to_string());
         let _ = cfg.save();
     }
 }
 
 #[cfg(target_os = "windows")]
-fn launch_windows_self_replace_updater(downloaded_exe: &Path, target_exe: &Path) -> Result<(), String> {
+fn launch_windows_self_replace_updater(
+    downloaded_exe: &Path,
+    target_exe: &Path,
+) -> Result<(), String> {
     let updates_root = std::env::temp_dir().join("cligj-updates");
     fs::create_dir_all(&updates_root).map_err(|e| format!("create temp folder failed: {e}"))?;
     let stamp = std::time::SystemTime::now()
@@ -845,7 +848,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             let mut s = st_shell_save.borrow_mut();
             s.shell_profiles = out;
             let fallback = default_shell_profile_name(&*s);
-            let allowed: HashSet<String> = s.shell_profiles.iter().map(|(n, _, _)| n.clone()).collect();
+            let allowed: HashSet<String> =
+                s.shell_profiles.iter().map(|(n, _, _)| n.clone()).collect();
             for tab in &mut s.tabs {
                 if !allowed.contains(&tab.cmd_type) {
                     tab.cmd_type = fallback.clone();
@@ -927,7 +931,9 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 cfg.set_ui_language(language.as_str());
                 cfg.set_default_shell_profile(profile.as_str());
                 cfg.set_terminal_font_family(terminal_font_family.as_str());
-                cfg.set_terminal_cjk_fallback_font_family(terminal_cjk_fallback_font_family.as_str());
+                cfg.set_terminal_cjk_fallback_font_family(
+                    terminal_cjk_fallback_font_family.as_str(),
+                );
                 if let Err(e) = cfg.save() {
                     eprintln!("CliGJ: save config: {e}");
                     return;
@@ -985,4 +991,3 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         ui.set_ws_shell_manage_open(false);
     });
 }
-
