@@ -132,6 +132,8 @@ export component AppWindow inherits Window {
     callback terminal-viewport-changed;
     callback terminal-resize-requested(int, int);
     callback terminal-wheel(int) -> bool;
+    callback terminal-context-copy-requested;
+    callback terminal-context-clear-requested;
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
@@ -404,6 +406,12 @@ export component AppWindow inherits Window {
                         }
                         terminal-wheel(delta) => {
                             root.terminal-wheel(delta)
+                        }
+                        terminal-context-copy-requested => {
+                            root.terminal-context-copy-requested();
+                        }
+                        terminal-context-clear-requested => {
+                            root.terminal-context-clear-requested();
                         }
                     }
                 }

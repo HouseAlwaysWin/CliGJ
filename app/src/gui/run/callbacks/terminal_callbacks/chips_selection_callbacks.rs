@@ -2,14 +2,14 @@ use std::cell::RefCell;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, Model, SharedString};
 
 use crate::gui::ipc::IpcBridge;
 use crate::gui::open_in_vscode::open_path_in_editor;
 use crate::gui::reveal_in_explorer::reveal_path_in_file_manager;
 use crate::gui::run::helpers::{
-    clear_all_prompt_files, copy_to_clipboard, remove_prompt_file_at,
-    selected_text_from_terminal_lines,
+    clear_all_prompt_files, copy_to_clipboard, remove_prompt_file_at, selected_text_from_terminal_lines,
+    terminal_history_plain_text,
 };
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TabState, workspace_root_for_tab_with_profile};
@@ -157,6 +157,72 @@ pub(super) fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiS
         let current = s.current;
         s.tabs[current].selected_context = SharedString::from(selected.as_str());
         ui.set_ws_selected_context(SharedString::from(selected.as_str()));
+    });
+}
+
+pub(super) fn connect_terminal_context_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    let st_copy = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_context_copy_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = st_copy.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let selected = s.tabs[current].selected_context.to_string();
+        let text = if selected.trim().is_empty() {
+            terminal_history_plain_text(&s.tabs[current])
+        } else {
+            selected
+        };
+        if text.trim().is_empty() {
+            return;
+        }
+        if let Err(e) = copy_to_clipboard(text.as_str()) {
+            eprintln!("CliGJ: terminal context copy: {e}");
+            return;
+        }
+        s.tabs[current].selected_context = SharedString::from(text.as_str());
+        ui.set_ws_selected_context(SharedString::from(text.as_str()));
+    });
+
+    let st_clear = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_context_clear_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = st_clear.borrow_mut();
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let tab = &mut s.tabs[current];
+        tab.terminal_text.clear();
+        tab.terminal_lines.clear();
+        tab.interactive_frame_lines.clear();
+        tab.interactive_history_lines.clear();
+        tab.interactive_last_archived_signature.clear();
+        tab.terminal_model_rows.clear();
+        tab.terminal_model_hashes.clear();
+        tab.terminal_model_dirty.clear();
+        tab.terminal_physical_origin = 0;
+        tab.terminal_cursor_row = None;
+        tab.terminal_cursor_col = None;
+        tab.last_window_first = usize::MAX;
+        tab.last_window_last = usize::MAX;
+        tab.last_window_total = usize::MAX;
+        tab.terminal_saved_scroll_top_px = 0.0;
+        tab.selected_context = SharedString::new();
+        while tab.terminal_slint_model.row_count() > 0 {
+            tab.terminal_slint_model.remove(0);
+        }
+        ui.set_ws_selected_context(SharedString::new());
+        crate::gui::ui_sync::load_tab_to_ui(&ui, tab);
+        ui.invoke_ws_scroll_terminal_to_top();
     });
 }
 

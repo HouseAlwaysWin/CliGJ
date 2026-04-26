@@ -80,6 +80,7 @@ pub(crate) fn connect(
     prompt_callbacks::connect_prompt_and_picker(app, Rc::clone(&state));
     terminal_callbacks::connect_chips(app, Rc::clone(&state), ipc.clone());
     terminal_callbacks::connect_terminal_selection(app, Rc::clone(&state));
+    terminal_callbacks::connect_terminal_context_menu(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_viewport(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_resize(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_wheel(app, Rc::clone(&state));

@@ -18,6 +18,10 @@ pub(super) fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiS
     chips_selection_callbacks::connect_terminal_selection(app, state);
 }
 
+pub(super) fn connect_terminal_context_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    chips_selection_callbacks::connect_terminal_context_menu(app, state);
+}
+
 pub(super) fn connect_terminal_history(
     app: &AppWindow,
     state: Rc<RefCell<GuiState>>,

@@ -25,6 +25,8 @@ export component GjViewer inherits Rectangle {
     callback viewport-changed;
     callback terminal-resize-requested(int, int);
     callback terminal-wheel(int) -> bool;
+    callback terminal-context-copy-requested;
+    callback terminal-context-clear-requested;
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px;
     /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
@@ -32,6 +34,9 @@ export component GjViewer inherits Rectangle {
     private property <int> last-resize-rows: 0;
     private property <bool> drag-active: false;
     private property <bool> has-selection: false;
+    private property <bool> context-menu-open: false;
+    private property <length> context-menu-x: 0px;
+    private property <length> context-menu-y: 0px;
     private property <int> drag-start-row: 0;
     private property <int> drag-end-row: 0;
     private property <int> drag-start-col: 0;
@@ -412,7 +417,12 @@ export component GjViewer inherits Rectangle {
         height: sv.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.context-menu-open = false;
                 root.begin-selection(self.mouse-x, self.mouse-y);
+            } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                root.context-menu-x = min(self.mouse-x, max(0px, self.width - 134px));
+                root.context-menu-y = min(self.mouse-y, max(0px, self.height - 66px));
+                root.context-menu-open = true;
             } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left) {
                 root.end-selection();
             }
@@ -420,6 +430,80 @@ export component GjViewer inherits Rectangle {
         moved => {
             if (self.pressed) {
                 root.update-selection(self.mouse-x, self.mouse-y);
+            }
+        }
+    }
+
+    if (root.context-menu-open) : Rectangle {
+        z: 140;
+        x: root.terminal-left-inset + root.context-menu-x;
+        y: root.context-menu-y;
+        width: 132px;
+        height: 64px;
+        border-width: 1px;
+        border-color: AppTheme.prompt_chrome_border;
+        border-radius: 6px;
+        background: #1a1d24;
+
+        VerticalLayout {
+            padding: 4px;
+            spacing: 2px;
+
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: copy_ta.has-hover ? #2b2d33 : #00000000;
+
+                Text {
+                    text: @tr("複製");
+                    color: AppTheme.text;
+                    vertical-alignment: center;
+                    x: 10px;
+                    width: parent.width - 10px;
+                    height: parent.height;
+                }
+
+                copy_ta := TouchArea {
+                    clicked => {
+                        root.context-menu-open = false;
+                        root.terminal-context-copy-requested();
+                    }
+                }
+            }
+
+            Rectangle {
+                height: 26px;
+                border-radius: 4px;
+                background: clear_ta.has-hover ? #2b2d33 : #00000000;
+
+                Text {
+                    text: @tr("清除畫面");
+                    color: AppTheme.text;
+                    vertical-alignment: center;
+                    x: 10px;
+                    width: parent.width - 10px;
+                    height: parent.height;
+                }
+
+                clear_ta := TouchArea {
+                    clicked => {
+                        root.context-menu-open = false;
+                        root.terminal-context-clear-requested();
+                    }
+                }
+            }
+        }
+    }
+
+    if (root.context-menu-open) : TouchArea {
+        z: 130;
+        x: root.terminal-left-inset;
+        y: 0px;
+        width: max(0px, parent.width - root.terminal-left-inset);
+        height: parent.height;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+                root.context-menu-open = false;
             }
         }
     }
