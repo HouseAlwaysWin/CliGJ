@@ -237,6 +237,15 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 );
                 let inject_ok = {
                     let mut s = st_keys.borrow_mut();
+                    if s.current < s.tabs.len() {
+                        let cur = s.current;
+                        let tab = &mut s.tabs[cur];
+                        // If the user is actively typing in interactive raw mode, keep following
+                        // the latest output so prompt redraws don't end up off-screen.
+                        if raw_tty && !is_nav && tab.terminal_mode == crate::gui::state::TerminalMode::InteractiveAi {
+                            tab.interactive_follow_output = true;
+                        }
+                    }
                     s.inject_bytes_into_current(&ui, &bytes)
                 };
                 match &inject_ok {
