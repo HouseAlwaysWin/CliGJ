@@ -28,6 +28,12 @@ use super::ui_sync::{load_tab_to_ui, sync_tab_count};
 mod callbacks;
 mod helpers;
 mod timers;
+mod timers_ipc;
+mod timers_terminal_interactive;
+mod timers_terminal_shell;
+mod timers_terminal;
+#[cfg(test)]
+mod timers_tests;
 
 const APP_GITHUB_URL: &str = "https://github.com/HouseAlwaysWin/CliGJ";
 const APP_AUTHOR: &str = "HouseAlwaysWin";
