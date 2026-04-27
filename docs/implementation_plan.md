@@ -52,7 +52,7 @@ This is correct for normal operation but wrong when the resize path has already 
 
 ## Proposed Changes
 
-### [MODIFY] [windows_conpty.rs](file:///d:/DotNetProjects/CliGJ/src/terminal/windows_conpty.rs)
+### [MODIFY] [windows_conpty.rs](file:///d:/Projects/CliGJ/app/src/terminal/windows_conpty.rs)
 
 **Change 1: Clear history on resize in InteractiveAi mode**
 
@@ -65,7 +65,7 @@ When a resize occurs in `InteractiveAi` mode, the entire wezterm-term buffer is 
 
 After a resize settle, the reader already sends a full snapshot with `changed_indices` empty (because `line_cache` was cleared). This part is correct. No changes needed.
 
-### [MODIFY] [timers.rs](file:///d:/DotNetProjects/CliGJ/src/gui/run/timers.rs)
+### [MODIFY] [timers.rs](file:///d:/Projects/CliGJ/app/src/gui/run/timers.rs)
 
 **Change 1: On `reset_terminal_buffer` in InteractiveAi mode, discard history instead of archiving**
 

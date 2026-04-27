@@ -1,17 +1,17 @@
 # 終端與 PTY 邏輯重構計畫
 
 ## 1. 背景與動機 (Background & Motivation)
-目前 `CliGJ` 專案中的終端邏輯高度耦合在 `src/terminal/windows_conpty.rs` 中。這個檔案不僅包含了 Windows 專屬的 `CreatePseudoConsole` 底層 API 呼叫，還包含了跨平台的終端模擬（使用 `wezterm-term`）、背景讀取執行緒（Reader Thread）、指紋識別（Fingerprinting）以及渲染快照生成。
+目前 `CliGJ` 專案中的終端邏輯高度耦合在 `app/src/terminal/windows_conpty.rs` 中。這個檔案不僅包含了 Windows 專屬的 `CreatePseudoConsole` 底層 API 呼叫，還包含了跨平台的終端模擬（使用 `wezterm-term`）、背景讀取執行緒（Reader Thread）、指紋識別（Fingerprinting）以及渲染快照生成。
 為了讓未來更容易支援 macOS/Linux，並朝向將 `cligj-terminal` 提取為獨立 Crate 的目標邁進，必須將「作業系統的 PTY 實作」與「跨平台的終端模擬及狀態管理」解耦。
 
 ## 2. 範圍與影響 (Scope & Impact)
-- **影響範圍**：主要重構 `src/terminal/*` 目錄內的程式碼。
-- **外部依賴**：`src/gui/run/timers.rs` 和 `src/gui/run/mod.rs` 將需要更新匯入路徑，但其核心的 AI 歷史記錄合併邏輯將保持不變。
+- **影響範圍**：主要重構 `app/src/terminal/*` 目錄內的程式碼。
+- **外部依賴**：`app/src/gui/run/timers.rs` 和 `app/src/gui/run/mod.rs` 將需要更新匯入路徑，但其核心的 AI 歷史記錄合併邏輯將保持不變。
 - **目標平台**：維持現有 Windows 支援的穩定性，並為未來 Unix 平台留下乾淨的介面。
 
 ## 3. 解決方案 (Proposed Solution)
 
-我們將 `src/terminal/` 拆分為以下幾個明確的模組：
+我們將 `app/src/terminal/` 拆分為以下幾個明確的模組：
 
 1. **`types.rs` (數據結構層)**
    - 集中定義所有終端與 GUI 溝通的共用結構，包含：`TerminalRender`、`ReaderRenderMode`、`ControlCommand` 等。
@@ -34,12 +34,12 @@
 
 ## 4. 實作步驟 (Implementation Steps)
 
-- **步驟一**：建立 `src/terminal/types.rs`，從 `windows_conpty.rs` 遷移通用的結構體與列舉。
-- **步驟二**：建立 `src/terminal/pty.rs`，定義 `PtyProcess` 和 `PtyReader` / `PtyWriter` 的特徵。
-- **步驟三**：建立 `src/terminal/session.rs`，遷移並重構 `start_reader_thread` 及其相依的快照邏輯（如 `terminal_render_from_lines_cached`）。
-- **步驟四**：重構 `src/terminal/windows_conpty.rs`，使其僅負責 Windows API 呼叫，並返回符合抽象層介面的物件。
-- **步驟五**：更新 `src/terminal/mod.rs` 以匯出新的模組結構。
-- **步驟六**：修復 `src/gui/run/mod.rs`、`src/gui/run/timers.rs` 等外部呼叫處的匯入路徑及初始化邏輯。
+- **步驟一**：建立 `app/src/terminal/types.rs`，從 `windows_conpty.rs` 遷移通用的結構體與列舉。
+- **步驟二**：建立 `app/src/terminal/pty.rs`，定義 `PtyProcess` 和 `PtyReader` / `PtyWriter` 的特徵。
+- **步驟三**：建立 `app/src/terminal/session.rs`，遷移並重構 `start_reader_thread` 及其相依的快照邏輯（如 `terminal_render_from_lines_cached`）。
+- **步驟四**：重構 `app/src/terminal/windows_conpty.rs`，使其僅負責 Windows API 呼叫，並返回符合抽象層介面的物件。
+- **步驟五**：更新 `app/src/terminal/mod.rs` 以匯出新的模組結構。
+- **步驟六**：修復 `app/src/gui/run/mod.rs`、`app/src/gui/run/timers.rs` 等外部呼叫處的匯入路徑及初始化邏輯。
 
 ## 5. 驗證與測試 (Verification & Testing)
 - 確保專案能成功編譯 (`cargo build`)。
