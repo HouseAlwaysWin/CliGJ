@@ -393,6 +393,41 @@ export component GjViewer inherits Rectangle {
         }
     }
 
+    // Middle-click Autoscroll Layer
+    TouchArea {
+        z: 150;
+        enabled: root.terminal-total-lines > 0;
+        x: root.terminal-left-inset;
+        y: 0px;
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
+        height: parent.height;
+        mouse-cursor: root.middle-drag-active ? MouseCursor.move : MouseCursor.default;
+        
+        pointer-event(e) => {
+            if (e.button == PointerEventButton.middle) {
+                if (e.kind == PointerEventKind.down) {
+                    root.middle-drag-active = true;
+                    root.middle-drag-anchor-y = self.mouse-y;
+                    root.middle-drag-current-y = self.mouse-y;
+                } else if (e.kind == PointerEventKind.up) {
+                    root.middle-drag-active = false;
+                }
+            }
+        }
+
+        moved => {
+            if (root.middle-drag-active) {
+                let delta = self.mouse-y - root.middle-drag-current-y;
+                root.middle-drag-current-y = self.mouse-y;
+                
+                // Scrolling down (mouse moves down, delta > 0) should decrease viewport-y
+                let next = sv.viewport-y - delta;
+                let max-y = min(0px, sv.height - sv.viewport-height);
+                sv.viewport-y = max(max-y, min(0px, next));
+            }
+        }
+    }
+
     // Wheel layer: always active for terminal scrolling / interactive follow.
     TouchArea {
         z: 100;
@@ -421,17 +456,8 @@ export component GjViewer inherits Rectangle {
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: sv.height;
-        mouse-cursor: root.middle-drag-active ? MouseCursor.move : MouseCursor.default;
         pointer-event(e) => {
-            if (e.button == PointerEventButton.middle) {
-                if (e.kind == PointerEventKind.down) {
-                    root.middle-drag-active = true;
-                    root.middle-drag-anchor-y = self.mouse-y;
-                    root.middle-drag-current-y = self.mouse-y;
-                } else if (e.kind == PointerEventKind.up) {
-                    root.middle-drag-active = false;
-                }
-            } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
+            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                 root.context-menu-open = false;
                 root.begin-selection(self.mouse-x, self.mouse-y);
             } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
@@ -443,13 +469,7 @@ export component GjViewer inherits Rectangle {
             }
         }
         moved => {
-            if (root.middle-drag-active) {
-                let delta = self.mouse-y - root.middle-drag-current-y;
-                root.middle-drag-current-y = self.mouse-y;
-                let next = sv.viewport-y + delta;
-                let max-y = min(0px, sv.height - sv.viewport-height);
-                sv.viewport-y = max(max-y, min(0px, next));
-            } else if (self.pressed) {
+            if (self.pressed) {
                 root.update-selection(self.mouse-x, self.mouse-y);
             }
         }
