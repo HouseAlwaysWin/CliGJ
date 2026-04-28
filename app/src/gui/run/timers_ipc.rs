@@ -117,7 +117,9 @@ fn apply_send_prompt_payloads(
         s.tabs[cur].prompt_picked_selections = selection_payloads;
         s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
         s.tabs[cur].prompt_picked_file_origins = file_origin_payloads_converted;
-        while s.tabs[cur].prompt_picked_file_origins.len() < s.tabs[cur].prompt_picked_files_abs.len() {
+        while s.tabs[cur].prompt_picked_file_origins.len()
+            < s.tabs[cur].prompt_picked_files_abs.len()
+        {
             s.tabs[cur].prompt_picked_file_origins.push(None);
         }
         crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
@@ -141,11 +143,16 @@ fn apply_send_prompt_payloads(
             s.tabs[cur].prompt_picked_selections.push(payload);
         }
     }
-    for (path, origin) in file_path_payloads
-        .into_iter()
-        .zip(file_origin_payloads_converted.into_iter().chain(std::iter::repeat(None)))
-    {
-        if !s.tabs[cur].prompt_picked_files_abs.iter().any(|p| p == &path) {
+    for (path, origin) in file_path_payloads.into_iter().zip(
+        file_origin_payloads_converted
+            .into_iter()
+            .chain(std::iter::repeat(None)),
+    ) {
+        if !s.tabs[cur]
+            .prompt_picked_files_abs
+            .iter()
+            .any(|p| p == &path)
+        {
             s.tabs[cur].prompt_picked_files_abs.push(path);
             s.tabs[cur].prompt_picked_file_origins.push(origin);
         }

@@ -125,6 +125,7 @@ impl GuiState {
                                     set_auto_scroll: if render.filled { Some(true) } else { None },
                                     changed_indices: render.changed_indices,
                                     reset_terminal_buffer: render.reset_terminal_buffer,
+                                    reset_reason: render.reset_reason,
                                 });
                             },
                         );
@@ -323,6 +324,7 @@ impl GuiState {
                                 set_auto_scroll: if render.filled { Some(true) } else { None },
                                 changed_indices: render.changed_indices,
                                 reset_terminal_buffer: render.reset_terminal_buffer,
+                                reset_reason: render.reset_reason,
                             });
                         },
                     );

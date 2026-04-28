@@ -1,10 +1,13 @@
 use crate::gui::state::TabState;
 use cligj_terminal::render::ColoredLine;
+use cligj_terminal::types::ResetReason;
 
 use super::timers_terminal::{
-    append_interactive_history_block, archive_dropped_interactive_prefix, compose_interactive_terminal_lines,
-    line_has_visible_text, maybe_archive_repainted_frame_before_replace, reset_terminal_model_cache,
-    snapshot_starts_mid_interactive_frame, trim_or_drop_shell_preamble_snapshot,
+    append_interactive_history_block, archive_dropped_interactive_prefix,
+    compose_interactive_terminal_lines, line_has_visible_text,
+    maybe_archive_interactive_frame_before_reset, maybe_archive_repainted_frame_before_replace,
+    reset_terminal_model_cache, snapshot_starts_mid_interactive_frame,
+    trim_or_drop_shell_preamble_snapshot,
 };
 
 const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
@@ -13,6 +16,7 @@ pub(super) fn apply_interactive_replace(
     tab: &mut TabState,
     changed_indices: &[usize],
     reset_terminal_buffer: bool,
+    reset_reason: Option<ResetReason>,
     cursor_row: Option<usize>,
     cursor_col: Option<usize>,
     chunk_first_idx: usize,
@@ -59,9 +63,8 @@ pub(super) fn apply_interactive_replace(
             }
         } else {
             if reset_terminal_buffer {
-                if !tab.interactive_archive_repainted_frames {
-                    tab.interactive_history_lines.clear();
-                    tab.interactive_last_archived_signature.clear();
+                if matches!(reset_reason, Some(ResetReason::ClearScreen)) {
+                    maybe_archive_interactive_frame_before_reset(tab, &snapshot_lines);
                 }
                 tab.interactive_frame_lines.clear();
                 tab.terminal_lines.clear();
@@ -96,9 +99,8 @@ pub(super) fn apply_interactive_replace(
         None
     };
     if reset_terminal_buffer {
-        if !tab.interactive_archive_repainted_frames {
-            tab.interactive_history_lines.clear();
-            tab.interactive_last_archived_signature.clear();
+        if matches!(reset_reason, Some(ResetReason::ClearScreen)) {
+            maybe_archive_interactive_frame_before_reset(tab, &new_lines);
         }
         tab.interactive_frame_lines.clear();
         tab.terminal_lines.clear();

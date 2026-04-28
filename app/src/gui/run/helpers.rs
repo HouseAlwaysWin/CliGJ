@@ -11,10 +11,11 @@ use unicode_width::UnicodeWidthChar;
 use crate::gui::prompt_attachments::{hint_token_for_file_index, hint_token_for_image_index};
 use cligj_terminal::key_encoding;
 use cligj_terminal::render::ColoredLine;
+use cligj_terminal::replay::replay_raw_pty_events;
 use cligj_workspace as workspace_files;
 
 use super::super::slint_ui::AppWindow;
-use super::super::state::{GuiState, PromptImageAttach, TabState};
+use super::super::state::{GuiState, PromptImageAttach, TabState, TerminalMode};
 
 pub(crate) fn inject_path_into_current(
     ui: &AppWindow,
@@ -434,14 +435,41 @@ fn colored_line_plain_text(line: &ColoredLine) -> String {
     })
 }
 
+fn colored_lines_plain_text(lines: &[ColoredLine]) -> String {
+    lines
+        .iter()
+        .map(colored_line_plain_text)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 pub(crate) fn terminal_history_plain_text(tab: &TabState) -> String {
-    if !tab.terminal_lines.is_empty() {
-        return tab
-            .terminal_lines
-            .iter()
-            .map(colored_line_plain_text)
-            .collect::<Vec<_>>()
-            .join("\n");
+    let live_text = if tab.terminal_lines.is_empty() {
+        String::new()
+    } else {
+        colored_lines_plain_text(&tab.terminal_lines)
+    };
+    if tab.terminal_mode == TerminalMode::InteractiveAi {
+        if !tab.raw_pty_events.is_empty() {
+            if let Ok(replay) = replay_raw_pty_events(&tab.raw_pty_events) {
+                if !replay.full_text.trim().is_empty() {
+                    return replay.full_text;
+                }
+            }
+        }
+        if !live_text.trim().is_empty() {
+            return live_text;
+        }
+    }
+    if !tab.raw_pty_events.is_empty() {
+        if let Ok(replay) = replay_raw_pty_events(&tab.raw_pty_events) {
+            if !replay.full_text.trim().is_empty() {
+                return replay.full_text;
+            }
+        }
+    }
+    if !live_text.is_empty() {
+        return live_text;
     }
     tab.terminal_text.clone()
 }

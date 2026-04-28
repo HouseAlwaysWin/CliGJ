@@ -1,9 +1,8 @@
 use crate::gui::state::{TabState, TerminalMode};
 use cligj_terminal::render::ColoredLine;
+use cligj_terminal::types::ResetReason;
 
-use super::timers_terminal::{
-    compact_terminal_lines_after_snapshot, line_has_visible_text,
-};
+use super::timers_terminal::{compact_terminal_lines_after_snapshot, line_has_visible_text};
 
 const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
 
@@ -11,6 +10,7 @@ pub(super) fn apply_shell_replace(
     tab: &mut TabState,
     changed_indices: &[usize],
     reset_terminal_buffer: bool,
+    _reset_reason: Option<ResetReason>,
     cursor_row: Option<usize>,
     cursor_col: Option<usize>,
     chunk_first_idx: usize,
@@ -87,11 +87,12 @@ pub(super) fn apply_shell_replace(
     }
 
     let leading = chunk_first_idx.saturating_sub(origin);
-    let drop_snapshot_prefix = reset_terminal_buffer && tab.terminal_mode == TerminalMode::InteractiveAi;
+    let drop_snapshot_prefix =
+        reset_terminal_buffer && tab.terminal_mode == TerminalMode::InteractiveAi;
     compact_terminal_lines_after_snapshot(tab, leading, drop_snapshot_prefix);
 
-    tab.terminal_cursor_row = cursor_row
-        .and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
+    tab.terminal_cursor_row =
+        cursor_row.and_then(|phys| phys.checked_sub(tab.terminal_physical_origin));
     tab.terminal_cursor_col = cursor_col;
 
     let cursor_local_end = tab.terminal_cursor_row.map(|r| r + 1).unwrap_or(0);

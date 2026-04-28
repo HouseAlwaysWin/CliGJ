@@ -808,21 +808,41 @@ export component TerminalHistoryWindow inherits Window {
 
             Rectangle {
                 vertical-stretch: 1;
+                min-height: 0px;
                 border-width: 1px;
                 border-color: AppTheme.prompt_chrome_border;
                 border-radius: 10px;
                 background: #0c0f15;
 
-                TextEdit {
+                history-scroll := ScrollView {
                     x: 0px;
                     y: 0px;
                     width: parent.width;
                     height: parent.height;
-                    text <=> root.history-text;
-                    read-only: true;
-                    font-family: root.terminal-font-family;
-                    font-size: 13px;
-                    wrap: word-wrap;
+                    horizontal-scrollbar-policy: always-off;
+                    vertical-scrollbar-policy: always-on;
+                    mouse-drag-pan-enabled: true;
+                    viewport-width: max(0px, self.width - 14px);
+                    viewport-height: max(self.height, history-text-block.preferred-height + 16px);
+
+                    Rectangle {
+                        width: max(0px, history-scroll.width - 14px);
+                        height: max(history-scroll.height, history-text-block.preferred-height + 16px);
+                        background: #00000000;
+
+                        history-text-block := Text {
+                            x: 8px;
+                            y: 8px;
+                            width: max(0px, parent.width - 16px);
+                            text: root.history-text;
+                            color: AppTheme.text;
+                            font-family: root.terminal-font-family;
+                            font-size: 13px;
+                            wrap: word-wrap;
+                            vertical-alignment: top;
+                            horizontal-alignment: left;
+                        }
+                    }
                 }
             }
         }

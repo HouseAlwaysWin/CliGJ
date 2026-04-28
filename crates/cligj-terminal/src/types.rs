@@ -28,6 +28,14 @@ pub enum ReaderRenderMode {
     InteractiveAi,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ResetReason {
+    Resize,
+    ClearScreen,
+    RenderMode,
+    AltScreen,
+}
+
 impl From<ReaderRenderMode> for RawPtyMode {
     fn from(value: ReaderRenderMode) -> Self {
         match value {
@@ -56,6 +64,7 @@ pub struct TerminalRender {
     pub changed_indices: Vec<usize>,
     /// Next snapshot should replace the GUI buffer entirely (PTY geometry / reflow reset).
     pub reset_terminal_buffer: bool,
+    pub reset_reason: Option<ResetReason>,
 }
 
 #[derive(Debug)]

@@ -1,5 +1,6 @@
 use super::timers_terminal::*;
 use cligj_terminal::render::{ColoredLine, ColoredSpan};
+use cligj_terminal::types::{RawPtyEvent, RawPtyMode};
 
 fn line(text: &str) -> ColoredLine {
     ColoredLine {
@@ -64,4 +65,188 @@ fn repainted_footer_typing_does_not_archive_each_prompt_edit() {
 
     maybe_archive_repainted_frame_before_replace(&mut tab, &next);
     assert!(tab.interactive_history_lines.is_empty());
+}
+
+#[test]
+fn interactive_history_without_overlap_preserves_existing_lines() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.interactive_history_lines = vec![line("older reply"), line("older footer")];
+
+    append_interactive_history_block(
+        &mut tab,
+        &[
+            line("new snapshot line 1"),
+            line("new snapshot line 2"),
+            line("new snapshot line 3"),
+            line("new snapshot line 4"),
+        ],
+    );
+
+    let text: Vec<String> = tab
+        .interactive_history_lines
+        .iter()
+        .map(line_plain_text)
+        .collect();
+    assert_eq!(
+        text,
+        vec![
+            "older reply".to_string(),
+            "older footer".to_string(),
+            "new snapshot line 1".to_string(),
+            "new snapshot line 2".to_string(),
+            "new snapshot line 3".to_string(),
+            "new snapshot line 4".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn interactive_reset_buffer_keeps_archived_history() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.interactive_history_lines = vec![line("codex reply kept"), line("follow-up kept")];
+    tab.interactive_frame_lines = vec![line("old frame")];
+    tab.terminal_lines = vec![
+        line("codex reply kept"),
+        line("follow-up kept"),
+        line("old frame"),
+    ];
+
+    super::timers_terminal_interactive::apply_interactive_replace(
+        &mut tab,
+        &[],
+        true,
+        Some(cligj_terminal::types::ResetReason::ClearScreen),
+        None,
+        None,
+        8,
+        10,
+        vec![line("new frame top"), line("new frame bottom")],
+    );
+
+    let archived: Vec<String> = tab
+        .interactive_history_lines
+        .iter()
+        .map(line_plain_text)
+        .collect();
+    assert_eq!(
+        archived,
+        vec![
+            "codex reply kept".to_string(),
+            "follow-up kept".to_string(),
+            "old frame".to_string(),
+        ]
+    );
+    let rendered: Vec<String> = tab.terminal_lines.iter().map(line_plain_text).collect();
+    assert_eq!(
+        rendered,
+        vec![
+            "codex reply kept".to_string(),
+            "follow-up kept".to_string(),
+            "old frame".to_string(),
+            "new frame top".to_string(),
+            "new frame bottom".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn interactive_reset_archives_previous_visible_frame_before_replacing_it() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.interactive_frame_lines = vec![
+        line("assistant reply line 1"),
+        line("assistant reply line 2"),
+        line("? for shortcuts"),
+    ];
+    tab.terminal_lines = tab.interactive_frame_lines.clone();
+
+    super::timers_terminal_interactive::apply_interactive_replace(
+        &mut tab,
+        &[],
+        true,
+        Some(cligj_terminal::types::ResetReason::ClearScreen),
+        None,
+        None,
+        12,
+        14,
+        vec![line("fresh prompt"), line("waiting input")],
+    );
+
+    let archived: Vec<String> = tab
+        .interactive_history_lines
+        .iter()
+        .map(line_plain_text)
+        .collect();
+    assert_eq!(
+        archived,
+        vec![
+            "assistant reply line 1".to_string(),
+            "assistant reply line 2".to_string(),
+            "? for shortcuts".to_string(),
+        ]
+    );
+}
+
+#[test]
+fn interactive_resize_reset_does_not_archive_previous_frame_again() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.interactive_history_lines = vec![line("older archived reply")];
+    tab.interactive_frame_lines = vec![
+        line("pre-resize frame line 1"),
+        line("pre-resize frame line 2"),
+    ];
+    tab.terminal_lines = vec![
+        line("older archived reply"),
+        line("pre-resize frame line 1"),
+        line("pre-resize frame line 2"),
+    ];
+
+    super::timers_terminal_interactive::apply_interactive_replace(
+        &mut tab,
+        &[],
+        true,
+        Some(cligj_terminal::types::ResetReason::Resize),
+        None,
+        None,
+        20,
+        22,
+        vec![
+            line("post-resize frame line 1"),
+            line("post-resize frame line 2"),
+        ],
+    );
+
+    let archived: Vec<String> = tab
+        .interactive_history_lines
+        .iter()
+        .map(line_plain_text)
+        .collect();
+    assert_eq!(archived, vec!["older archived reply".to_string()]);
+}
+
+#[test]
+fn interactive_terminal_history_prefers_raw_replay_over_live_snapshot() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![line("only current snapshot")];
+    tab.raw_pty_events = vec![
+        RawPtyEvent::RenderMode {
+            mode: RawPtyMode::InteractiveAi,
+        },
+        RawPtyEvent::Resize { cols: 24, rows: 6 },
+        RawPtyEvent::Bytes(b"older line 1\r\nolder line 2\r\ncurrent line\r\n".to_vec()),
+    ];
+
+    let text = crate::gui::run::helpers::terminal_history_plain_text(&tab);
+    assert!(text.contains("older line 1"));
+    assert!(text.contains("older line 2"));
+    assert!(!text.contains("only current snapshot"));
 }
