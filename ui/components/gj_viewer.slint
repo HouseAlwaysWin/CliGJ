@@ -327,7 +327,7 @@ export component GjViewer inherits Rectangle {
     if (root.terminal-pinned-lines.length > 0) : Rectangle {
         x: root.terminal-left-inset;
         y: sv.height;
-        width: max(0px, parent.width - root.terminal-left-inset);
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: root.pinned-footer-height;
         background: AppTheme.bg;
         clip: true;
@@ -392,7 +392,7 @@ export component GjViewer inherits Rectangle {
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset);
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: parent.height;
         scroll-event(event) => {
             if (root.terminal-wheel(event.delta-y / 1px)) {
@@ -413,7 +413,7 @@ export component GjViewer inherits Rectangle {
         enabled: root.terminal-total-lines > 0;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset);
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: sv.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
@@ -499,7 +499,7 @@ export component GjViewer inherits Rectangle {
         z: 130;
         x: root.terminal-left-inset;
         y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset);
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: parent.height;
         pointer-event(e) => {
             if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
