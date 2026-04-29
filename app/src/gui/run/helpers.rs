@@ -15,28 +15,27 @@ use cligj_workspace as workspace_files;
 
 use super::super::slint_ui::AppWindow;
 use super::super::state::{GuiState, PromptImageAttach, TabState};
+use super::super::ui_sync::{
+    sync_prompt_file_chips_to_ui, sync_prompt_image_chips_to_ui, tab_update_from_ui,
+};
 
-pub(crate) fn inject_path_into_current(
-    ui: &AppWindow,
-    s: &mut GuiState,
-    path: &Path,
-) -> Result<(), String> {
-    inject_paths_into_current(ui, s, std::slice::from_ref(&path.to_path_buf()))
-}
-
-/// Add one or more absolute paths as composer file chips (same rules as drag-and-drop).
-pub(crate) fn inject_paths_into_current(
-    ui: &AppWindow,
-    s: &mut GuiState,
-    paths: &[PathBuf],
-) -> Result<(), String> {
+fn sync_current_tab_prompt_from_ui(ui: &AppWindow, s: &mut GuiState) -> Result<(), String> {
     if s.current >= s.tabs.len() {
         return Err("invalid tab index".into());
     }
-    if paths.is_empty() {
-        return Ok(());
-    }
-    let tab = &mut s.tabs[s.current];
+    let current = s.current;
+    tab_update_from_ui(&mut s.tabs[current], ui);
+    Ok(())
+}
+
+fn refresh_current_tab_composer_ui(ui: &AppWindow, tab: &TabState) {
+    ui.set_ws_image_zoom_index(-1);
+    ui.set_ws_prompt(tab.prompt.clone());
+    sync_prompt_file_chips_to_ui(ui, tab);
+    sync_prompt_image_chips_to_ui(ui, tab);
+}
+
+fn attach_paths_to_prompt(tab: &mut TabState, paths: &[PathBuf]) {
     for path in paths {
         let abs_path = path
             .canonicalize()
@@ -55,8 +54,46 @@ pub(crate) fn inject_paths_into_current(
             tab.prompt = SharedString::from(next.as_str());
         }
     }
+}
+
+fn attach_prompt_image(tab: &mut TabState, abs_path: String, preview: Image) {
+    if path_has_prompt_attachment(tab, &abs_path) {
+        return;
+    }
+    tab.prompt_picked_images
+        .push(PromptImageAttach { abs_path, preview });
+    let newest = tab
+        .prompt_picked_images
+        .last()
+        .map(|x| x.abs_path.as_str())
+        .unwrap_or("");
+    let token = filepath_hint_token_for_abs_path(tab, newest);
+    let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+    tab.prompt = SharedString::from(next.as_str());
+}
+
+pub(crate) fn inject_path_into_current(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    path: &Path,
+) -> Result<(), String> {
+    inject_paths_into_current(ui, s, std::slice::from_ref(&path.to_path_buf()))
+}
+
+/// Add one or more absolute paths as composer file chips (same rules as drag-and-drop).
+pub(crate) fn inject_paths_into_current(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    paths: &[PathBuf],
+) -> Result<(), String> {
+    if paths.is_empty() {
+        return Ok(());
+    }
+    sync_current_tab_prompt_from_ui(ui, s)?;
+    let tab = &mut s.tabs[s.current];
+    attach_paths_to_prompt(tab, paths);
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    refresh_current_tab_composer_ui(ui, tab);
     Ok(())
 }
 
@@ -221,25 +258,11 @@ pub(crate) fn push_prompt_image(
     abs_path: String,
     preview: Image,
 ) -> Result<(), String> {
-    if s.current >= s.tabs.len() {
-        return Err("invalid tab index".into());
-    }
+    sync_current_tab_prompt_from_ui(ui, s)?;
     let tab = &mut s.tabs[s.current];
-    if path_has_prompt_attachment(tab, &abs_path) {
-        return Ok(());
-    }
-    tab.prompt_picked_images
-        .push(PromptImageAttach { abs_path, preview });
-    let newest = tab
-        .prompt_picked_images
-        .last()
-        .map(|x| x.abs_path.as_str())
-        .unwrap_or("");
-    let token = filepath_hint_token_for_abs_path(tab, newest);
-    let next = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
-    tab.prompt = SharedString::from(next.as_str());
+    attach_prompt_image(tab, abs_path, preview);
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    refresh_current_tab_composer_ui(ui, tab);
     Ok(())
 }
 
@@ -261,12 +284,10 @@ pub(crate) fn inject_paths_and_images_from_paths(
     s: &mut GuiState,
     paths: &[PathBuf],
 ) -> Result<(), String> {
-    if s.current >= s.tabs.len() {
-        return Err("invalid tab index".into());
-    }
     if paths.is_empty() {
         return Ok(());
     }
+    sync_current_tab_prompt_from_ui(ui, s)?;
     let mut non_image_paths = Vec::new();
     {
         let tab = &mut s.tabs[s.current];
@@ -274,22 +295,7 @@ pub(crate) fn inject_paths_and_images_from_paths(
             if is_probably_image_file(path) {
                 if let Some(preview) = load_slint_image_from_path(path) {
                     let abs_path = normalize_abs_path(path);
-                    if path_has_prompt_attachment(tab, &abs_path) {
-                        continue;
-                    }
-                    tab.prompt_picked_images
-                        .push(PromptImageAttach { abs_path, preview });
-                    let newest = tab
-                        .prompt_picked_images
-                        .last()
-                        .map(|x| x.abs_path.as_str())
-                        .unwrap_or("");
-                    let token = filepath_hint_token_for_abs_path(tab, newest);
-                    let next = workspace_files::append_attachment_token(
-                        tab.prompt.as_str(),
-                        token.as_str(),
-                    );
-                    tab.prompt = SharedString::from(next.as_str());
+                    attach_prompt_image(tab, abs_path, preview);
                     continue;
                 }
             }
@@ -297,17 +303,17 @@ pub(crate) fn inject_paths_and_images_from_paths(
         }
     }
     if !non_image_paths.is_empty() {
-        inject_paths_into_current(ui, s, &non_image_paths)?;
-    } else {
         let tab = &mut s.tabs[s.current];
-        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+        attach_paths_to_prompt(tab, &non_image_paths);
     }
+    let tab = &mut s.tabs[s.current];
+    tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
+    refresh_current_tab_composer_ui(ui, tab);
     Ok(())
 }
 
 pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: usize) {
-    if s.current >= s.tabs.len() {
+    if sync_current_tab_prompt_from_ui(ui, s).is_err() {
         return;
     }
     let tab = &mut s.tabs[s.current];
@@ -318,12 +324,12 @@ pub(crate) fn remove_prompt_image_at(ui: &AppWindow, s: &mut GuiState, index: us
         }
         tab.prompt_picked_images.remove(index);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+        refresh_current_tab_composer_ui(ui, tab);
     }
 }
 
 pub(crate) fn remove_prompt_file_at(ui: &AppWindow, s: &mut GuiState, index: usize) {
-    if s.current >= s.tabs.len() {
+    if sync_current_tab_prompt_from_ui(ui, s).is_err() {
         return;
     }
     let tab = &mut s.tabs[s.current];
@@ -342,12 +348,12 @@ pub(crate) fn remove_prompt_file_at(ui: &AppWindow, s: &mut GuiState, index: usi
         }
         remove_selection_payloads_for_file(tab, removed_path.as_str());
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+        refresh_current_tab_composer_ui(ui, tab);
     }
 }
 
 pub(crate) fn clear_all_prompt_files(ui: &AppWindow, s: &mut GuiState) {
-    if s.current >= s.tabs.len() {
+    if sync_current_tab_prompt_from_ui(ui, s).is_err() {
         return;
     }
     let tab = &mut s.tabs[s.current];
@@ -367,11 +373,11 @@ pub(crate) fn clear_all_prompt_files(ui: &AppWindow, s: &mut GuiState) {
         remove_selection_payloads_for_file(tab, removed_path.as_str());
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    refresh_current_tab_composer_ui(ui, tab);
 }
 
 pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
-    if s.current >= s.tabs.len() {
+    if sync_current_tab_prompt_from_ui(ui, s).is_err() {
         return;
     }
     let tab = &mut s.tabs[s.current];
@@ -383,7 +389,7 @@ pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
         tab.prompt_picked_images.remove(0);
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-    crate::gui::ui_sync::load_tab_to_ui(ui, tab);
+    refresh_current_tab_composer_ui(ui, tab);
 }
 
 pub(crate) fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {

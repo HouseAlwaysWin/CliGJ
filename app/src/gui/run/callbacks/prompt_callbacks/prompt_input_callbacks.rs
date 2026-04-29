@@ -1,7 +1,8 @@
 use std::cell::RefCell;
+use std::path::PathBuf;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Model, SharedString};
+use slint::{ComponentHandle, Image, Model, SharedString};
 
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
@@ -19,17 +20,60 @@ use crate::gui::run::helpers::{
     inject_paths_and_images_from_paths, is_local_prompt_edit_key, push_prompt_image,
 };
 
+fn schedule_submit_current_prompt(
+    app_weak: slint::Weak<AppWindow>,
+    state: Rc<RefCell<GuiState>>,
+) {
+    slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = state.borrow_mut();
+        if let Err(e) = s.submit_current_prompt(&ui) {
+            eprintln!("CliGJ: prompt submit: {e}");
+        }
+    });
+}
+
+fn schedule_clipboard_paths_attach(
+    app_weak: slint::Weak<AppWindow>,
+    state: Rc<RefCell<GuiState>>,
+    paths: Vec<PathBuf>,
+) {
+    slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = state.borrow_mut();
+        if let Err(e) = inject_paths_and_images_from_paths(&ui, &mut *s, &paths) {
+            eprintln!("CliGJ: paste paths: {e}");
+        }
+    });
+}
+
+fn schedule_clipboard_image_attach(
+    app_weak: slint::Weak<AppWindow>,
+    state: Rc<RefCell<GuiState>>,
+    path: PathBuf,
+    img: Image,
+) {
+    slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = state.borrow_mut();
+        let abs = path.to_string_lossy().to_string();
+        if let Err(e) = push_prompt_image(&ui, &mut *s, abs, img.clone()) {
+            eprintln!("CliGJ: paste image: {e}");
+        }
+    });
+}
+
 pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_submit = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_submit_prompt(move || {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = st_submit.borrow_mut();
-        if let Err(e) = s.submit_current_prompt(&ui) {
-            eprintln!("CliGJ: prompt submit: {e}");
-        }
+        schedule_submit_current_prompt(app_weak.clone(), Rc::clone(&st_submit));
     });
 
     let st_hist_prev = Rc::clone(&state);
@@ -115,18 +159,11 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         {
             #[cfg(target_os = "windows")]
             if let Some(paths) = clipboard_file_paths_hdrop() {
-                let mut s = st_keys.borrow_mut();
-                if let Err(e) = inject_paths_and_images_from_paths(&ui, &mut *s, &paths) {
-                    eprintln!("CliGJ: paste paths: {e}");
-                }
+                schedule_clipboard_paths_attach(app_weak.clone(), Rc::clone(&st_keys), paths);
                 return true;
             }
             if let Some((path, img)) = clipboard_raster_image_file() {
-                let mut s = st_keys.borrow_mut();
-                let abs = path.to_string_lossy().to_string();
-                if let Err(e) = push_prompt_image(&ui, &mut *s, abs, img) {
-                    eprintln!("CliGJ: paste image: {e}");
-                }
+                schedule_clipboard_image_attach(app_weak.clone(), Rc::clone(&st_keys), path, img);
                 return true;
             }
         }
@@ -175,9 +212,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         commit_at_file_pick(&ui, &mut *s, idx);
                     } else {
                         // 統一 Enter：不論是否 Raw，都觸發提交
-                        if let Err(e) = s.submit_current_prompt(&ui) {
-                            eprintln!("CliGJ: prompt submit: {e}");
-                        }
+                        drop(s);
+                        schedule_submit_current_prompt(app_weak.clone(), Rc::clone(&st_keys));
                     }
                     return true;
                 }
@@ -206,10 +242,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                 true
             }
             PromptKeyAction::Submit => {
-                let mut s = st_keys.borrow_mut();
-                if let Err(e) = s.submit_current_prompt(&ui) {
-                    eprintln!("CliGJ: prompt submit: {e}");
-                }
+                schedule_submit_current_prompt(app_weak.clone(), Rc::clone(&st_keys));
                 true
             }
             PromptKeyAction::HistoryPrev => {

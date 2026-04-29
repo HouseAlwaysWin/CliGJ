@@ -20,7 +20,14 @@ pub(super) fn apply_interactive_replace(
     mut new_lines: Vec<ColoredLine>,
 ) {
     if changed_indices.is_empty() && !new_lines.is_empty() {
-        let previous_terminal_lines = Some(tab.terminal_lines.clone());
+        let previous_terminal_lines = if reset_terminal_buffer {
+            tab.interactive_history_lines.clear();
+            tab.interactive_frame_lines.clear();
+            tab.interactive_last_archived_signature.clear();
+            Some(tab.terminal_lines.clone())
+        } else {
+            Some(tab.terminal_lines.clone())
+        };
         let previous_cursor_row = tab.terminal_cursor_row;
         let previous_cursor_col = tab.terminal_cursor_col;
         let previous_origin = tab.terminal_physical_origin;
@@ -59,10 +66,8 @@ pub(super) fn apply_interactive_replace(
             }
         } else {
             if reset_terminal_buffer {
-                if !tab.interactive_archive_repainted_frames {
-                    tab.interactive_history_lines.clear();
-                    tab.interactive_last_archived_signature.clear();
-                }
+                tab.interactive_history_lines.clear();
+                tab.interactive_last_archived_signature.clear();
                 tab.interactive_frame_lines.clear();
                 tab.terminal_lines.clear();
             } else {
@@ -96,10 +101,8 @@ pub(super) fn apply_interactive_replace(
         None
     };
     if reset_terminal_buffer {
-        if !tab.interactive_archive_repainted_frames {
-            tab.interactive_history_lines.clear();
-            tab.interactive_last_archived_signature.clear();
-        }
+        tab.interactive_history_lines.clear();
+        tab.interactive_last_archived_signature.clear();
         tab.interactive_frame_lines.clear();
         tab.terminal_lines.clear();
         tab.terminal_physical_origin = chunk_first_idx;

@@ -1,2 +1,5 @@
 /target
 /dist
+/_tmp_cargo*/
+/raw_pty_dumps/
+/raw_pty_replays/

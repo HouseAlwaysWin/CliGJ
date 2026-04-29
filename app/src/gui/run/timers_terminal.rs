@@ -639,12 +639,11 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
         };
         let mut s = state_ui.borrow_mut();
         let current_id = s.tabs.get(s.current).map(|t| t.id);
-        let mut current_changed = false;
+        let mut pending: HashMap<u64, PendingTabUpdate> = HashMap::new();
         for chunk in drained {
-            let mut pending: HashMap<u64, PendingTabUpdate> = HashMap::new();
             fold_chunk_into_pending(chunk, &mut pending);
-            current_changed |= apply_pending_updates(&mut s, pending, current_id);
         }
+        let current_changed = apply_pending_updates(&mut s, pending, current_id);
         refresh_current_terminal(&ui, &mut s, current_changed);
         flush_pending_scroll(&ui, &mut s);
     });
