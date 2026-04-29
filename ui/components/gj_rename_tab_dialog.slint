@@ -15,8 +15,8 @@ export component GjRenameTabDialog inherits Rectangle {
     callback rename-cancel;
 
     Rectangle {
-        width: 360px;
-        height: 140px;
+        width: 360px * AppTheme.ui_zoom_factor;
+        height: 140px * AppTheme.ui_zoom_factor;
         x: (parent.width - self.width) / 2;
         y: (parent.height - self.height) / 2;
         background: AppTheme.panel;
@@ -31,13 +31,13 @@ export component GjRenameTabDialog inherits Rectangle {
             Text {
                 text: @tr("重新命名標籤");
                 color: AppTheme.text;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-weight: 600;
             }
 
             TextEdit {
                 text <=> root.rename-text;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 wrap: no-wrap;
                 key-pressed(event) => {
                     if (event.text == Key.Return) {

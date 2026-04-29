@@ -7,8 +7,8 @@ use slint::{ComponentHandle, Timer, spawn_local};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::ui_sync::{
-    TERMINAL_ROW_HEIGHT_PX, UI_LAYOUT_EPOCH, clamp_saved_scroll_top, push_terminal_view_to_ui,
-    scrollable_terminal_line_count, terminal_scroll_top_for_tab,
+    UI_LAYOUT_EPOCH, clamp_saved_scroll_top, push_terminal_view_to_ui,
+    scrollable_terminal_line_count, terminal_row_height_px, terminal_scroll_top_for_tab,
 };
 use cligj_terminal::types::ControlCommand;
 
@@ -87,16 +87,16 @@ pub(super) fn connect_terminal_wheel(app: &AppWindow, state: Rc<RefCell<GuiState
             let current = s.current;
             let tab = &mut s.tabs[current];
             let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+            let row_height = terminal_row_height_px(tab);
             let max_scroll =
-                ((scrollable_terminal_line_count(tab) as f32) * TERMINAL_ROW_HEIGHT_PX - vh)
-                    .max(0.0);
+                ((scrollable_terminal_line_count(tab) as f32) * row_height - vh).max(0.0);
             let current = if tab.interactive_follow_output {
                 terminal_scroll_top_for_tab(tab, vh)
             } else {
                 clamp_saved_scroll_top(tab, vh)
             };
             let steps = ((delta.abs() as f32) / 120.0).max(1.0).min(4.0);
-            let amount = TERMINAL_ROW_HEIGHT_PX * 3.0 * steps;
+            let amount = row_height * 3.0 * steps;
             let mut next = if delta > 0 {
                 (current - amount).max(0.0)
             } else if delta < 0 {

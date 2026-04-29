@@ -10,9 +10,9 @@ export component GjPromptImageLightbox inherits Rectangle {
     in-out property <int> zoom-index;
     in property <[PromptImageChip]> prompt-images;
     callback open-explorer-for-image-requested(int);
-    private property <length> panel-width: min(root.width - 48px, 900px);
-    private property <length> panel-height: min(root.height - 104px, 720px);
-    private property <length> nav-button-size: 42px;
+    private property <length> panel-width: min(root.width - 48px * AppTheme.ui_zoom_factor, 900px * AppTheme.ui_zoom_factor);
+    private property <length> panel-height: min(root.height - 104px * AppTheme.ui_zoom_factor, 720px * AppTheme.ui_zoom_factor);
+    private property <length> nav-button-size: 42px * AppTheme.ui_zoom_factor;
     private property <bool> can-go-prev: root.zoom-index > 0;
     private property <bool> can-go-next: root.zoom-index + 1 < root.prompt-images.length;
 
@@ -82,7 +82,7 @@ export component GjPromptImageLightbox inherits Rectangle {
                     color: root.can-go-prev ? #f3f5f8 : #656b78;
                     horizontal-alignment: center;
                     vertical-alignment: center;
-                    font-size: 22px;
+                    font-size: 22px * AppTheme.ui_zoom_factor;
                     font-weight: 700;
                 }
 
@@ -115,7 +115,7 @@ export component GjPromptImageLightbox inherits Rectangle {
                     color: root.can-go-next ? #f3f5f8 : #656b78;
                     horizontal-alignment: center;
                     vertical-alignment: center;
-                    font-size: 22px;
+                    font-size: 22px * AppTheme.ui_zoom_factor;
                     font-weight: 700;
                 }
 
@@ -133,7 +133,7 @@ export component GjPromptImageLightbox inherits Rectangle {
         Text {
             text: "\{root.zoom-index + 1} / \{root.prompt-images.length}";
             color: #f3f5f8;
-            font-size: 12px;
+            font-size: 12px * AppTheme.ui_zoom_factor;
             horizontal-alignment: center;
         }
 
@@ -148,7 +148,7 @@ export component GjPromptImageLightbox inherits Rectangle {
                 Text {
                     text: @tr("點擊：在檔案總管開啟");
                     color: AppTheme.text_muted;
-                    font-size: 11px;
+                    font-size: 11px * AppTheme.ui_zoom_factor;
                     horizontal-alignment: center;
                     width: 100%;
                 }
@@ -160,7 +160,7 @@ export component GjPromptImageLightbox inherits Rectangle {
                     Text {
                         text: root.prompt-images[root.zoom-index].abs-path;
                         color: AppTheme.prompt_submit_bg;
-                        font-size: 11px;
+                        font-size: 11px * AppTheme.ui_zoom_factor;
                         horizontal-alignment: center;
                         overflow: elide;
                         wrap: no-wrap;
@@ -191,7 +191,7 @@ export component GjPromptImageLightbox inherits Rectangle {
         Text {
             text: @tr("點擊任意處關閉");
             color: AppTheme.text_muted;
-            font-size: 12px;
+            font-size: 12px * AppTheme.ui_zoom_factor;
             horizontal-alignment: center;
         }
     }

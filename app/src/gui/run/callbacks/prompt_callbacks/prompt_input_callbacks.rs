@@ -7,10 +7,11 @@ use slint::{ComponentHandle, Image, Model, SharedString};
 use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::interactive_commands::{self, spec_for_label};
-use crate::gui::slint_ui::AppWindow;
+use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::tab_update_from_ui;
-use cligj_terminal::key_encoding::{self, MOD_CTRL};
+use crate::gui::zoom::{adjust_ui_zoom_percent, reset_ui_zoom_percent, UI_ZOOM_STEP_PERCENT};
+use cligj_terminal::key_encoding::{self, MOD_CTRL, MOD_SHIFT};
 use cligj_terminal::prompt_key::PromptKeyAction;
 use cligj_workspace as workspace_files;
 
@@ -69,7 +70,58 @@ fn schedule_clipboard_image_attach(
     });
 }
 
-pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+fn handle_zoom_shortcut(
+    ui: &AppWindow,
+    history_window: &TerminalHistoryWindow,
+    state: &Rc<RefCell<GuiState>>,
+    mod_mask: u32,
+    key: &str,
+) -> bool {
+    let has_ctrl = mod_mask & MOD_CTRL != 0;
+    let has_alt_or_meta = mod_mask & (key_encoding::MOD_ALT | key_encoding::MOD_META) != 0;
+    if !has_ctrl || has_alt_or_meta {
+        return false;
+    }
+
+    let result = match key {
+        "-" | "_" => {
+            let mut s = state.borrow_mut();
+            adjust_ui_zoom_percent(
+                ui,
+                Some(history_window),
+                &mut *s,
+                -UI_ZOOM_STEP_PERCENT,
+                true,
+            )
+        }
+        "+" | "=" => {
+            let mut s = state.borrow_mut();
+            adjust_ui_zoom_percent(
+                ui,
+                Some(history_window),
+                &mut *s,
+                UI_ZOOM_STEP_PERCENT,
+                true,
+            )
+        }
+        "0" => {
+            let mut s = state.borrow_mut();
+            reset_ui_zoom_percent(ui, Some(history_window), &mut *s, true)
+        }
+        _ => return false,
+    };
+
+    if let Err(e) = result {
+        eprintln!("CliGJ: ui zoom shortcut: {e}");
+    }
+    true
+}
+
+pub(super) fn connect(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    history_window: Rc<TerminalHistoryWindow>,
+) {
     let st_submit = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_submit_prompt(move || {
@@ -101,18 +153,28 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     });
 
     let st_keys = Rc::clone(&state);
+    let history_window_keys = Rc::clone(&history_window);
     let app_weak = app.as_weak();
     app.on_prompt_key_route(move |raw_tty, mod_mask, key, shift| {
         let Some(ui) = app_weak.upgrade() else {
             return false;
         };
         let key_str = key.as_str();
+        if handle_zoom_shortcut(
+            &ui,
+            &history_window_keys,
+            &st_keys,
+            mod_mask as u32,
+            key_str,
+        ) {
+            return true;
+        }
         // App-level prompt undo/redo (prevents Slint TextInput undo-stack panic).
         if !raw_tty
             && !ui.get_ws_at_picker_open()
             && (mod_mask as u32) & MOD_CTRL != 0
             && matches!(key_str, "z" | "Z")
-            && (mod_mask as u32) & key_encoding::MOD_SHIFT == 0
+            && (mod_mask as u32) & MOD_SHIFT == 0
         {
             let mut s = st_keys.borrow_mut();
             if s.current < s.tabs.len() {

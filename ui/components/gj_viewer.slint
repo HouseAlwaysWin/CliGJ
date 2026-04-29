@@ -17,7 +17,7 @@ export component GjViewer inherits Rectangle {
     in-out property <int> selected-line;
     in-out property <string> selected-context;
     /// Monospace cell width (approx. 13px Cascadia Code; tune if selection drifts).
-    private property <length> char-width: 7.8px;
+    private property <length> char-width: 7.8px * AppTheme.ui_zoom_factor;
     private property <length> stripe-width: 3px;
     private property <length> scrollbar-gutter: 14px;
     private property <length> pinned-footer-height: root.terminal-pinned-lines.length * root.row-height;
@@ -28,7 +28,7 @@ export component GjViewer inherits Rectangle {
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
     private property <length> terminal-left-inset: 8px;
-    private property <length> row-height: 18px;
+    private property <length> row-height: 18px * AppTheme.ui_zoom_factor;
     /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
     private property <int> last-resize-cols: 0;
     private property <int> last-resize-rows: 0;
@@ -55,6 +55,7 @@ export component GjViewer inherits Rectangle {
     /// For Rust: scroll offset in px (content top), matches `TERMINAL_ROW_HEIGHT` windowing math.
     out property <float> terminal-scroll-top-px: max(0.0, (0.0px - sv.viewport-y) / 1px);
     out property <float> terminal-viewport-height-px: sv.height / 1px;
+    out property <float> terminal-row-height-px: root.row-height / 1px;
 
     border-width: 0px;
     background: AppTheme.bg;
@@ -262,7 +263,7 @@ export component GjViewer inherits Rectangle {
                 width: parent.width;
                 text: root.terminal-text;
                 color: AppTheme.text_muted;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-family: root.terminal-font-family;
                 wrap: word-wrap;
             }
@@ -310,7 +311,7 @@ export component GjViewer inherits Rectangle {
                             Text {
                                 text: span.text;
                                 color: span.fg;
-                                font-size: 13px;
+                                font-size: 13px * AppTheme.ui_zoom_factor;
                                 font-family: span.font-family == "" ? root.terminal-font-family : span.font-family;
                                 wrap: no-wrap;
                                 vertical-alignment: center;
@@ -381,7 +382,7 @@ export component GjViewer inherits Rectangle {
                         Text {
                             text: span.text;
                             color: span.fg;
-                            font-size: 13px;
+                            font-size: 13px * AppTheme.ui_zoom_factor;
                             font-family: span.font-family == "" ? root.terminal-font-family : span.font-family;
                             wrap: no-wrap;
                             vertical-alignment: center;

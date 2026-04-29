@@ -3,12 +3,12 @@ import { AppTheme } from "../theme.slint";
 /// App-wide text pill: outline / filled / toggle / danger, with hover (settings, dialogs, editors).
 export component GjChromeButton inherits Rectangle {
     in property <string> label;
-    in property <length> min-button-width: 72px;
+    in property <length> min-button-width: 72px * AppTheme.ui_zoom_factor;
     /// When greater than `min-button-width`, caps width (e.g. delete 52px). Otherwise ignored.
     in property <length> max-button-width: 0px;
-    in property <length> button-height: 26px;
-    in property <length> pill-corner-radius: 8px;
-    in property <length> label-font-size: 12px;
+    in property <length> button-height: 26px * AppTheme.ui_zoom_factor;
+    in property <length> pill-corner-radius: 8px * AppTheme.ui_zoom_factor;
+    in property <length> label-font-size: 12px * AppTheme.ui_zoom_factor;
     /// "close" | "add" | "restore" | "save" | "danger" | "toggle-accent"
     in property <string> preset: "close";
     /// For `toggle-accent` only: on = accent fill.

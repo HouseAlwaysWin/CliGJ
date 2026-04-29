@@ -14,10 +14,12 @@ export component GjShellManagePanel inherits Rectangle {
     in-out property <string> settings-nav;
     in-out property <string> startup-default-profile;
     in-out property <string> startup-language;
+    in-out property <string> startup-ui-zoom;
     in-out property <string> startup-terminal-font-family;
     in-out property <string> startup-terminal-cjk-fallback-font-family;
     in property <[string]> cmd-type-choices;
     in property <[string]> startup-language-choices;
+    in property <[string]> startup-ui-zoom-choices;
     in property <[string]> startup-terminal-font-choices;
     in property <[string]> startup-terminal-cjk-fallback-font-choices;
     in-out property <[InteractiveCmdEditorRow]> shell-manage-rows;
@@ -35,6 +37,7 @@ export component GjShellManagePanel inherits Rectangle {
     callback toggle-row-expanded(int);
     /// Fired when the startup language ComboBox changes (immediate UI language switch).
     callback shell-ui-language-changed(string);
+    callback shell-ui-zoom-changed(string);
 
     HorizontalLayout {
         spacing: 0px;
@@ -77,7 +80,7 @@ export component GjShellManagePanel inherits Rectangle {
                         vertical-alignment: center;
                         horizontal-alignment: center;
                         width: 100%;
-                        font-size: 12px;
+                        font-size: 12px * AppTheme.ui_zoom_factor;
                         overflow: elide;
                     }
 
@@ -104,7 +107,7 @@ export component GjShellManagePanel inherits Rectangle {
                         vertical-alignment: center;
                         horizontal-alignment: center;
                         width: 100%;
-                        font-size: 12px;
+                        font-size: 12px * AppTheme.ui_zoom_factor;
                         overflow: elide;
                     }
 
@@ -145,7 +148,7 @@ export component GjShellManagePanel inherits Rectangle {
                         ? @tr("設定 / 啟動")
                         : @tr("設定 / 命令提示設定");
                     color: AppTheme.text;
-                    font-size: 13px;
+                    font-size: 13px * AppTheme.ui_zoom_factor;
                     font-weight: 600;
                 }
 
@@ -156,7 +159,7 @@ export component GjShellManagePanel inherits Rectangle {
                     Text {
                         text: @tr("設定新分頁預設啟動行為。");
                         color: AppTheme.text_muted;
-                        font-size: 11px;
+                        font-size: 11px * AppTheme.ui_zoom_factor;
                         wrap: word-wrap;
                     }
 
@@ -183,7 +186,7 @@ export component GjShellManagePanel inherits Rectangle {
                                     height: 100%;
                                     text: @tr("預設設定檔");
                                     color: AppTheme.text_muted;
-                                    font-size: 12px;
+                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -233,9 +236,60 @@ export component GjShellManagePanel inherits Rectangle {
                                 Text {
                                     width: 100%;
                                     height: 100%;
+                                    text: "UI / Terminal Zoom (Ctrl +/-)";
+                                    color: AppTheme.text_muted;
+                                    font-size: 12px * AppTheme.ui_zoom_factor;
+                                    horizontal-alignment: center;
+                                    vertical-alignment: center;
+                                }
+                            }
+
+                            Rectangle {
+                                horizontal-stretch: 1;
+                                background: #00000000;
+                            }
+
+                            Rectangle {
+                                width: 240px;
+                                horizontal-stretch: 0;
+                                background: #00000000;
+
+                                ComboBox {
+                                    width: 100%;
+                                    model: root.startup-ui-zoom-choices;
+                                    current-value <=> root.startup-ui-zoom;
+                                    selected(val) => {
+                                        root.shell-ui-zoom-changed(val);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Rectangle {
+                        height: 42px;
+                        border-width: 1px;
+                        border-color: AppTheme.prompt_chrome_border;
+                        border-radius: 6px;
+                        background: #00000000;
+
+                        HorizontalLayout {
+                            padding-left: 10px;
+                            padding-right: 10px;
+                            spacing: 10px;
+                            alignment: center;
+
+                            Rectangle {
+                                width: 140px;
+                                horizontal-stretch: 0;
+                                height: parent.height;
+
+                                Text {
+                                    width: 100%;
+                                    height: 100%;
                                     text: @tr("語言");
                                     color: AppTheme.text_muted;
-                                    font-size: 12px;
+                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -287,7 +341,7 @@ export component GjShellManagePanel inherits Rectangle {
                                     height: 100%;
                                     text: @tr("終端字型");
                                     color: AppTheme.text_muted;
-                                    font-size: 12px;
+                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -338,7 +392,7 @@ export component GjShellManagePanel inherits Rectangle {
                                     height: 100%;
                                     text: @tr("中文補字字型");
                                     color: AppTheme.text_muted;
-                                    font-size: 12px;
+                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
                                 }
@@ -379,7 +433,7 @@ export component GjShellManagePanel inherits Rectangle {
                     Text {
                         text: @tr("預設 Command Prompt / PowerShell 無法刪除；可新增自訂啟動命令。");
                         color: AppTheme.text_muted;
-                        font-size: 11px;
+                        font-size: 11px * AppTheme.ui_zoom_factor;
                         horizontal-alignment: left;
                         wrap: word-wrap;
                     }
@@ -429,7 +483,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             Text {
                                                 text: row.expanded ? "v" : ">";
                                                 color: AppTheme.text_muted;
-                                                font-size: 12px;
+                                                font-size: 12px * AppTheme.ui_zoom_factor;
                                                 vertical-alignment: center;
                                                 horizontal-stretch: 0;
                                                 width: 14px;
@@ -439,7 +493,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             Text {
                                                 text: row.name;
                                                 color: row.key-locked ? AppTheme.text_muted : AppTheme.text;
-                                                font-size: 12px;
+                                                font-size: 12px * AppTheme.ui_zoom_factor;
                                                 font-weight: 600;
                                                 vertical-alignment: center;
                                                 horizontal-stretch: 1;
@@ -475,7 +529,7 @@ export component GjShellManagePanel inherits Rectangle {
                                                 Text {
                                                     text: row.name;
                                                     color: AppTheme.text_muted;
-                                                    font-size: 12px;
+                                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                                     vertical-alignment: center;
                                                     horizontal-alignment: left;
                                                     overflow: elide;
@@ -485,7 +539,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             if !row.key-locked: LineEdit {
                                                 horizontal-stretch: 1;
                                                 min-width: 96px;
-                                                font-size: 12px;
+                                                font-size: 12px * AppTheme.ui_zoom_factor;
                                                 text: row.name;
                                                 edited(new_text) => {
                                                     root.shell-name-edited(key_idx, new_text);
@@ -495,7 +549,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             Text {
                                                 text: ">";
                                                 color: AppTheme.text_muted;
-                                                font-size: 12px;
+                                                font-size: 12px * AppTheme.ui_zoom_factor;
                                                 vertical-alignment: center;
                                                 horizontal-stretch: 0;
                                             }
@@ -503,7 +557,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             LineEdit {
                                                 horizontal-stretch: 2;
                                                 min-width: 180px;
-                                                font-size: 12px;
+                                                font-size: 12px * AppTheme.ui_zoom_factor;
                                                 text: row.line;
                                                 edited(new_text) => {
                                                     root.shell-line-edited(key_idx, new_text);
@@ -516,7 +570,7 @@ export component GjShellManagePanel inherits Rectangle {
                                                 max-button-width: 52px;
                                                 button-height: 24px;
                                                 pill-corner-radius: 6px;
-                                                label-font-size: 11px;
+                                                label-font-size: 11px * AppTheme.ui_zoom_factor;
                                                 preset: "danger";
                                                 interactive: !row.key-locked;
                                                 clicked => {
@@ -531,7 +585,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             Text {
                                                 text: @tr("工作區設定");
                                                 color: AppTheme.text_muted;
-                                                font-size: 11px;
+                                                font-size: 11px * AppTheme.ui_zoom_factor;
                                                 horizontal-alignment: left;
                                                 wrap: word-wrap;
                                             }
@@ -543,7 +597,7 @@ export component GjShellManagePanel inherits Rectangle {
                                                 LineEdit {
                                                     horizontal-stretch: 1;
                                                     min-height: 28px;
-                                                    font-size: 12px;
+                                                    font-size: 12px * AppTheme.ui_zoom_factor;
                                                     text: row.workspace-path;
                                                     edited(new_text) => {
                                                         root.shell-workspace-edited(key_idx, new_text);
@@ -564,7 +618,7 @@ export component GjShellManagePanel inherits Rectangle {
                                             Text {
                                                 text: @tr("空白則使用目前工作區（分頁資料夾或啟動目錄）；有填則以該路徑為工作區根目錄。");
                                                 color: AppTheme.text_muted;
-                                                font-size: 10px;
+                                                font-size: 10px * AppTheme.ui_zoom_factor;
                                                 horizontal-alignment: left;
                                                 wrap: word-wrap;
                                             }
@@ -581,7 +635,7 @@ export component GjShellManagePanel inherits Rectangle {
                     Text {
                         text: root.manage-saved-hint ? @tr("已儲存設定") : "";
                         color: #7fdc9a;
-                        font-size: 12px;
+                        font-size: 12px * AppTheme.ui_zoom_factor;
                         vertical-alignment: center;
                         horizontal-stretch: 1;
                     }

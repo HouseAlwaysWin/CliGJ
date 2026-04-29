@@ -241,6 +241,27 @@ impl AppConfig {
             .filter(|s| !s.is_empty())
     }
 
+    pub fn ui_zoom_percent(&self) -> Option<i32> {
+        let value = self
+            .data
+            .get("ui")
+            .and_then(|v| v.as_table())
+            .and_then(|t| t.get("ui_zoom_percent"))?;
+        if let Some(n) = value.as_integer() {
+            return i32::try_from(n).ok();
+        }
+        value
+            .as_str()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .and_then(|s| {
+                s.trim_end_matches('%')
+                    .trim()
+                    .parse::<i32>()
+                    .ok()
+            })
+    }
+
     pub fn set_ui_language(&mut self, language: &str) {
         let ui = self
             .data
@@ -306,6 +327,23 @@ impl AppConfig {
         ui_table.insert(
             "terminal_cjk_fallback_font_family".to_string(),
             toml::Value::String(family.trim().to_string()),
+        );
+    }
+
+    pub fn set_ui_zoom_percent(&mut self, percent: i32) {
+        let ui = self
+            .data
+            .entry("ui".to_string())
+            .or_insert_with(|| toml::Value::Table(toml::Table::new()));
+        if !ui.is_table() {
+            *ui = toml::Value::Table(toml::Table::new());
+        }
+        let Some(ui_table) = ui.as_table_mut() else {
+            return;
+        };
+        ui_table.insert(
+            "ui_zoom_percent".to_string(),
+            toml::Value::Integer(i64::from(percent)),
         );
     }
 }
@@ -699,5 +737,24 @@ mod tests {
         let commands = cfg.interactive_commands();
         assert_eq!(commands.len(), 1);
         assert!(!commands[0].interactive_cli);
+    }
+
+    #[test]
+    fn ui_zoom_percent_reads_integer_and_percent_string() {
+        let cfg = config_from_toml(
+            r#"
+            [ui]
+            ui_zoom_percent = 120
+            "#,
+        );
+        assert_eq!(cfg.ui_zoom_percent(), Some(120));
+
+        let cfg = config_from_toml(
+            r#"
+            [ui]
+            ui_zoom_percent = "130%"
+            "#,
+        );
+        assert_eq!(cfg.ui_zoom_percent(), Some(130));
     }
 }

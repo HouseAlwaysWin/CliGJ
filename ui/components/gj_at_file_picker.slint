@@ -9,14 +9,14 @@ export component GjAtFilePicker inherits Rectangle {
     in-out property <int> selected-index: 0;
     callback choose(int);
 
-    private property <length> row-h: 22px;
+    private property <length> row-h: 22px * AppTheme.ui_zoom_factor;
     /// Visible rows in the list viewport (rest is scroll / wheel).
     private property <int> visible-rows-cap: 8;
     // Cap list viewport; inner list can be longer — Flickable scrolls.
     private property <length> list-view-h: min(row-h * visible-rows-cap, row-h * choices.length);
 
     visible: open;
-    height: open ? min(280px, 34px + list-view-h) : 0px;
+    height: open ? min(280px * AppTheme.ui_zoom_factor, 34px * AppTheme.ui_zoom_factor + list-view-h) : 0px;
     background: AppTheme.panel;
     border-width: 1px;
     border-color: AppTheme.prompt_chrome_border;
@@ -29,7 +29,7 @@ export component GjAtFilePicker inherits Rectangle {
 
         if (root-label != ""): Text {
             text: root-label;
-            font-size: 11px;
+            font-size: 11px * AppTheme.ui_zoom_factor;
             color: AppTheme.text_muted;
             wrap: word-wrap;
         }
@@ -59,7 +59,7 @@ export component GjAtFilePicker inherits Rectangle {
                             height: parent.height;
                             text: path;
                             color: AppTheme.text;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             font-family: root.terminal-font-family;
                             vertical-alignment: center;
                         }

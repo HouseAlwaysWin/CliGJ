@@ -19,8 +19,9 @@ use crate::gui::shell_profiles::{
     default_shell_profile_name, normalize_shell_profile_command, sync_shell_manage_editor_to_ui,
     sync_shell_profile_choices_to_ui,
 };
-use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow};
+use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
+use crate::gui::zoom::{apply_ui_zoom_percent, format_ui_zoom_percent, parse_ui_zoom_percent};
 use cligj_core::config::AppConfig;
 
 use super::super::{model_interactive_editor_rows, set_shell_manage_rows};
@@ -410,7 +411,11 @@ fn schedule_app_quit(app_weak: slint::Weak<AppWindow>) {
     });
 }
 
-pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+pub(super) fn connect(
+    app: &AppWindow,
+    state: Rc<RefCell<GuiState>>,
+    history_window: Rc<TerminalHistoryWindow>,
+) {
     let st_shell_manage = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_manage_cmd_types_requested(move || {
@@ -422,6 +427,9 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         ui.set_ws_shell_startup_language(SharedString::from(s.startup_language.as_str()));
         ui.set_ws_shell_startup_default_profile(SharedString::from(
             s.startup_default_shell_profile.as_str(),
+        ));
+        ui.set_ws_shell_startup_ui_zoom(SharedString::from(
+            format_ui_zoom_percent(s.startup_ui_zoom_percent).as_str(),
         ));
         ui.set_ws_shell_startup_terminal_font_family(SharedString::from(
             s.startup_terminal_font_family.as_str(),
@@ -900,6 +908,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     });
 
     let st_startup_save = Rc::clone(&state);
+    let history_window_startup = Rc::clone(&history_window);
     let app_weak = app.as_weak();
     app.on_save_shell_startup_settings(move || {
         let Some(ui) = app_weak.upgrade() else {
@@ -907,6 +916,8 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         let language = ui.get_ws_shell_startup_language().to_string();
         let mut profile = ui.get_ws_shell_startup_default_profile().to_string();
+        let ui_zoom_percent = parse_ui_zoom_percent(ui.get_ws_shell_startup_ui_zoom().as_str())
+            .unwrap_or(crate::gui::zoom::DEFAULT_UI_ZOOM_PERCENT);
         let terminal_font_family =
             normalize_terminal_font_family(ui.get_ws_shell_startup_terminal_font_family().as_str())
                 .to_string();
@@ -930,6 +941,7 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             Ok(mut cfg) => {
                 cfg.set_ui_language(language.as_str());
                 cfg.set_default_shell_profile(profile.as_str());
+                cfg.set_ui_zoom_percent(ui_zoom_percent);
                 cfg.set_terminal_font_family(terminal_font_family.as_str());
                 cfg.set_terminal_cjk_fallback_font_family(
                     terminal_cjk_fallback_font_family.as_str(),
@@ -950,8 +962,20 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
             s.startup_default_shell_profile = profile.clone();
             s.startup_terminal_font_family = terminal_font_family.clone();
             s.startup_terminal_cjk_fallback_font_family = terminal_cjk_fallback_font_family.clone();
+            if let Err(e) = apply_ui_zoom_percent(
+                &ui,
+                Some(&history_window_startup),
+                &mut *s,
+                ui_zoom_percent,
+                false,
+            ) {
+                eprintln!("CliGJ: apply ui zoom: {e}");
+            }
         }
         apply_slint_language_from_shell_setting(&ui, language.as_str());
+        ui.set_ws_shell_startup_ui_zoom(SharedString::from(
+            format_ui_zoom_percent(ui_zoom_percent).as_str(),
+        ));
         ui.set_ws_terminal_font_family(SharedString::from(terminal_font_family.as_str()));
         ui.set_ws_terminal_cjk_fallback_font_family(SharedString::from(
             terminal_cjk_fallback_font_family.as_str(),
@@ -980,6 +1004,22 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
         };
         st_lang_sync.borrow_mut().startup_language = lang.to_string();
         apply_slint_language_from_shell_setting(&ui, lang.as_str());
+    });
+
+    let st_zoom_sync = Rc::clone(&state);
+    let history_window_zoom = Rc::clone(&history_window);
+    let app_weak_zoom = app.as_weak();
+    app.on_shell_ui_zoom_changed(move |value| {
+        let Some(ui) = app_weak_zoom.upgrade() else {
+            return;
+        };
+        let mut s = st_zoom_sync.borrow_mut();
+        let percent = parse_ui_zoom_percent(value.as_str()).unwrap_or(s.startup_ui_zoom_percent);
+        if let Err(e) =
+            apply_ui_zoom_percent(&ui, Some(&history_window_zoom), &mut *s, percent, false)
+        {
+            eprintln!("CliGJ: preview ui zoom: {e}");
+        }
     });
 
     let app_weak = app.as_weak();

@@ -53,13 +53,13 @@ export component GjAboutDialog inherits Rectangle {
                     Text {
                         text: "CliGJ";
                         color: AppTheme.text;
-                        font-size: 18px;
+                        font-size: 18px * AppTheme.ui_zoom_factor;
                         font-weight: 700;
                     }
                     Text {
                         text: @tr("版本：") + root.version + "  |  " + @tr("作者：") + root.author;
                         color: AppTheme.text_muted;
-                        font-size: 12px;
+                        font-size: 12px * AppTheme.ui_zoom_factor;
                     }
                 }
             }
@@ -72,7 +72,7 @@ export component GjAboutDialog inherits Rectangle {
             Text {
                 text: @tr("GitHub");
                 color: AppTheme.text;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-weight: 600;
             }
 
@@ -87,7 +87,7 @@ export component GjAboutDialog inherits Rectangle {
                     vertical-alignment: center;
                     x: 0px;
                     width: parent.width;
-                    font-size: 12px;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
                     overflow: elide;
                 }
 

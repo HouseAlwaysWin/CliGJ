@@ -143,6 +143,8 @@ pub struct TabState {
     pub(crate) last_pushed_scroll_top: f32,
     /// Last viewport height used when pushing the terminal window.
     pub(crate) last_pushed_viewport_height: f32,
+    /// Current viewer row height in logical pixels; must stay in sync with `GjViewer.row-height`.
+    pub(crate) terminal_row_height_px: f32,
     /// Last pushed global first row index for sliced terminal model.
     pub(crate) last_window_first: usize,
     /// Last pushed global last row index for sliced terminal model.
@@ -298,6 +300,7 @@ impl TabState {
             terminal_view_height_px: 600.0,
             last_pushed_scroll_top: -1.0,
             last_pushed_viewport_height: -1.0,
+            terminal_row_height_px: 18.0,
             last_window_first: usize::MAX,
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
@@ -687,6 +690,8 @@ pub struct GuiState {
     pub(crate) startup_terminal_font_family: String,
     /// Startup page setting: CJK fallback font used when the main terminal font lacks glyphs.
     pub(crate) startup_terminal_cjk_fallback_font_family: String,
+    /// Startup page setting: global UI/terminal zoom percentage.
+    pub(crate) startup_ui_zoom_percent: i32,
     /// Last IPC "endpoint occupied" error that already triggered a popup.
     pub(crate) ipc_last_occupied_error_notified: String,
 }

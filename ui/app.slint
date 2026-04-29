@@ -13,12 +13,14 @@ import { GjFileDropOverlay } from "components/gj_file_drop_overlay.slint";
 import { GjUpdateDialog } from "pages/gj_update_dialog.slint";
 import { GjAboutDialog } from "pages/gj_about_dialog.slint";
 import { InteractiveCmdEditorRow, PromptImageChip, TermLine } from "term_types.slint";
+export { AppTheme } from "theme.slint";
 
 export component AppWindow inherits Window {
     title: "CliGJ";
     icon: @image-url("../app/src/asset/logo3.png");
     no-frame: true;
     default-font-family: AppTheme.ui_font_family;
+    default-font-size: 13px * AppTheme.ui_zoom_factor;
     resize-border-width: AppTheme.chrome_resize_border;
     preferred-width: 800px;
     preferred-height: 600px;
@@ -70,8 +72,10 @@ export component AppWindow inherits Window {
     in-out property <string> ws-shell-settings-nav: "startup";
     in-out property <string> ws-shell-startup-language: "預設";
     in-out property <string> ws-shell-startup-default-profile: "Command Prompt";
+    in-out property <string> ws-shell-startup-ui-zoom: "100%";
     in-out property <string> ws-shell-startup-terminal-font-family: "DejaVu Sans Mono";
     in-out property <string> ws-shell-startup-terminal-cjk-fallback-font-family: "MingLiU";
+    in-out property <[string]> ws-shell-startup-ui-zoom-choices: ["70%", "80%", "90%", "100%", "110%", "120%", "130%", "140%", "150%"];
     in-out property <[string]> ws-shell-startup-language-choices: ["預設", "中文", "English"];
     in-out property <[string]> ws-shell-startup-terminal-font-choices: ["Cascadia Mono", "Cascadia Code", "MingLiU", "DejaVu Sans Mono", "Microsoft JhengHei", "Noto Sans TC"];
     in-out property <[string]> ws-shell-startup-terminal-cjk-fallback-font-choices: ["MingLiU", "Microsoft JhengHei", "Noto Sans TC", "PMingLiU"];
@@ -168,6 +172,7 @@ export component AppWindow inherits Window {
     callback save-shell-manage;
     callback save-shell-startup-settings;
     callback shell-ui-language-changed(string);
+    callback shell-ui-zoom-changed(string);
     callback close-shell-manage;
     callback toggle-shell-manage-row-expanded(int);
     callback window-chrome-drag();
@@ -208,6 +213,18 @@ export component AppWindow inherits Window {
         t == "Return" || t == "Tab" || t == "UpArrow" || t == "DownArrow"
     }
 
+    function is_zoom_shortcut(m: int, t: string, shift: bool) -> bool {
+        (m == 1 || m == 3)
+        && (
+            t == "-"
+            || t == "_"
+            || t == "+"
+            || t == "0"
+            || t == "="
+            || (shift && t == "=")
+        )
+    }
+
     // Global key capture: more reliable than TextEdit key handlers on Windows.
     root_keys := FocusScope {
         focus-on-click: true;
@@ -215,7 +232,8 @@ export component AppWindow inherits Window {
         capture-key-pressed(event) => {
             let t = LogicalKey.tty_text(event);
             let m = ws_pty_mod(event);
-            if (root.ws-interactive-manage-open || root.ws-shell-manage-open) {
+            if ((root.ws-interactive-manage-open || root.ws-shell-manage-open)
+                    && !is_zoom_shortcut(m, t, event.modifiers.shift)) {
                 return reject;
             }
             // Fast path: normal typing stays in TextEdit, avoid Rust callback on every keystroke.
@@ -479,10 +497,12 @@ export component AppWindow inherits Window {
         settings-nav <=> root.ws-shell-settings-nav;
         startup-default-profile <=> root.ws-shell-startup-default-profile;
         startup-language <=> root.ws-shell-startup-language;
+        startup-ui-zoom <=> root.ws-shell-startup-ui-zoom;
         startup-terminal-font-family <=> root.ws-shell-startup-terminal-font-family;
         startup-terminal-cjk-fallback-font-family <=> root.ws-shell-startup-terminal-cjk-fallback-font-family;
         cmd-type-choices: root.ws-cmd-type-choices;
         startup-language-choices: root.ws-shell-startup-language-choices;
+        startup-ui-zoom-choices: root.ws-shell-startup-ui-zoom-choices;
         startup-terminal-font-choices: root.ws-shell-startup-terminal-font-choices;
         startup-terminal-cjk-fallback-font-choices: root.ws-shell-startup-terminal-cjk-fallback-font-choices;
         shell-manage-rows <=> root.ws-shell-manage-rows;
@@ -516,6 +536,9 @@ export component AppWindow inherits Window {
         }
         shell-ui-language-changed(lang) => {
             root.shell-ui-language-changed(lang);
+        }
+        shell-ui-zoom-changed(value) => {
+            root.shell-ui-zoom-changed(value);
         }
         toggle-row-expanded(idx) => {
             root.toggle-shell-manage-row-expanded(idx);
@@ -563,6 +586,7 @@ export component AppWindow inherits Window {
 
     out property <float> ws-terminal-scroll-top-px: workspace.terminal-scroll-top-px;
     out property <float> ws-terminal-viewport-height-px: workspace.terminal-viewport-height-px;
+    out property <float> ws-terminal-row-height-px: workspace.terminal-row-height-px;
 
     if root.ws-image-zoom-index >= 0
             && root.ws-image-zoom-index < root.ws-prompt-images.length: GjPromptImageLightbox {
@@ -600,7 +624,7 @@ export component AppWindow inherits Window {
                 Text {
                     text: root.ws-ipc-warning-title;
                     color: AppTheme.text;
-                    font-size: 16px;
+                    font-size: 16px * AppTheme.ui_zoom_factor;
                     font-weight: 700;
                 }
 
@@ -658,6 +682,7 @@ export component TerminalHistoryWindow inherits Window {
     min-height: 360px;
     background: AppTheme.bg;
     default-font-family: AppTheme.ui_font_family;
+    default-font-size: 13px * AppTheme.ui_zoom_factor;
 
     in-out property <string> history-title: @tr("終端歷史");
     in-out property <string> history-text: "";
@@ -685,7 +710,7 @@ export component TerminalHistoryWindow inherits Window {
                     Text {
                         text: root.history-title;
                         color: AppTheme.text;
-                        font-size: 16px;
+                        font-size: 16px * AppTheme.ui_zoom_factor;
                         font-weight: 700;
                         vertical-alignment: center;
                     }
@@ -708,7 +733,7 @@ export component TerminalHistoryWindow inherits Window {
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             width: 100%;
                             height: 100%;
                         }
@@ -735,7 +760,7 @@ export component TerminalHistoryWindow inherits Window {
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             width: 100%;
                             height: 100%;
                         }
@@ -762,7 +787,7 @@ export component TerminalHistoryWindow inherits Window {
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             width: 100%;
                             height: 100%;
                         }
@@ -789,7 +814,7 @@ export component TerminalHistoryWindow inherits Window {
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             width: 100%;
                             height: 100%;
                         }
@@ -837,7 +862,7 @@ export component TerminalHistoryWindow inherits Window {
                             text: root.history-text;
                             color: AppTheme.text;
                             font-family: root.terminal-font-family;
-                            font-size: 13px;
+                            font-size: 13px * AppTheme.ui_zoom_factor;
                             wrap: word-wrap;
                             vertical-alignment: top;
                             horizontal-alignment: left;

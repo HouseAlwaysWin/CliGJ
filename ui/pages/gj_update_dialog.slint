@@ -50,14 +50,14 @@ export component GjUpdateDialog inherits Rectangle {
             Text {
                 text: @tr("檢查更新");
                 color: AppTheme.text;
-                font-size: 18px;
+                font-size: 18px * AppTheme.ui_zoom_factor;
                 font-weight: 700;
             }
 
             Text {
                 text: @tr("目前版本：") + root.current-version;
                 color: AppTheme.text_muted;
-                font-size: 12px;
+                font-size: 12px * AppTheme.ui_zoom_factor;
             }
 
             Rectangle {
@@ -68,7 +68,7 @@ export component GjUpdateDialog inherits Rectangle {
             Text {
                 text: @tr("可用版本");
                 color: AppTheme.text;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-weight: 600;
             }
 
@@ -98,7 +98,7 @@ export component GjUpdateDialog inherits Rectangle {
                     ? (@tr("已選擇版本：") + root.selected-version + @tr("。按下「確認切換」後將下載新版並關閉目前視窗。"))
                     : root.status-text;
                 color: AppTheme.text_muted;
-                font-size: 12px;
+                font-size: 12px * AppTheme.ui_zoom_factor;
                 wrap: word-wrap;
                 min-height: 24px;
             }

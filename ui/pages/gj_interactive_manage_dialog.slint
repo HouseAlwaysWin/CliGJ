@@ -48,21 +48,21 @@ export component GjInteractiveManageDialog inherits Rectangle {
             Text {
                 text: @tr("指令設定");
                 color: AppTheme.text;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-weight: 600;
             }
 
             Text {
                 text: @tr("變更後請按「儲存」寫入設定；「回復預設」可還原內建 Gemini / Codex / Claude / Copilot。");
                 color: AppTheme.text_muted;
-                font-size: 11px;
+                font-size: 11px * AppTheme.ui_zoom_factor;
                 wrap: word-wrap;
             }
 
             Text {
                 text: "Interactive decides whether the command uses the InteractiveAi terminal path. Markers identify CLI screens; Replay saves repaint-only TUI history.";
                 color: AppTheme.text_muted;
-                font-size: 11px;
+                font-size: 11px * AppTheme.ui_zoom_factor;
                 wrap: word-wrap;
             }
 
@@ -150,7 +150,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         Text {
                                             text: row.name;
                                             color: AppTheme.text_muted;
-                                            font-size: 12px;
+                                            font-size: 12px * AppTheme.ui_zoom_factor;
                                             vertical-alignment: center;
                                             horizontal-alignment: left;
                                             overflow: elide;
@@ -160,7 +160,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                     if !row.key-locked: LineEdit {
                                         horizontal-stretch: 1;
                                         min-height: 26px;
-                                        font-size: 12px;
+                                        font-size: 12px * AppTheme.ui_zoom_factor;
                                         text: row.name;
                                         edited(new_text) => {
                                             root.name-edited(key_idx, new_text);
@@ -186,7 +186,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             Text {
                                                 text: @tr("指令");
                                                 color: AppTheme.text_muted;
-                                                font-size: 11px;
+                                                font-size: 11px * AppTheme.ui_zoom_factor;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: left;
                                             }
@@ -195,7 +195,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         LineEdit {
                                             horizontal-stretch: 1;
                                             min-height: 26px;
-                                            font-size: 12px;
+                                            font-size: 12px * AppTheme.ui_zoom_factor;
                                             text: row.line;
                                             edited(new_text) => {
                                                 root.line-edited(key_idx, new_text);
@@ -217,7 +217,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             Text {
                                                 text: @tr("Markers");
                                                 color: AppTheme.text_muted;
-                                                font-size: 11px;
+                                                font-size: 11px * AppTheme.ui_zoom_factor;
                                                 vertical-alignment: center;
                                                 horizontal-alignment: left;
                                             }
@@ -226,7 +226,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                         LineEdit {
                                             horizontal-stretch: 1;
                                             min-height: 26px;
-                                            font-size: 12px;
+                                            font-size: 12px * AppTheme.ui_zoom_factor;
                                             text: row.markers;
                                             edited(new_text) => {
                                                 root.markers-edited(key_idx, new_text);
@@ -262,7 +262,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             min-width: 52px;
                                             max-width: 72px;
                                             min-height: 26px;
-                                            font-size: 12px;
+                                            font-size: 12px * AppTheme.ui_zoom_factor;
                                             text: row.pinned-footer-lines;
                                             edited(new_text) => {
                                                 root.pinned-lines-edited(key_idx, new_text);
@@ -281,7 +281,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             max-button-width: 92px;
                                             button-height: 24px;
                                             pill-corner-radius: 6px;
-                                            label-font-size: 11px;
+                                            label-font-size: 11px * AppTheme.ui_zoom_factor;
                                             preset: "toggle-accent";
                                             active: row.interactive-cli;
                                             clicked => {
@@ -295,7 +295,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             max-button-width: 72px;
                                             button-height: 24px;
                                             pill-corner-radius: 6px;
-                                            label-font-size: 11px;
+                                            label-font-size: 11px * AppTheme.ui_zoom_factor;
                                             preset: "toggle-accent";
                                             active: row.archive-repainted-frames;
                                             clicked => {
@@ -309,7 +309,7 @@ export component GjInteractiveManageDialog inherits Rectangle {
                                             max-button-width: 52px;
                                             button-height: 24px;
                                             pill-corner-radius: 6px;
-                                            label-font-size: 11px;
+                                            label-font-size: 11px * AppTheme.ui_zoom_factor;
                                             preset: "danger";
                                             clicked => {
                                                 root.remove-row(key_idx);

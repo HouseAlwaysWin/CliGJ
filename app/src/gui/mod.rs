@@ -18,5 +18,6 @@ mod state;
 mod ui_sync;
 #[cfg(target_os = "windows")]
 mod windows_tray;
+mod zoom;
 
 pub use run::run_gui;

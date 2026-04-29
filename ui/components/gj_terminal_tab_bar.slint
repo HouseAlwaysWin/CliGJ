@@ -18,10 +18,10 @@ export component GjTerminalTabBar inherits Rectangle {
     callback rename-tab(int);
     callback move-tab(int, int);
 
-    property <length> plus-w: 32px;
-    property <length> cmd-picker-w: 32px;
-    property <length> left-pad: 4px;
-    property <length> right-pad: 4px;
+    property <length> plus-w: 32px * AppTheme.ui_zoom_factor;
+    property <length> cmd-picker-w: 32px * AppTheme.ui_zoom_factor;
+    property <length> left-pad: 4px * AppTheme.ui_zoom_factor;
+    property <length> right-pad: 4px * AppTheme.ui_zoom_factor;
     property <length> bar-h: AppTheme.tab_bar_height;
     property <length> tabs-content-width: root.tab-count * AppTheme.tab_width;
     property <length> plus-fixed-x: root.width - root.plus-w - root.cmd-picker-w - root.right-pad;
@@ -147,7 +147,7 @@ export component GjTerminalTabBar inherits Rectangle {
             color: AppTheme.text_muted;
             horizontal-alignment: center;
             vertical-alignment: center;
-            font-size: 16px;
+            font-size: 16px * AppTheme.ui_zoom_factor;
             font-weight: 500;
         }
 
@@ -168,17 +168,17 @@ export component GjTerminalTabBar inherits Rectangle {
         background: picker_ta.has-hover ? #2d2d30 : #00000000;
 
         Path {
-            x: (parent.width - 10px) / 2;
-            y: (parent.height - 6px) / 2;
-            width: 10px;
-            height: 6px;
+            x: (parent.width - 10px * AppTheme.ui_zoom_factor) / 2;
+            y: (parent.height - 6px * AppTheme.ui_zoom_factor) / 2;
+            width: 10px * AppTheme.ui_zoom_factor;
+            height: 6px * AppTheme.ui_zoom_factor;
             viewbox-x: 0;
             viewbox-y: 0;
             viewbox-width: 10;
             viewbox-height: 6;
             fill: #00000000;
             stroke: AppTheme.text_muted;
-            stroke-width: 1.6px;
+            stroke-width: 1.6px * AppTheme.ui_zoom_factor;
             stroke-line-cap: round;
             stroke-line-join: round;
             commands: root.cmd-menu-open ? "M 1 5 L 5 1 L 9 5" : "M 1 1 L 5 5 L 9 1";
@@ -192,10 +192,10 @@ export component GjTerminalTabBar inherits Rectangle {
     }
 
     if root.cmd-menu-open : Rectangle {
-        x: max(root.left-pad, root.cmd-picker-x - 170px);
-        y: root.bar-h + 2px;
-        width: 198px;
-        height: min(280px, 14px + root.cmd-type-choices.length * 28px + 96px);
+        x: max(root.left-pad, root.cmd-picker-x - 170px * AppTheme.ui_zoom_factor);
+        y: root.bar-h + 2px * AppTheme.ui_zoom_factor;
+        width: 198px * AppTheme.ui_zoom_factor;
+        height: min(280px * AppTheme.ui_zoom_factor, 14px * AppTheme.ui_zoom_factor + root.cmd-type-choices.length * 28px * AppTheme.ui_zoom_factor + 96px * AppTheme.ui_zoom_factor);
         background: AppTheme.panel_alt;
         border-width: 1px;
         border-color: AppTheme.prompt_chrome_border;
@@ -217,7 +217,7 @@ export component GjTerminalTabBar inherits Rectangle {
                     alignment: start;
 
                     for item in root.cmd-type-choices: Rectangle {
-                        height: 24px;
+                        height: 24px * AppTheme.ui_zoom_factor;
                         border-radius: 6px;
                         background: (root.current-cmd-type == item || item_ta.has-hover) ? #2d2d30 : #00000000;
                         Text {
@@ -225,9 +225,9 @@ export component GjTerminalTabBar inherits Rectangle {
                             color: AppTheme.text;
                             vertical-alignment: center;
                             horizontal-alignment: left;
-                            x: 8px;
-                            width: parent.width - 12px;
-                            font-size: 12px;
+                            x: 8px * AppTheme.ui_zoom_factor;
+                            width: parent.width - 12px * AppTheme.ui_zoom_factor;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             overflow: elide;
                         }
                         item_ta := TouchArea {
@@ -247,7 +247,7 @@ export component GjTerminalTabBar inherits Rectangle {
             }
 
             Rectangle {
-                height: 24px;
+                height: 24px * AppTheme.ui_zoom_factor;
                 border-radius: 6px;
                 background: manage_ta.has-hover ? #2d2d30 : #00000000;
                 Text {
@@ -255,9 +255,9 @@ export component GjTerminalTabBar inherits Rectangle {
                     color: AppTheme.text;
                     vertical-alignment: center;
                     horizontal-alignment: left;
-                    x: 8px;
-                    width: parent.width - 12px;
-                    font-size: 12px;
+                    x: 8px * AppTheme.ui_zoom_factor;
+                    width: parent.width - 12px * AppTheme.ui_zoom_factor;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
                 }
                 manage_ta := TouchArea {
                     clicked => {
@@ -273,7 +273,7 @@ export component GjTerminalTabBar inherits Rectangle {
             }
 
             Rectangle {
-                height: 24px;
+                height: 24px * AppTheme.ui_zoom_factor;
                 border-radius: 6px;
                 background: update_ta.has-hover ? #2d2d30 : #00000000;
                 Text {
@@ -281,9 +281,9 @@ export component GjTerminalTabBar inherits Rectangle {
                     color: AppTheme.text;
                     vertical-alignment: center;
                     horizontal-alignment: left;
-                    x: 8px;
-                    width: parent.width - 12px;
-                    font-size: 12px;
+                    x: 8px * AppTheme.ui_zoom_factor;
+                    width: parent.width - 12px * AppTheme.ui_zoom_factor;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
                 }
                 update_ta := TouchArea {
                     clicked => {
@@ -294,7 +294,7 @@ export component GjTerminalTabBar inherits Rectangle {
             }
 
             Rectangle {
-                height: 24px;
+                height: 24px * AppTheme.ui_zoom_factor;
                 border-radius: 6px;
                 background: about_ta.has-hover ? #2d2d30 : #00000000;
                 Text {
@@ -302,9 +302,9 @@ export component GjTerminalTabBar inherits Rectangle {
                     color: AppTheme.text;
                     vertical-alignment: center;
                     horizontal-alignment: left;
-                    x: 8px;
-                    width: parent.width - 12px;
-                    font-size: 12px;
+                    x: 8px * AppTheme.ui_zoom_factor;
+                    width: parent.width - 12px * AppTheme.ui_zoom_factor;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
                 }
                 about_ta := TouchArea {
                     clicked => {

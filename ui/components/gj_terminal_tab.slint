@@ -14,7 +14,7 @@ export component GjTerminalTab inherits Rectangle {
     width: AppTheme.tab_width;
     height: 100%;
     background: active ? AppTheme.tab_active : AppTheme.tab_inactive;
-    border-radius: 4px;
+    border-radius: 4px * AppTheme.ui_zoom_factor;
 
     Rectangle {
         y: parent.height - 2px;
@@ -32,8 +32,8 @@ export component GjTerminalTab inherits Rectangle {
 
     HorizontalLayout {
         spacing: 0px;
-        padding-left: 8px;
-        padding-right: 2px;
+        padding-left: 8px * AppTheme.ui_zoom_factor;
+        padding-right: 2px * AppTheme.ui_zoom_factor;
 
         Rectangle {
             horizontal-stretch: 1;
@@ -46,10 +46,10 @@ export component GjTerminalTab inherits Rectangle {
                 color: active ? AppTheme.text : AppTheme.text_muted;
                 horizontal-alignment: left;
                 vertical-alignment: center;
-                font-size: 13px;
+                font-size: 13px * AppTheme.ui_zoom_factor;
                 font-weight: active ? 600 : 400;
-                x: 4px;
-                width: parent.width - 8px;
+                x: 4px * AppTheme.ui_zoom_factor;
+                width: parent.width - 8px * AppTheme.ui_zoom_factor;
                 wrap: no-wrap;
                 overflow: elide;
             }
@@ -79,7 +79,7 @@ export component GjTerminalTab inherits Rectangle {
                 moved => {
                     // 只有移動超過 5px 才啟動拖曳，防止點擊時微小位移觸發重排
                     if (!self.is-dragging) {
-                        if (abs(self.mouse-x - self.press-x) > 5px) {
+                        if (abs(self.mouse-x - self.press-x) > 5px * AppTheme.ui_zoom_factor) {
                             self.is-dragging = true;
                             root.drag-started(root.x + self.mouse-x);
                         }
@@ -95,16 +95,16 @@ export component GjTerminalTab inherits Rectangle {
         }
 
         Rectangle {
-            width: 32px;
+            width: 32px * AppTheme.ui_zoom_factor;
             height: 100%;
             background: #00000000;
 
             Rectangle {
-                x: 3px;
-                y: 4px;
-                width: parent.width - 6px;
-                height: parent.height - 8px;
-                border-radius: 4px;
+                x: 3px * AppTheme.ui_zoom_factor;
+                y: 4px * AppTheme.ui_zoom_factor;
+                width: parent.width - 6px * AppTheme.ui_zoom_factor;
+                height: parent.height - 8px * AppTheme.ui_zoom_factor;
+                border-radius: 4px * AppTheme.ui_zoom_factor;
                 background: close_ta.has-hover ? #2d2d30 : #00000000;
             }
 
@@ -113,7 +113,7 @@ export component GjTerminalTab inherits Rectangle {
                 color: close_ta.has-hover ? AppTheme.text : AppTheme.text_muted;
                 horizontal-alignment: center;
                 vertical-alignment: center;
-                font-size: 16px;
+                font-size: 16px * AppTheme.ui_zoom_factor;
                 font-weight: 400;
             }
 

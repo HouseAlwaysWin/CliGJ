@@ -7,8 +7,8 @@ export component GjFileDropOverlay inherits Rectangle {
     z: 500;
 
     Rectangle {
-        width: 240px;
-        height: 120px;
+        width: 240px * AppTheme.ui_zoom_factor;
+        height: 120px * AppTheme.ui_zoom_factor;
         border-width: 2px;
         border-color: AppTheme.accent;
         border-radius: 12px;
@@ -20,14 +20,14 @@ export component GjFileDropOverlay inherits Rectangle {
             Text {
                 // ASCII "+" — U+2295 (⊕) is often missing from bundled UI fonts and renders as tofu.
                 text: "+";
-                font-size: 32px;
+                font-size: 32px * AppTheme.ui_zoom_factor;
                 font-weight: 300;
                 color: AppTheme.accent;
                 horizontal-alignment: center;
             }
             Text {
                 text: @tr("放開以加入檔案");
-                font-size: 16px;
+                font-size: 16px * AppTheme.ui_zoom_factor;
                 font-weight: 600;
                 color: AppTheme.text;
                 horizontal-alignment: center;

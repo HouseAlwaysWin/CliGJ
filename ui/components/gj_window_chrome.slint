@@ -2,7 +2,7 @@ import { AppTheme } from "../theme.slint";
 
 /// Custom title bar: logo, centered title, minimize / maximize / close (frameless window).
 export component GjWindowChrome inherits Rectangle {
-    height: 34px;
+    height: 34px * AppTheme.ui_zoom_factor;
     in-out property <bool> window-maximized;
     callback window-chrome-drag();
     callback window-chrome-minimize();
@@ -19,15 +19,15 @@ export component GjWindowChrome inherits Rectangle {
         alignment: stretch;
 
         Rectangle {
-            width: 138px;
-            height: 34px;
+            width: 138px * AppTheme.ui_zoom_factor;
+            height: 34px * AppTheme.ui_zoom_factor;
             background: #00000000;
 
             Image {
-                x: 10px;
+                x: 10px * AppTheme.ui_zoom_factor;
                 y: (parent.height - self.height) / 2;
-                width: 22px;
-                height: 22px;
+                width: 22px * AppTheme.ui_zoom_factor;
+                height: 22px * AppTheme.ui_zoom_factor;
                 source: @image-url("../../app/src/asset/logo3.png");
             }
 
@@ -48,7 +48,7 @@ export component GjWindowChrome inherits Rectangle {
 
         Rectangle {
             horizontal-stretch: 1;
-            min-height: 34px;
+            min-height: 34px * AppTheme.ui_zoom_factor;
             background: #00000000;
 
             Text {
@@ -56,7 +56,7 @@ export component GjWindowChrome inherits Rectangle {
                 height: 100%;
                 text: "CliGJ";
                 color: AppTheme.text;
-                font-size: 14px;
+                font-size: 14px * AppTheme.ui_zoom_factor;
                 font-weight: 700;
                 horizontal-alignment: center;
                 vertical-alignment: center;
@@ -81,8 +81,8 @@ export component GjWindowChrome inherits Rectangle {
             spacing: 0px;
 
             Rectangle {
-                width: 46px;
-                height: 34px;
+                width: 46px * AppTheme.ui_zoom_factor;
+                height: 34px * AppTheme.ui_zoom_factor;
                 background: tray_ta.has-hover ? #3c3c3c : #00000000;
 
                 Text {
@@ -90,7 +90,7 @@ export component GjWindowChrome inherits Rectangle {
                     height: 100%;
                     text: "T";
                     color: AppTheme.text_muted;
-                    font-size: 12px;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
                     font-weight: 700;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -106,8 +106,8 @@ export component GjWindowChrome inherits Rectangle {
             }
 
             Rectangle {
-                width: 46px;
-                height: 34px;
+                width: 46px * AppTheme.ui_zoom_factor;
+                height: 34px * AppTheme.ui_zoom_factor;
                 background: min_ta.has-hover ? #3c3c3c : #00000000;
 
                 Text {
@@ -115,7 +115,7 @@ export component GjWindowChrome inherits Rectangle {
                     height: 100%;
                     text: "\u{e921}";
                     color: AppTheme.text_muted;
-                    font-size: 11px;
+                    font-size: 11px * AppTheme.ui_zoom_factor;
                     font-family: AppTheme.chrome_caption_icon_font;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -131,8 +131,8 @@ export component GjWindowChrome inherits Rectangle {
             }
 
             Rectangle {
-                width: 46px;
-                height: 34px;
+                width: 46px * AppTheme.ui_zoom_factor;
+                height: 34px * AppTheme.ui_zoom_factor;
                 background: max_ta.has-hover ? #3c3c3c : #00000000;
 
                 Text {
@@ -140,7 +140,7 @@ export component GjWindowChrome inherits Rectangle {
                     height: 100%;
                     text: root.window-maximized ? "\u{e923}" : "\u{e922}";
                     color: AppTheme.text_muted;
-                    font-size: 11px;
+                    font-size: 11px * AppTheme.ui_zoom_factor;
                     font-family: AppTheme.chrome_caption_icon_font;
                     horizontal-alignment: center;
                     vertical-alignment: center;
@@ -156,8 +156,8 @@ export component GjWindowChrome inherits Rectangle {
             }
 
             Rectangle {
-                width: 46px;
-                height: 34px;
+                width: 46px * AppTheme.ui_zoom_factor;
+                height: 34px * AppTheme.ui_zoom_factor;
                 background: close_ta.has-hover ? #e81123 : #00000000;
 
                 Text {
@@ -165,7 +165,7 @@ export component GjWindowChrome inherits Rectangle {
                     height: 100%;
                     text: "\u{e8bb}";
                     color: close_ta.has-hover ? #ffffff : AppTheme.text_muted;
-                    font-size: 11px;
+                    font-size: 11px * AppTheme.ui_zoom_factor;
                     font-family: AppTheme.chrome_caption_icon_font;
                     horizontal-alignment: center;
                     vertical-alignment: center;

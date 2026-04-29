@@ -14,9 +14,8 @@ use cligj_workspace as workspace_files;
 use super::slint_ui::{AppWindow, PromptImageChip};
 use super::slint_ui::{TermLine, TermSpan};
 use super::state::{TabState, TerminalMode};
+use super::zoom::DEFAULT_TERMINAL_ROW_HEIGHT_PX;
 
-/// Must match `row-height` in `gj_viewer.slint`.
-pub(crate) const TERMINAL_ROW_HEIGHT_PX: f32 = 18.0;
 /// Extra rows above/below the visible band (matches prior Slint overscan intent).
 pub(crate) const TERMINAL_ROW_OVERSCAN: usize = 8;
 
@@ -49,13 +48,17 @@ pub(crate) fn scrollable_terminal_line_count(tab: &TabState) -> usize {
     terminal_pinned_footer_start(tab).unwrap_or(tab.terminal_lines.len())
 }
 
+pub(crate) fn terminal_row_height_px(tab: &TabState) -> f32 {
+    tab.terminal_row_height_px.max(DEFAULT_TERMINAL_ROW_HEIGHT_PX)
+}
+
 pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {
     let n = scrollable_terminal_line_count(tab);
     if n == 0 {
         return 0.0;
     }
     let vh = viewport_height_px.max(1.0);
-    let content_h = n as f32 * TERMINAL_ROW_HEIGHT_PX;
+    let content_h = n as f32 * terminal_row_height_px(tab);
     if tab.terminal_mode == TerminalMode::InteractiveAi {
         if tab.interactive_follow_output {
             return (content_h - vh).max(0.0);
@@ -78,7 +81,7 @@ pub(crate) fn clamp_saved_scroll_top(tab: &TabState, viewport_height_px: f32) ->
         return 0.0;
     }
     let vh = viewport_height_px.max(1.0);
-    let max_s = (n as f32 * TERMINAL_ROW_HEIGHT_PX - vh).max(0.0);
+    let max_s = (n as f32 * terminal_row_height_px(tab) - vh).max(0.0);
     tab.terminal_saved_scroll_top_px.clamp(0.0, max_s)
 }
 
@@ -404,6 +407,8 @@ pub(crate) fn push_terminal_view_to_ui(
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     tab.terminal_scroll_top_px = scroll_top;
     tab.terminal_view_height_px = vh;
+    tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
+    let row_height = terminal_row_height_px(tab);
 
     let footer_start = terminal_pinned_footer_start(tab);
     let body_n = scrollable_terminal_line_count(tab);
@@ -438,12 +443,12 @@ pub(crate) fn push_terminal_view_to_ui(
         return;
     }
 
-    let first_f = (scroll_top / TERMINAL_ROW_HEIGHT_PX).floor() as isize;
+    let first_f = (scroll_top / row_height).floor() as isize;
     let first = first_f
         .saturating_sub(TERMINAL_ROW_OVERSCAN as isize)
         .max(0) as usize;
     let last_visible_bottom = scroll_top + vh;
-    let last_visible = (last_visible_bottom / TERMINAL_ROW_HEIGHT_PX).ceil() as isize;
+    let last_visible = (last_visible_bottom / row_height).ceil() as isize;
     let last =
         (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, body_n as isize - 1) as usize;
     let first = first.min(last);
@@ -578,6 +583,7 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     tab.auto_scroll = ui.get_ws_auto_scroll();
     tab.terminal_select_mode = ui.get_ws_terminal_select_mode();
     tab.raw_input_mode = ui.get_ws_raw_input();
+    tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
 }
 
 pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
@@ -602,6 +608,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_terminal_pin_lines(SharedString::from(
         tab.terminal_pinned_footer_lines.to_string().as_str(),
     ));
+    tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
 
     let n = scrollable_terminal_line_count(tab);
     ui.set_ws_terminal_total_lines(n as i32);

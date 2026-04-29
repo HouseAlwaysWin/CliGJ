@@ -40,12 +40,12 @@ export component GjPromptDropZone inherits Rectangle {
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
     forward-focus: prompt-input;
-    private property <length> image-chip-width: 120px;
-    private property <length> image-chip-gap: 8px;
-    private property <length> image-row-height: 52px;
-    private property <length> image-strip-extra-height: 60px;
-    private property <length> image-clear-button-width: 92px;
-    private property <length> image-clear-button-height: 22px;
+    private property <length> image-chip-width: 120px * AppTheme.ui_zoom_factor;
+    private property <length> image-chip-gap: 8px * AppTheme.ui_zoom_factor;
+    private property <length> image-row-height: 52px * AppTheme.ui_zoom_factor;
+    private property <length> image-strip-extra-height: 60px * AppTheme.ui_zoom_factor;
+    private property <length> image-clear-button-width: 92px * AppTheme.ui_zoom_factor;
+    private property <length> image-clear-button-height: 22px * AppTheme.ui_zoom_factor;
     private property <length> image-strip-content-width: root.prompt-images.length > 0
         ? root.prompt-images.length * root.image-chip-width
             + (root.prompt-images.length - 1) * root.image-chip-gap
@@ -60,11 +60,11 @@ export component GjPromptDropZone inherits Rectangle {
 
     horizontal-stretch: 1;
     // Base 116px; +28px file chip strip; +60px image strip (thumbnails row).
-    min-height: 116px
-        + (root.prompt-path-chips.length > 0 ? 28px : 0px)
+    min-height: 116px * AppTheme.ui_zoom_factor
+        + (root.prompt-path-chips.length > 0 ? 28px * AppTheme.ui_zoom_factor : 0px)
         + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
-    max-height: 116px
-        + (root.prompt-path-chips.length > 0 ? 28px : 0px)
+    max-height: 116px * AppTheme.ui_zoom_factor
+        + (root.prompt-path-chips.length > 0 ? 28px * AppTheme.ui_zoom_factor : 0px)
         + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
     background: AppTheme.bg;
     border-width: 0px;
@@ -123,13 +123,13 @@ export component GjPromptDropZone inherits Rectangle {
                                             text: "file";
                                             color: #b5bcc8;
                                             vertical-alignment: center;
-                                            font-size: 11px;
+                                            font-size: 11px * AppTheme.ui_zoom_factor;
                                         }
                                         Text {
                                             text: chip;
                                             color: AppTheme.prompt_submit_bg;
                                             vertical-alignment: center;
-                                            font-size: 12px;
+                                            font-size: 12px * AppTheme.ui_zoom_factor;
                                             font-weight: 600;
                                         }
                                     }
@@ -159,7 +159,7 @@ export component GjPromptDropZone inherits Rectangle {
                                         color: #ff8ca8;
                                         vertical-alignment: center;
                                         horizontal-alignment: center;
-                                        font-size: 11px;
+                                        font-size: 11px * AppTheme.ui_zoom_factor;
                                         width: 100%;
                                         height: 100%;
                                     }
@@ -189,7 +189,7 @@ export component GjPromptDropZone inherits Rectangle {
                                     color: AppTheme.text_muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
-                                    font-size: 9px;
+                                    font-size: 9px * AppTheme.ui_zoom_factor;
                                 }
                             }
                         }
@@ -210,7 +210,7 @@ export component GjPromptDropZone inherits Rectangle {
                                     text: @tr("取消");
                                     color: AppTheme.text_muted;
                                     vertical-alignment: center;
-                                    font-size: 11px;
+                                    font-size: 11px * AppTheme.ui_zoom_factor;
                                 }
                             }
 
@@ -311,7 +311,7 @@ export component GjPromptDropZone inherits Rectangle {
                                                         text: row.label;
                                                         color: AppTheme.prompt_submit_bg;
                                                         vertical-alignment: center;
-                                                        font-size: 11px;
+                                                        font-size: 11px * AppTheme.ui_zoom_factor;
                                                         font-weight: 600;
                                                         overflow: elide;
                                                         horizontal-stretch: 1;
@@ -348,7 +348,7 @@ export component GjPromptDropZone inherits Rectangle {
                                                     color: #ff8ca8;
                                                     vertical-alignment: center;
                                                     horizontal-alignment: center;
-                                                    font-size: 11px;
+                                                    font-size: 11px * AppTheme.ui_zoom_factor;
                                                     width: 100%;
                                                     height: parent.height;
                                                 }
@@ -396,7 +396,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 text: @tr("清除圖");
                                 color: AppTheme.text_muted;
                                 vertical-alignment: center;
-                                font-size: 11px;
+                                font-size: 11px * AppTheme.ui_zoom_factor;
                             }
                         }
 
@@ -416,7 +416,7 @@ export component GjPromptDropZone inherits Rectangle {
                         ? @tr("TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject")
                         : @tr("Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V");
                     font-family: AppTheme.ui_font_family;
-                    font-size: 13px;
+                    font-size: 13px * AppTheme.ui_zoom_factor;
                     wrap: word-wrap;
                 }
 
@@ -461,7 +461,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 11px;
+                                font-size: 11px * AppTheme.ui_zoom_factor;
                                 font-weight: 700;
                             }
 
@@ -487,7 +487,7 @@ export component GjPromptDropZone inherits Rectangle {
                                     color: AppTheme.text_muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
-                                    font-size: 9px;
+                                    font-size: 9px * AppTheme.ui_zoom_factor;
                                 }
                             }
                         }
@@ -532,7 +532,7 @@ export component GjPromptDropZone inherits Rectangle {
                                     color: AppTheme.text_muted;
                                     horizontal-alignment: center;
                                     vertical-alignment: center;
-                                    font-size: 9px;
+                                    font-size: 9px * AppTheme.ui_zoom_factor;
                                 }
                             }
                         }
@@ -592,7 +592,7 @@ export component GjPromptDropZone inherits Rectangle {
                                         color: AppTheme.text_muted;
                                         horizontal-alignment: center;
                                         vertical-alignment: center;
-                                        font-size: 9px;
+                                        font-size: 9px * AppTheme.ui_zoom_factor;
                                     }
                                 }
                             }
@@ -601,7 +601,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 horizontal-stretch: 1;
                                 min-width: 60px;
                                 text <=> root.terminal-pin-lines;
-                                font-size: 11px;
+                                font-size: 11px * AppTheme.ui_zoom_factor;
                                 edited(new_text) => {
                                     root.terminal-pin-lines-edited(new_text);
                                 }
@@ -650,7 +650,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }
@@ -703,7 +703,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }
@@ -730,7 +730,7 @@ export component GjPromptDropZone inherits Rectangle {
                         if root.ipc-running && root.ipc-client-count > 0: Text {
                             text: "\{root.ipc-client-count}";
                             color: #97f5be;
-                            font-size: 8px;
+                            font-size: 8px * AppTheme.ui_zoom_factor;
                             font-weight: 700;
                             x: parent.width - self.width - 4px;
                             y: 1px;
@@ -760,7 +760,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }
@@ -807,7 +807,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }
@@ -829,7 +829,7 @@ export component GjPromptDropZone inherits Rectangle {
                             color: AppTheme.text_muted;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             font-family: AppTheme.chrome_caption_icon_font;
                         }
 
@@ -857,7 +857,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }
@@ -878,7 +878,7 @@ export component GjPromptDropZone inherits Rectangle {
                             color: AppTheme.text;
                             horizontal-alignment: center;
                             vertical-alignment: center;
-                            font-size: 12px;
+                            font-size: 12px * AppTheme.ui_zoom_factor;
                             font-weight: 700;
                         }
 
@@ -906,7 +906,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
-                                font-size: 9px;
+                                font-size: 9px * AppTheme.ui_zoom_factor;
                             }
                         }
                     }

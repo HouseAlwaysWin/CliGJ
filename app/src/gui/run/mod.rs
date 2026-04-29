@@ -21,9 +21,12 @@ use super::i18n::apply_slint_language_from_shell_setting;
 use super::interactive_commands::sync_interactive_command_choices_to_ui;
 use super::ipc::{IpcBridge, IpcGuiCommand};
 use super::shell_profiles::sync_shell_profile_choices_to_ui;
-use super::slint_ui::{AppWindow, TerminalHistoryWindow};
+use super::slint_ui::{AppTheme, AppWindow, TerminalHistoryWindow};
 use super::state::{GuiState, TabState, TerminalChunk};
 use super::ui_sync::{load_tab_to_ui, sync_tab_count};
+use super::zoom::{
+    DEFAULT_UI_ZOOM_PERCENT, format_ui_zoom_percent, normalize_ui_zoom_percent, ui_zoom_factor,
+};
 
 mod callbacks;
 mod helpers;
@@ -80,6 +83,8 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     if persist_interactive || persist_shell_profiles {
         let _ = cfg.save();
     }
+    let ui_zoom_percent =
+        normalize_ui_zoom_percent(cfg.ui_zoom_percent().unwrap_or(DEFAULT_UI_ZOOM_PERCENT));
     let ui_language = cfg.ui_language().unwrap_or_else(|| "預設".to_string());
     let terminal_font_family =
         normalize_terminal_font_family(cfg.terminal_font_family().as_deref().unwrap_or(""))
@@ -134,6 +139,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         shell_profiles,
         startup_language: ui_language.clone(),
         startup_default_shell_profile: startup_profile.clone(),
+        startup_ui_zoom_percent: ui_zoom_percent,
         startup_terminal_font_family: terminal_font_family.clone(),
         startup_terminal_cjk_fallback_font_family: terminal_cjk_fallback_font_family.clone(),
         ipc_last_occupied_error_notified: String::new(),
@@ -145,6 +151,9 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
     sync_shell_profile_choices_to_ui(&app, &state.borrow());
     app.set_ws_shell_startup_language(SharedString::from(ui_language.as_str()));
     app.set_ws_shell_startup_default_profile(SharedString::from(startup_profile.as_str()));
+    app.set_ws_shell_startup_ui_zoom(SharedString::from(
+        format_ui_zoom_percent(ui_zoom_percent).as_str(),
+    ));
     app.set_ws_terminal_font_family(SharedString::from(terminal_font_family.as_str()));
     app.set_ws_terminal_cjk_fallback_font_family(SharedString::from(
         terminal_cjk_fallback_font_family.as_str(),
@@ -180,6 +189,11 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
             .map(|name| SharedString::from(*name))
             .collect::<Vec<_>>(),
     )));
+    app.global::<AppTheme>()
+        .set_ui_zoom_factor(ui_zoom_factor(ui_zoom_percent));
+    history_window
+        .global::<AppTheme>()
+        .set_ui_zoom_factor(ui_zoom_factor(ui_zoom_percent));
     apply_slint_language_from_shell_setting(&app, ui_language.as_str());
     if let Err(e) = ipc_bridge.start() {
         eprintln!("CliGJ: IPC auto-start: {e}");
