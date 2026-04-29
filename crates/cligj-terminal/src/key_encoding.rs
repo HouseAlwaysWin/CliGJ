@@ -29,6 +29,9 @@ pub fn normalize_tty_key_token(key: &str) -> &str {
         "\u{2193}" => "DownArrow",
         "\u{2190}" => "LeftArrow",
         "\u{2192}" => "RightArrow",
+        // Ignore bare modifier key events (Windows VK_SHIFT=0x10, VK_CONTROL=0x11, VK_MENU=0x12)
+        // and string names that some windowing backends leak into text events.
+        "\u{10}" | "\u{11}" | "\u{12}" | "\u{14}" | "Shift" | "Control" | "Alt" | "Meta" | "Super" | "OS" => "",
         _ => key,
     }
 }

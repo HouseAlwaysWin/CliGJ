@@ -34,6 +34,64 @@ pub(super) fn line_plain_text(line: &ColoredLine) -> String {
     text
 }
 
+fn strip_interactive_prompt_prefix(text: &str) -> &str {
+    let trimmed = text.trim_start();
+    let Some(first) = trimmed.chars().next() else {
+        return "";
+    };
+    if matches!(first, '\u{203a}' | '>') {
+        let rest = &trimmed[first.len_utf8()..];
+        return rest.strip_prefix(' ').unwrap_or(rest);
+    }
+    trimmed
+}
+
+fn extract_interactive_prompt_from_line(line: &ColoredLine) -> Option<String> {
+    let line_text = line_plain_text(line);
+    let prompt = strip_interactive_prompt_prefix(line_text.as_str()).trim_end();
+    if prompt.is_empty() {
+        return None;
+    }
+    Some(prompt.to_string())
+}
+
+pub(super) fn interactive_prompt_from_cursor_line(tab: &TabState) -> Option<String> {
+    let row = tab.terminal_cursor_row?;
+    let line = tab.terminal_lines.get(row)?;
+    extract_interactive_prompt_from_line(line)
+}
+
+pub(super) fn interactive_prompt_from_visible_footer(tab: &TabState) -> Option<String> {
+    tab.terminal_lines
+        .iter()
+        .rev()
+        .filter_map(extract_interactive_prompt_from_line)
+        .find(|prompt| {
+            prompt.starts_with('/') || prompt.starts_with('@') || prompt.starts_with('#')
+        })
+}
+
+fn sync_interactive_prompt_to_composer(ui: &AppWindow, tab: &mut TabState) {
+    if tab.terminal_mode != TerminalMode::InteractiveAi {
+        return;
+    }
+    let Some(extracted) = interactive_prompt_from_cursor_line(tab)
+        .or_else(|| interactive_prompt_from_visible_footer(tab))
+    else {
+        return;
+    };
+    let current_ui = ui.get_ws_prompt().to_string();
+    let can_sync = current_ui.is_empty()
+        || (current_ui == tab.composer_pty_mirror && extracted.starts_with(current_ui.as_str()));
+    if !can_sync || extracted == current_ui {
+        return;
+    }
+    let next = SharedString::from(extracted.as_str());
+    ui.set_ws_prompt(next.clone());
+    tab.prompt = next;
+    tab.composer_pty_mirror = extracted;
+}
+
 fn line_has_shell_preamble_marker(line: &ColoredLine) -> bool {
     let text = line_plain_text(line).to_ascii_lowercase();
     text.contains("microsoft windows") || text.contains("microsoft corporation")
@@ -563,6 +621,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         } else {
             push_terminal_view_to_ui(ui, tab, None);
         }
+        sync_interactive_prompt_to_composer(ui, tab);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         return;
     }
@@ -588,6 +647,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         {
             ui.invoke_ws_apply_terminal_scroll_top_px(exp);
             push_terminal_view_to_ui(ui, tab, Some(exp));
+            sync_interactive_prompt_to_composer(ui, tab);
             tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         }
         return;
@@ -597,6 +657,7 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
         || (vh - tab.last_pushed_viewport_height).abs() > 0.5
     {
         push_terminal_view_to_ui(ui, tab, None);
+        sync_interactive_prompt_to_composer(ui, tab);
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     }
 }

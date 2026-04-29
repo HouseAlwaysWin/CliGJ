@@ -68,6 +68,48 @@ fn repainted_footer_typing_does_not_archive_each_prompt_edit() {
 }
 
 #[test]
+fn interactive_prompt_from_cursor_line_strips_prompt_marker() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![line("\u{203a} /skills")];
+    tab.terminal_cursor_row = Some(0);
+    tab.terminal_cursor_col = Some(9);
+
+    let prompt = interactive_prompt_from_cursor_line(&tab);
+    assert_eq!(prompt.as_deref(), Some("/skills"));
+}
+
+#[test]
+fn interactive_prompt_from_cursor_line_ignores_empty_prompt() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![line("\u{203a} ")];
+    tab.terminal_cursor_row = Some(0);
+    tab.terminal_cursor_col = Some(2);
+
+    assert_eq!(interactive_prompt_from_cursor_line(&tab), None);
+}
+
+#[test]
+fn interactive_prompt_from_visible_footer_falls_back_when_cursor_is_elsewhere() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![
+        line("Shift+Tab to accept edits"),
+        line("> /skills"),
+        line("skills  list, enable, disable"),
+    ];
+    tab.terminal_cursor_row = Some(2);
+    tab.terminal_cursor_col = Some(6);
+
+    let prompt = interactive_prompt_from_visible_footer(&tab);
+    assert_eq!(prompt.as_deref(), Some("/skills"));
+}
+
+#[test]
 fn interactive_history_without_overlap_preserves_existing_lines() {
     let (tx, _rx) = std::sync::mpsc::channel();
     let mut tab = crate::gui::state::TabState::new(1, tx, None);
