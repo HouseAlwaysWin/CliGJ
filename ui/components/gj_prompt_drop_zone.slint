@@ -40,10 +40,24 @@ export component GjPromptDropZone inherits Rectangle {
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
     forward-focus: prompt-input;
+    private property <length> chrome-padding: 8px * AppTheme.ui_zoom_factor;
+    private property <length> chrome-spacing: 4px * AppTheme.ui_zoom_factor;
+    private property <length> chip-row-height: 24px * AppTheme.ui_zoom_factor;
+    private property <length> chip-height: 22px * AppTheme.ui_zoom_factor;
+    private property <length> chip-close-width: 18px * AppTheme.ui_zoom_factor;
+    private property <length> editor-min-height: 68px * AppTheme.ui_zoom_factor;
+    private property <length> toolbar-height: 22px * AppTheme.ui_zoom_factor;
+    private property <length> base-layout-slack: 6px * AppTheme.ui_zoom_factor;
+    private property <length> image-row-slack: 4px * AppTheme.ui_zoom_factor;
+    private property <length> toolbar-main-button-width: 28px * AppTheme.ui_zoom_factor;
+    private property <length> toolbar-wide-button-width: 34px * AppTheme.ui_zoom_factor;
+    private property <length> toolbar-combo-width: 168px * AppTheme.ui_zoom_factor;
+    private property <length> pin-pill-min-width: 86px * AppTheme.ui_zoom_factor;
+    private property <length> pin-input-min-width: 60px * AppTheme.ui_zoom_factor;
+    private property <length> pin-icon-width: 22px * AppTheme.ui_zoom_factor;
     private property <length> image-chip-width: 120px * AppTheme.ui_zoom_factor;
     private property <length> image-chip-gap: 8px * AppTheme.ui_zoom_factor;
     private property <length> image-row-height: 52px * AppTheme.ui_zoom_factor;
-    private property <length> image-strip-extra-height: 60px * AppTheme.ui_zoom_factor;
     private property <length> image-clear-button-width: 92px * AppTheme.ui_zoom_factor;
     private property <length> image-clear-button-height: 22px * AppTheme.ui_zoom_factor;
     private property <length> image-strip-content-width: root.prompt-images.length > 0
@@ -59,13 +73,26 @@ export component GjPromptDropZone inherits Rectangle {
     }
 
     horizontal-stretch: 1;
-    // Base 116px; +28px file chip strip; +60px image strip (thumbnails row).
-    min-height: 116px * AppTheme.ui_zoom_factor
-        + (root.prompt-path-chips.length > 0 ? 28px * AppTheme.ui_zoom_factor : 0px)
-        + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
-    max-height: 116px * AppTheme.ui_zoom_factor
-        + (root.prompt-path-chips.length > 0 ? 28px * AppTheme.ui_zoom_factor : 0px)
-        + (root.prompt-images.length > 0 ? root.image-strip-extra-height : 0px);
+    // Keep the outer frame derived from the actual scaled row heights so zoom-out doesn't
+    // shrink the shell below the toolbar / editor content.
+    min-height: root.editor-min-height
+        + root.toolbar-height
+        + root.chrome-padding * 2
+        + root.chrome-spacing
+        + root.base-layout-slack
+        + (root.prompt-path-chips.length > 0 ? root.chip-row-height + root.chrome-spacing : 0px)
+        + (root.prompt-images.length > 0
+            ? root.image-row-height + root.chrome-spacing + root.image-row-slack
+            : 0px);
+    max-height: root.editor-min-height
+        + root.toolbar-height
+        + root.chrome-padding * 2
+        + root.chrome-spacing
+        + root.base-layout-slack
+        + (root.prompt-path-chips.length > 0 ? root.chip-row-height + root.chrome-spacing : 0px)
+        + (root.prompt-images.length > 0
+            ? root.image-row-height + root.chrome-spacing + root.image-row-slack
+            : 0px);
     background: AppTheme.bg;
     border-width: 0px;
 
@@ -87,29 +114,29 @@ export component GjPromptDropZone inherits Rectangle {
             border-radius: AppTheme.prompt_chrome_radius;
 
             VerticalLayout {
-                padding: 8px;
-                spacing: 4px;
+                padding: root.chrome-padding;
+                spacing: root.chrome-spacing;
 
                 if root.prompt-path-chips.length > 0 : Rectangle {
-                    min-height: 24px;
-                    max-height: 24px;
+                    min-height: root.chip-row-height;
+                    max-height: root.chip-row-height;
                     background: #00000000;
                     HorizontalLayout {
-                        height: 22px;
-                        spacing: 6px;
+                        height: root.chip-height;
+                        spacing: 6px * AppTheme.ui_zoom_factor;
 
                         for chip[idx] in root.prompt-path-chips: Rectangle {
                             width: self.preferred-width;
-                            height: 22px;
+                            height: root.chip-height;
                             border-width: 1px;
                             border-color: #ff3b6d;
                             border-radius: 12px;
                             background: #14161c;
 
                             HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 4px;
-                                spacing: 8px;
+                                padding-left: 8px * AppTheme.ui_zoom_factor;
+                                padding-right: 4px * AppTheme.ui_zoom_factor;
+                                spacing: 8px * AppTheme.ui_zoom_factor;
 
                                 Rectangle {
                                     horizontal-stretch: 1;
@@ -117,7 +144,7 @@ export component GjPromptDropZone inherits Rectangle {
                                     background: #00000000;
 
                                     HorizontalLayout {
-                                        spacing: 8px;
+                                        spacing: 8px * AppTheme.ui_zoom_factor;
 
                                         Text {
                                             text: "file";
@@ -150,7 +177,7 @@ export component GjPromptDropZone inherits Rectangle {
                                 }
 
                                 Rectangle {
-                                    width: 18px;
+                                    width: root.chip-close-width;
                                     height: parent.height;
                                     background: #00000000;
 
@@ -175,11 +202,11 @@ export component GjPromptDropZone inherits Rectangle {
                             }
 
                             if chip_ta.has-hover: Rectangle {
-                                y: -22px;
+                                y: -22px * AppTheme.ui_zoom_factor;
                                 x: 0px;
-                                width: 214px;
-                                height: 18px;
-                                border-radius: 4px;
+                                width: 214px * AppTheme.ui_zoom_factor;
+                                height: 18px * AppTheme.ui_zoom_factor;
+                                border-radius: 4px * AppTheme.ui_zoom_factor;
                                 background: #20232b;
                                 border-width: 1px;
                                 border-color: AppTheme.prompt_chrome_border;
@@ -196,16 +223,16 @@ export component GjPromptDropZone inherits Rectangle {
 
                         Rectangle {
                             width: self.preferred-width;
-                            height: 22px;
+                            height: root.chip-height;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
                             border-radius: 12px;
                             background: #00000000;
 
                             HorizontalLayout {
-                                padding-left: 8px;
-                                padding-right: 8px;
-                                spacing: 6px;
+                                padding-left: 8px * AppTheme.ui_zoom_factor;
+                                padding-right: 8px * AppTheme.ui_zoom_factor;
+                                spacing: 6px * AppTheme.ui_zoom_factor;
                                 Text {
                                     text: @tr("取消");
                                     color: AppTheme.text_muted;
@@ -268,14 +295,14 @@ export component GjPromptDropZone inherits Rectangle {
                                         clip: true;
 
                                         HorizontalLayout {
-                                            padding-left: 6px;
-                                            padding-right: 6px;
-                                            spacing: 6px;
+                                            padding-left: 6px * AppTheme.ui_zoom_factor;
+                                            padding-right: 6px * AppTheme.ui_zoom_factor;
+                                            spacing: 6px * AppTheme.ui_zoom_factor;
 
                                             Rectangle {
-                                                width: 40px;
-                                                height: 40px;
-                                                border-radius: 6px;
+                                                width: 40px * AppTheme.ui_zoom_factor;
+                                                height: 40px * AppTheme.ui_zoom_factor;
+                                                border-radius: 6px * AppTheme.ui_zoom_factor;
                                                 clip: true;
                                                 y: (parent.height - self.height) / 2;
 
@@ -340,7 +367,7 @@ export component GjPromptDropZone inherits Rectangle {
                                             }
 
                                             Rectangle {
-                                                width: 18px;
+                                                width: root.chip-close-width;
                                                 height: parent.height;
 
                                                 Text {
@@ -389,9 +416,9 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 8px;
-                            spacing: 6px;
+                            padding-left: 8px * AppTheme.ui_zoom_factor;
+                            padding-right: 8px * AppTheme.ui_zoom_factor;
+                            spacing: 6px * AppTheme.ui_zoom_factor;
                             Text {
                                 text: @tr("清除圖");
                                 color: AppTheme.text_muted;
@@ -410,7 +437,7 @@ export component GjPromptDropZone inherits Rectangle {
 
                 prompt-input := TextEdit {
                     horizontal-stretch: 1;
-                    min-height: 68px;
+                    min-height: root.editor-min-height;
                     text <=> root.prompt;
                     placeholder-text: root.raw-input-enabled
                         ? @tr("TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject")
@@ -421,22 +448,22 @@ export component GjPromptDropZone inherits Rectangle {
                 }
 
                 HorizontalLayout {
-                    spacing: 6px;
+                    spacing: 6px * AppTheme.ui_zoom_factor;
 
                     HorizontalLayout {
-                        spacing: 4px;
+                        spacing: 4px * AppTheme.ui_zoom_factor;
                         alignment: start;
                         horizontal-stretch: 0;
 
                         // Cap width so long labels don't stretch the bar; popup uses native scrolling.
                         Rectangle {
-                            width: 168px;
-                            height: 22px;
+                            width: root.toolbar-combo-width;
+                            height: root.toolbar-height;
                             horizontal-stretch: 0;
 
                             ComboBox {
                                 width: 100%;
-                                height: 22px;
+                                height: root.toolbar-height;
                                 model: root.interactive-command-choices;
                                 current-value: @tr("選擇指令");
                                 selected(val) => {
@@ -447,8 +474,8 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         Rectangle {
-                            width: 28px;
-                            height: 22px;
+                            width: root.toolbar-main-button-width;
+                            height: root.toolbar-height;
                             horizontal-stretch: 0;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -474,11 +501,11 @@ export component GjPromptDropZone inherits Rectangle {
                             }
 
                             if manage_cmds_ta.has-hover: Rectangle {
-                                y: -22px;
-                                x: -20px;
-                                width: 72px;
-                                height: 18px;
-                                border-radius: 4px;
+                                y: -22px * AppTheme.ui_zoom_factor;
+                                x: -20px * AppTheme.ui_zoom_factor;
+                                width: 72px * AppTheme.ui_zoom_factor;
+                                height: 18px * AppTheme.ui_zoom_factor;
+                                border-radius: 4px * AppTheme.ui_zoom_factor;
                                 background: #20232b;
                                 border-width: 1px;
                                 border-color: AppTheme.prompt_chrome_border;
@@ -493,8 +520,8 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         Rectangle {
-                            width: 28px;
-                            height: 22px;
+                            width: root.toolbar-main-button-width;
+                            height: root.toolbar-height;
                             horizontal-stretch: 0;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -502,8 +529,8 @@ export component GjPromptDropZone inherits Rectangle {
                             background: #00000000;
 
                             Image {
-                                width: 14px;
-                                height: 14px;
+                                width: 14px * AppTheme.ui_zoom_factor;
+                                height: 14px * AppTheme.ui_zoom_factor;
                                 x: (parent.width - self.width) / 2;
                                 y: (parent.height - self.height) / 2;
                                 source: @image-url("../icons/prompt_workspace.svg");
@@ -519,11 +546,11 @@ export component GjPromptDropZone inherits Rectangle {
                             }
 
                             if workspace_ta.has-hover: Rectangle {
-                                y: -22px;
+                                y: -22px * AppTheme.ui_zoom_factor;
                                 x: (parent.width - self.width) / 2;
-                                width: 104px;
-                                height: 18px;
-                                border-radius: 4px;
+                                width: 104px * AppTheme.ui_zoom_factor;
+                                height: 18px * AppTheme.ui_zoom_factor;
+                                border-radius: 4px * AppTheme.ui_zoom_factor;
                                 background: #20232b;
                                 border-width: 1px;
                                 border-color: AppTheme.prompt_chrome_border;
@@ -544,8 +571,8 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        min-width: 86px;
-                        height: 22px;
+                        min-width: root.pin-pill-min-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
@@ -553,18 +580,18 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         HorizontalLayout {
-                            padding-left: 8px;
-                            padding-right: 6px;
-                            spacing: 6px;
+                            padding-left: 8px * AppTheme.ui_zoom_factor;
+                            padding-right: 6px * AppTheme.ui_zoom_factor;
+                            spacing: 6px * AppTheme.ui_zoom_factor;
 
                             Rectangle {
-                                width: 22px;
+                                width: root.pin-icon-width;
                                 height: parent.height;
                                 background: #00000000;
 
                                 Image {
-                                    width: 14px;
-                                    height: 14px;
+                                    width: 14px * AppTheme.ui_zoom_factor;
+                                    height: 14px * AppTheme.ui_zoom_factor;
                                     x: (parent.width - self.width) / 2;
                                     y: (parent.height - self.height) / 2;
                                     source: @image-url("../icons/prompt_pin.svg");
@@ -579,11 +606,11 @@ export component GjPromptDropZone inherits Rectangle {
                                 }
 
                                 if pin_tip_ta.has-hover: Rectangle {
-                                    y: -22px;
+                                    y: -22px * AppTheme.ui_zoom_factor;
                                     x: (parent.width - self.width) / 2;
-                                    width: 72px;
-                                    height: 18px;
-                                    border-radius: 4px;
+                                    width: 72px * AppTheme.ui_zoom_factor;
+                                    height: 18px * AppTheme.ui_zoom_factor;
+                                    border-radius: 4px * AppTheme.ui_zoom_factor;
                                     background: #20232b;
                                     border-width: 1px;
                                     border-color: AppTheme.prompt_chrome_border;
@@ -599,7 +626,7 @@ export component GjPromptDropZone inherits Rectangle {
 
                             LineEdit {
                                 horizontal-stretch: 1;
-                                min-width: 60px;
+                                min-width: root.pin-input-min-width;
                                 text <=> root.terminal-pin-lines;
                                 font-size: 11px * AppTheme.ui_zoom_factor;
                                 edited(new_text) => {
@@ -611,8 +638,8 @@ export component GjPromptDropZone inherits Rectangle {
 
                     // History: icon button
                     Rectangle {
-                        width: 28px;
-                        height: 22px;
+                        width: root.toolbar-main-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
@@ -620,8 +647,8 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         Image {
-                            width: 14px;
-                            height: 14px;
+                            width: 14px * AppTheme.ui_zoom_factor;
+                            height: 14px * AppTheme.ui_zoom_factor;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                             source: @image-url("../icons/prompt_history.svg");
@@ -637,11 +664,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if history_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -12px;
-                            width: 60px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -12px * AppTheme.ui_zoom_factor;
+                            width: 60px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -656,8 +683,8 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        width: 28px;
-                        height: 22px;
+                        width: root.toolbar-main-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: root.raw-input-enabled ? AppTheme.accent : AppTheme.prompt_chrome_border;
@@ -665,8 +692,8 @@ export component GjPromptDropZone inherits Rectangle {
                         background: root.raw-input-enabled ? #ff4f6f : #00000000;
 
                         Image {
-                            width: 14px;
-                            height: 14px;
+                            width: 14px * AppTheme.ui_zoom_factor;
+                            height: 14px * AppTheme.ui_zoom_factor;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                             source: root.raw-input-enabled
@@ -690,11 +717,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if raw_toggle_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -18px;
-                            width: 95px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -18px * AppTheme.ui_zoom_factor;
+                            width: 95px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -710,8 +737,10 @@ export component GjPromptDropZone inherits Rectangle {
 
                     // IPC: SVG 鏈條；連線中顯示客戶端數量
                     Rectangle {
-                        width: root.ipc-running && root.ipc-client-count > 0 ? 38px : 28px;
-                        height: 22px;
+                        width: root.ipc-running && root.ipc-client-count > 0
+                            ? 38px * AppTheme.ui_zoom_factor
+                            : root.toolbar-main-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: root.ipc-running ? #4fb67b : AppTheme.prompt_chrome_border;
@@ -719,8 +748,8 @@ export component GjPromptDropZone inherits Rectangle {
                         background: root.ipc-running ? #193126 : #00000000;
 
                         Image {
-                            width: 20px;
-                            height: 20px;
+                            width: 20px * AppTheme.ui_zoom_factor;
+                            height: 20px * AppTheme.ui_zoom_factor;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                             source: @image-url("../icons/prompt_ipc.svg");
@@ -732,8 +761,8 @@ export component GjPromptDropZone inherits Rectangle {
                             color: #97f5be;
                             font-size: 8px * AppTheme.ui_zoom_factor;
                             font-weight: 700;
-                            x: parent.width - self.width - 4px;
-                            y: 1px;
+                            x: parent.width - self.width - 4px * AppTheme.ui_zoom_factor;
+                            y: 1px * AppTheme.ui_zoom_factor;
                         }
 
                         ipc_toggle_ta := TouchArea {
@@ -747,11 +776,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if ipc_toggle_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -14px;
-                            width: 58px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -14px * AppTheme.ui_zoom_factor;
+                            width: 58px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -766,8 +795,8 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        width: 28px;
-                        height: 22px;
+                        width: root.toolbar-main-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
@@ -775,8 +804,8 @@ export component GjPromptDropZone inherits Rectangle {
                         background: #00000000;
 
                         Image {
-                            width: 14px;
-                            height: 14px;
+                            width: 14px * AppTheme.ui_zoom_factor;
+                            height: 14px * AppTheme.ui_zoom_factor;
                             x: (parent.width - self.width) / 2;
                             y: (parent.height - self.height) / 2;
                             source: @image-url("../icons/prompt_file.svg");
@@ -794,11 +823,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if inject_file_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -16px;
-                            width: 64px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -16px * AppTheme.ui_zoom_factor;
+                            width: 64px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -813,8 +842,8 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        width: 28px;
-                        height: 22px;
+                        width: root.toolbar-main-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_chrome_border;
@@ -844,11 +873,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if image_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -16px;
-                            width: 64px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -16px * AppTheme.ui_zoom_factor;
+                            width: 64px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
@@ -863,8 +892,8 @@ export component GjPromptDropZone inherits Rectangle {
                     }
 
                     Rectangle {
-                        width: 34px;
-                        height: 22px;
+                        width: root.toolbar-wide-button-width;
+                        height: root.toolbar-height;
                         horizontal-stretch: 0;
                         border-width: 1px;
                         border-color: AppTheme.prompt_submit_border;
@@ -893,11 +922,11 @@ export component GjPromptDropZone inherits Rectangle {
                         }
 
                         if submit_ta.has-hover: Rectangle {
-                            y: -22px;
-                            x: -12px;
-                            width: 60px;
-                            height: 18px;
-                            border-radius: 4px;
+                            y: -22px * AppTheme.ui_zoom_factor;
+                            x: -12px * AppTheme.ui_zoom_factor;
+                            width: 60px * AppTheme.ui_zoom_factor;
+                            height: 18px * AppTheme.ui_zoom_factor;
+                            border-radius: 4px * AppTheme.ui_zoom_factor;
                             background: #20232b;
                             border-width: 1px;
                             border-color: AppTheme.prompt_chrome_border;
