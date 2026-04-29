@@ -62,7 +62,7 @@ export component GjViewer inherits Rectangle {
     /// Notifies the PTY of the current grid size (for reflow). Kept in one place so
     /// window resize + explicit bump (e.g. tab switch) stay in sync.
     function sync-terminal-grid-to-pty() {
-        let cols = floor((self.width - root.terminal-left-inset - root.stripe-width) / root.char-width);
+        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.char-width);
         let rows = floor(self.height / root.row-height);
         if (cols > 0 && rows > 0
             && (cols != root.last-resize-cols || rows != root.last-resize-rows))
@@ -84,7 +84,7 @@ export component GjViewer inherits Rectangle {
     /// 分頁載入時呼叫：強制送出 resize，忽略去抖。
     /// 新分頁的 PTY 可能還在 120×40，必須確保 resize 到實際 viewer 尺寸。
     public function bump-terminal-size() {
-        let cols = floor((self.width - root.terminal-left-inset - root.stripe-width) / root.char-width);
+        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.char-width);
         let rows = floor(self.height / root.row-height);
         if (cols > 0 && rows > 0) {
             root.last-resize-cols = cols;
@@ -245,7 +245,7 @@ export component GjViewer inherits Rectangle {
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset);
         height: max(0px, parent.height - root.pinned-footer-height);
-        viewport-width: parent.width;
+        viewport-width: max(0px, self.width - root.scrollbar-gutter);
         viewport-height: max(root.row-height, root.terminal-total-lines * root.row-height);
 
         changed viewport-y => {
@@ -253,7 +253,7 @@ export component GjViewer inherits Rectangle {
         }
 
         content := Rectangle {
-            width: parent.width;
+            width: max(0px, parent.width - root.scrollbar-gutter);
             height: parent.viewport-height;
 
             if (root.terminal-total-lines == 0) : Text {

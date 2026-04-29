@@ -219,29 +219,6 @@ fn archive_repainted_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
     tab.interactive_last_archived_signature = signature;
 }
 
-pub(super) fn maybe_archive_interactive_frame_before_reset(
-    tab: &mut TabState,
-    next_frame: &[ColoredLine],
-) {
-    if tab.interactive_frame_lines.is_empty() {
-        return;
-    }
-
-    let current_visible = visible_interactive_lines(&tab.interactive_frame_lines);
-    if current_visible.is_empty() {
-        return;
-    }
-    let next_visible = visible_interactive_lines(next_frame);
-    if !next_visible.is_empty()
-        && interactive_frame_signature(&current_visible)
-            == interactive_frame_signature(&next_visible)
-    {
-        return;
-    }
-
-    archive_repainted_block_if_new(tab, &current_visible);
-}
-
 pub(super) fn maybe_archive_repainted_frame_before_replace(
     tab: &mut TabState,
     next_frame: &[ColoredLine],

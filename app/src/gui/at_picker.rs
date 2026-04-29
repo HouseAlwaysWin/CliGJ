@@ -8,7 +8,7 @@ use super::composer_sync::sync_composer_line_to_conpty;
 use super::slint_ui::AppWindow;
 use super::state::GuiState;
 use super::state::workspace_root_for_tab_with_profile;
-use super::ui_sync::tab_update_from_ui;
+use super::ui_sync::{sync_prompt_file_chips_to_ui, tab_update_from_ui};
 
 pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
     if ui.get_ws_raw_input() {
@@ -117,22 +117,32 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
     let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
     let (new_p, abs_path) =
         workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
-    ui.set_ws_prompt(SharedString::from(new_p.as_str()));
-    if !s.tabs[s.current]
-        .prompt_picked_files_abs
-        .iter()
-        .any(|p| p == &abs_path)
-    {
-        s.tabs[s.current].prompt_picked_files_abs.push(abs_path);
-        s.tabs[s.current].prompt_picked_file_origins.push(None);
-    }
-    let chips: Vec<SharedString> = s.tabs[s.current]
-        .prompt_picked_files_abs
-        .iter()
-        .map(|p| SharedString::from(workspace_files::file_name_label(p).as_str()))
-        .collect();
-    ui.set_ws_prompt_path_chips(ModelRc::new(VecModel::from(chips)));
     ui.set_ws_at_picker_open(false);
-    tab_update_from_ui(&mut s.tabs[s.current], ui);
+    s.at_picker_query_snapshot.clear();
+    s.at_picker_open_snapshot = false;
+    let current = s.current;
+    let tab = &mut s.tabs[current];
+    tab.prompt = SharedString::from(new_p.as_str());
+    if !tab.prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
+        tab.prompt_picked_files_abs.push(abs_path.clone());
+        tab.prompt_picked_file_origins.push(None);
+    }
+    let file_name = workspace_files::file_name_label(abs_path.as_str());
+    let occurrence = tab
+        .prompt_picked_files_abs
+        .iter()
+        .filter(|p| workspace_files::file_name_label(p) == file_name)
+        .count()
+        + tab
+            .prompt_picked_images
+            .iter()
+            .filter(|img| workspace_files::file_name_label(img.abs_path.as_str()) == file_name)
+            .count();
+    let token = workspace_files::filepath_hint_token(file_name.as_str(), occurrence.max(1));
+    let next_prompt = workspace_files::append_attachment_token(tab.prompt.as_str(), token.as_str());
+    tab.prompt = SharedString::from(next_prompt.as_str());
+    ui.set_ws_prompt(tab.prompt.clone());
+    sync_prompt_file_chips_to_ui(ui, tab);
+    tab_update_from_ui(tab, ui);
     sync_composer_line_to_conpty(ui, s);
 }

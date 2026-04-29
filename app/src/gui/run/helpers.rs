@@ -15,7 +15,7 @@ use cligj_terminal::replay::replay_raw_pty_events;
 use cligj_workspace as workspace_files;
 
 use super::super::slint_ui::AppWindow;
-use super::super::state::{GuiState, PromptImageAttach, TabState};
+use super::super::state::{GuiState, PromptImageAttach, TabState, TerminalMode};
 use super::super::ui_sync::{
     sync_prompt_file_chips_to_ui, sync_prompt_image_chips_to_ui, tab_update_from_ui,
 };
