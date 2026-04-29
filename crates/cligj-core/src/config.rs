@@ -384,10 +384,23 @@ fn read_interactive_command_array(cfg: &AppConfig, key: &str) -> Vec<Interactive
                 .get("markers")
                 .map(interactive_marker_values)
                 .unwrap_or_else(|| default_interactive_markers(&name, &command));
-            let archive_repainted_frames = t
+            let explicit_archive_repainted_frames = t
                 .get("archive_repainted_frames")
-                .and_then(interactive_bool_value)
-                .unwrap_or_else(|| default_interactive_archive_repainted_frames(&name, &command));
+                .and_then(interactive_bool_value);
+            let archive_repainted_frames = if should_upgrade_legacy_repaint_archive_setting(
+                &name,
+                &command,
+                interactive_cli,
+                pinned_footer_lines,
+                &markers,
+                explicit_archive_repainted_frames,
+            ) {
+                true
+            } else {
+                explicit_archive_repainted_frames.unwrap_or_else(|| {
+                    default_interactive_archive_repainted_frames(&name, &command)
+                })
+            };
             out.push(InteractiveCommandConfig {
                 name,
                 command,
@@ -493,8 +506,28 @@ fn default_interactive_markers(name: &str, command: &str) -> Vec<String> {
 }
 
 fn default_interactive_archive_repainted_frames(name: &str, command: &str) -> bool {
-    let _ = (name, command);
-    false
+    matches!(
+        interactive_program_name(name, command).as_str(),
+        "gemini" | "codex"
+    )
+}
+
+fn should_upgrade_legacy_repaint_archive_setting(
+    name: &str,
+    command: &str,
+    interactive_cli: bool,
+    pinned_footer_lines: usize,
+    markers: &[String],
+    archive_repainted_frames: Option<bool>,
+) -> bool {
+    if archive_repainted_frames != Some(false) || !interactive_cli {
+        return false;
+    }
+    if !default_interactive_archive_repainted_frames(name, command) {
+        return false;
+    }
+    pinned_footer_lines == default_interactive_pinned_footer_lines(name, command)
+        && markers == default_interactive_markers(name, command)
 }
 
 impl Default for AppConfig {
@@ -603,6 +636,52 @@ mod tests {
                 .iter()
                 .any(|marker| marker == "openai codex")
         );
+        assert!(commands[0].archive_repainted_frames);
+    }
+
+    #[test]
+    fn interactive_command_upgrades_legacy_builtin_gemini_repaint_policy() {
+        let cfg = config_from_toml(
+            r#"
+            [[ui.interactive_commands]]
+            name = "Gemini"
+            command = "gemini"
+            interactive_cli = true
+            pinned_footer_lines = 8
+            markers = [
+                "gemini cli",
+                "waiting for authentication",
+                "signed in with google",
+                "about gemini",
+                "gemini.md",
+                "? for shortcuts",
+                "type your message",
+            ]
+            archive_repainted_frames = false
+            "#,
+        );
+
+        let commands = cfg.interactive_commands();
+        assert_eq!(commands.len(), 1);
+        assert!(commands[0].archive_repainted_frames);
+    }
+
+    #[test]
+    fn interactive_command_preserves_explicit_false_for_customized_gemini() {
+        let cfg = config_from_toml(
+            r#"
+            [[ui.interactive_commands]]
+            name = "Gemini"
+            command = "gemini"
+            interactive_cli = true
+            pinned_footer_lines = 8
+            markers = ["gemini cli", "custom marker"]
+            archive_repainted_frames = false
+            "#,
+        );
+
+        let commands = cfg.interactive_commands();
+        assert_eq!(commands.len(), 1);
         assert!(!commands[0].archive_repainted_frames);
     }
 

@@ -11,7 +11,9 @@ use super::interactive_commands::InteractiveCommandSpec;
 use super::slint_ui::TermLine;
 use cligj_terminal::render::ColoredLine;
 use cligj_terminal::replay::replay_raw_pty_events;
-use cligj_terminal::types::{ControlCommand, RawPtyEvent, RawPtyMode, ReaderRenderMode};
+use cligj_terminal::types::{
+    ControlCommand, RawPtyEvent, RawPtyMode, ReaderRenderMode, ResetReason,
+};
 
 pub(crate) fn workspace_root_for_tab(tab: &TabState) -> PathBuf {
     let cwd = std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."));
@@ -355,6 +357,7 @@ impl TabState {
                                 set_auto_scroll: if render.filled { Some(true) } else { None },
                                 changed_indices: render.changed_indices,
                                 reset_terminal_buffer: render.reset_terminal_buffer,
+                                reset_reason: render.reset_reason,
                             });
                         },
                     );
@@ -708,4 +711,5 @@ pub struct TerminalChunk {
     pub(crate) changed_indices: Vec<usize>,
     /// Drop GUI scrollback and re-apply the next snapshot (e.g. after PTY resize).
     pub(crate) reset_terminal_buffer: bool,
+    pub(crate) reset_reason: Option<ResetReason>,
 }

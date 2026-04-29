@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use serde_json::json;
+use serde_json::{Value, json};
 #[cfg(target_os = "windows")]
 use slint::winit_030::WinitWindowAccessor;
 use slint::{ComponentHandle, Model, SharedString, Timer};
@@ -25,6 +25,141 @@ fn ipc_error_suggests_endpoint_occupied(err: &str) -> bool {
         || lower.contains("denied")
 }
 
+fn send_ipc_response(
+    response_tx: &mpsc::Sender<IpcGuiResponse>,
+    id: &mut Option<Value>,
+    ok: bool,
+    result: Value,
+    error: Option<String>,
+) {
+    let _ = response_tx.send(IpcGuiResponse {
+        id: id.take(),
+        ok,
+        result,
+        error,
+    });
+}
+
+fn send_ipc_error(
+    response_tx: &mpsc::Sender<IpcGuiResponse>,
+    id: &mut Option<Value>,
+    error: String,
+) {
+    send_ipc_response(response_tx, id, false, json!({}), Some(error));
+}
+
+fn switch_to_target_tab(
+    s: &mut GuiState,
+    ui: &AppWindow,
+    tab_id: Option<u64>,
+    response_tx: &mpsc::Sender<IpcGuiResponse>,
+    out_id: &mut Option<Value>,
+) -> bool {
+    let Some(target_id) = tab_id else {
+        return true;
+    };
+    if let Some(idx) = s.tabs.iter().position(|t| t.id == target_id) {
+        let _ = s.switch_tab(idx, ui);
+        true
+    } else {
+        send_ipc_error(
+            response_tx,
+            out_id,
+            format!("sendPrompt failed: tabId {target_id} not found"),
+        );
+        false
+    }
+}
+
+fn convert_file_origin_payloads(
+    file_origin_payloads: Vec<Option<crate::gui::ipc::IpcFileOriginPayload>>,
+) -> Vec<Option<crate::gui::state::PromptFileOrigin>> {
+    file_origin_payloads
+        .into_iter()
+        .map(|origin| {
+            origin.map(|o| crate::gui::state::PromptFileOrigin {
+                client_id: o.client_id,
+                uri_scheme: o.uri_scheme,
+            })
+        })
+        .collect()
+}
+
+fn update_last_file_origin(
+    s: &mut GuiState,
+    cur: usize,
+    file_origin_payloads_converted: &[Option<crate::gui::state::PromptFileOrigin>],
+) {
+    if let Some(origin) = file_origin_payloads_converted
+        .iter()
+        .rev()
+        .filter_map(|origin| origin.as_ref())
+        .find(|origin| !origin.client_id.trim().is_empty() || !origin.uri_scheme.trim().is_empty())
+        .cloned()
+    {
+        s.tabs[cur].prompt_last_file_origin = Some(origin);
+    }
+}
+
+fn apply_send_prompt_payloads(
+    ui: &AppWindow,
+    s: &mut GuiState,
+    cur: usize,
+    prompt: String,
+    submit: bool,
+    selection_payloads: Vec<String>,
+    file_path_payloads: Vec<String>,
+    file_origin_payloads_converted: Vec<Option<crate::gui::state::PromptFileOrigin>>,
+) {
+    if submit {
+        ui.set_ws_prompt(SharedString::from(prompt.as_str()));
+        s.tabs[cur].prompt = SharedString::from(prompt.as_str());
+        s.tabs[cur].prompt_picked_selections = selection_payloads;
+        s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
+        s.tabs[cur].prompt_picked_file_origins = file_origin_payloads_converted;
+        while s.tabs[cur].prompt_picked_file_origins.len()
+            < s.tabs[cur].prompt_picked_files_abs.len()
+        {
+            s.tabs[cur].prompt_picked_file_origins.push(None);
+        }
+        crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
+        return;
+    }
+
+    let current_prompt = s.tabs[cur].prompt.to_string();
+    let merged_prompt = if prompt.trim().is_empty() {
+        current_prompt
+    } else {
+        cligj_workspace::append_attachment_token(current_prompt.as_str(), prompt.as_str())
+    };
+    ui.set_ws_prompt(SharedString::from(merged_prompt.as_str()));
+    s.tabs[cur].prompt = SharedString::from(merged_prompt.as_str());
+    for payload in selection_payloads {
+        if !s.tabs[cur]
+            .prompt_picked_selections
+            .iter()
+            .any(|p| p == &payload)
+        {
+            s.tabs[cur].prompt_picked_selections.push(payload);
+        }
+    }
+    for (path, origin) in file_path_payloads.into_iter().zip(
+        file_origin_payloads_converted
+            .into_iter()
+            .chain(std::iter::repeat(None)),
+    ) {
+        if !s.tabs[cur]
+            .prompt_picked_files_abs
+            .iter()
+            .any(|p| p == &path)
+        {
+            s.tabs[cur].prompt_picked_files_abs.push(path);
+            s.tabs[cur].prompt_picked_file_origins.push(origin);
+        }
+    }
+    crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
+}
+
 fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd: IpcGuiCommand) {
     match cmd {
         IpcGuiCommand::OpenTab {
@@ -35,26 +170,18 @@ fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd
         } => {
             let mut out_id = id;
             if let Err(e) = s.add_tab(ui) {
-                let _ = response_tx.send(IpcGuiResponse {
-                    id: out_id,
-                    ok: false,
-                    result: json!({}),
-                    error: Some(format!("openTab failed: {e}")),
-                });
+                send_ipc_error(&response_tx, &mut out_id, format!("openTab failed: {e}"));
                 return;
             }
-            if let Some(profile) = profile {
-                if !profile.trim().is_empty() {
-                    let _ = s.change_current_cmd_type(profile.as_str(), ui);
-                }
+            if let Some(profile) = profile.filter(|profile| !profile.trim().is_empty()) {
+                let _ = s.change_current_cmd_type(profile.as_str(), ui);
             }
             if s.current >= s.tabs.len() {
-                let _ = response_tx.send(IpcGuiResponse {
-                    id: out_id,
-                    ok: false,
-                    result: json!({}),
-                    error: Some("openTab failed: no current tab".to_string()),
-                });
+                send_ipc_error(
+                    &response_tx,
+                    &mut out_id,
+                    "openTab failed: no current tab".to_string(),
+                );
                 return;
             }
             let created_index = s.current;
@@ -75,16 +202,17 @@ fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd
                 created_title,
                 created_cmd_type.clone(),
             );
-            let _ = response_tx.send(IpcGuiResponse {
-                id: out_id.take(),
-                ok: true,
-                result: json!({
+            send_ipc_response(
+                &response_tx,
+                &mut out_id,
+                true,
+                json!({
                     "tabId": created_id,
                     "tabIndex": created_index,
                     "cmdType": created_cmd_type,
                 }),
-                error: None,
-            });
+                None,
+            );
         }
         IpcGuiCommand::FocusWindow { id, response_tx } => {
             let mut out_id = id;
@@ -103,16 +231,17 @@ fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd
                 ui.window().request_activate();
                 true
             };
-            let _ = response_tx.send(IpcGuiResponse {
-                id: out_id.take(),
-                ok: focused,
-                result: json!({ "focused": focused }),
-                error: if focused {
+            send_ipc_response(
+                &response_tx,
+                &mut out_id,
+                focused,
+                json!({ "focused": focused }),
+                if focused {
                     None
                 } else {
                     Some("focusWindow failed".to_string())
                 },
-            });
+            );
         }
         IpcGuiCommand::SendPrompt {
             id,
@@ -125,107 +254,33 @@ fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd
             response_tx,
         } => {
             let mut out_id = id;
-            if let Some(target_id) = tab_id {
-                if let Some(idx) = s.tabs.iter().position(|t| t.id == target_id) {
-                    let _ = s.switch_tab(idx, ui);
-                } else {
-                    let _ = response_tx.send(IpcGuiResponse {
-                        id: out_id.take(),
-                        ok: false,
-                        result: json!({}),
-                        error: Some(format!("sendPrompt failed: tabId {target_id} not found")),
-                    });
-                    return;
-                }
+            if !switch_to_target_tab(s, ui, tab_id, &response_tx, &mut out_id) {
+                return;
             }
             if s.current >= s.tabs.len() {
-                let _ = response_tx.send(IpcGuiResponse {
-                    id: out_id.take(),
-                    ok: false,
-                    result: json!({}),
-                    error: Some("sendPrompt failed: no active tab".to_string()),
-                });
+                send_ipc_error(
+                    &response_tx,
+                    &mut out_id,
+                    "sendPrompt failed: no active tab".to_string(),
+                );
                 return;
             }
             let cur = s.current;
-            let file_origin_payloads_converted: Vec<Option<crate::gui::state::PromptFileOrigin>> =
-                file_origin_payloads
-                    .into_iter()
-                    .map(|origin| {
-                        origin.map(|o| crate::gui::state::PromptFileOrigin {
-                            client_id: o.client_id,
-                            uri_scheme: o.uri_scheme,
-                        })
-                    })
-                    .collect();
-            if let Some(origin) = file_origin_payloads_converted
-                .iter()
-                .rev()
-                .filter_map(|origin| origin.as_ref())
-                .find(|origin| {
-                    !origin.client_id.trim().is_empty() || !origin.uri_scheme.trim().is_empty()
-                })
-                .cloned()
-            {
-                s.tabs[cur].prompt_last_file_origin = Some(origin);
-            }
-            if submit {
-                ui.set_ws_prompt(SharedString::from(prompt.as_str()));
-                s.tabs[cur].prompt = SharedString::from(prompt.as_str());
-                s.tabs[cur].prompt_picked_selections = selection_payloads;
-                s.tabs[cur].prompt_picked_files_abs = file_path_payloads;
-                s.tabs[cur].prompt_picked_file_origins = file_origin_payloads_converted;
-                while s.tabs[cur].prompt_picked_file_origins.len()
-                    < s.tabs[cur].prompt_picked_files_abs.len()
-                {
-                    s.tabs[cur].prompt_picked_file_origins.push(None);
-                }
-                crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
-            } else {
-                let current_prompt = s.tabs[cur].prompt.to_string();
-                let merged_prompt = if prompt.trim().is_empty() {
-                    current_prompt
-                } else {
-                    cligj_workspace::append_attachment_token(
-                        current_prompt.as_str(),
-                        prompt.as_str(),
-                    )
-                };
-                ui.set_ws_prompt(SharedString::from(merged_prompt.as_str()));
-                s.tabs[cur].prompt = SharedString::from(merged_prompt.as_str());
-                for payload in selection_payloads {
-                    if !s.tabs[cur]
-                        .prompt_picked_selections
-                        .iter()
-                        .any(|p| p == &payload)
-                    {
-                        s.tabs[cur].prompt_picked_selections.push(payload);
-                    }
-                }
-                for (path, origin) in file_path_payloads.into_iter().zip(
-                    file_origin_payloads_converted
-                        .into_iter()
-                        .chain(std::iter::repeat(None)),
-                ) {
-                    if !s.tabs[cur]
-                        .prompt_picked_files_abs
-                        .iter()
-                        .any(|p| p == &path)
-                    {
-                        s.tabs[cur].prompt_picked_files_abs.push(path);
-                        s.tabs[cur].prompt_picked_file_origins.push(origin);
-                    }
-                }
-                crate::gui::ui_sync::sync_prompt_file_chips_to_ui(ui, &s.tabs[cur]);
-            }
+            let file_origin_payloads_converted = convert_file_origin_payloads(file_origin_payloads);
+            update_last_file_origin(s, cur, &file_origin_payloads_converted);
+            apply_send_prompt_payloads(
+                ui,
+                s,
+                cur,
+                prompt,
+                submit,
+                selection_payloads,
+                file_path_payloads,
+                file_origin_payloads_converted,
+            );
             if submit {
                 if let Err(e) = s.submit_current_prompt(ui) {
-                    let _ = response_tx.send(IpcGuiResponse {
-                        id: out_id.take(),
-                        ok: false,
-                        result: json!({}),
-                        error: Some(format!("sendPrompt failed: {e}")),
-                    });
+                    send_ipc_error(&response_tx, &mut out_id, format!("sendPrompt failed: {e}"));
                     return;
                 }
             } else {
@@ -233,15 +288,16 @@ fn handle_ipc_gui_command(ui: &AppWindow, s: &mut GuiState, ipc: &IpcBridge, cmd
                 sync_composer_line_to_conpty(ui, s);
             }
             let tab = &s.tabs[s.current];
-            let _ = response_tx.send(IpcGuiResponse {
-                id: out_id.take(),
-                ok: true,
-                result: json!({
+            send_ipc_response(
+                &response_tx,
+                &mut out_id,
+                true,
+                json!({
                     "tabId": tab.id,
                     "submitted": submit
                 }),
-                error: None,
-            });
+                None,
+            );
         }
     }
 }

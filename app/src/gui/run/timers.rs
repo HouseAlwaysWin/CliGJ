@@ -111,4 +111,3 @@ pub(crate) fn spawn_inject_startup_timer(
     );
     timer
 }
-

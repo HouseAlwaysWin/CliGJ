@@ -29,9 +29,9 @@ mod callbacks;
 mod helpers;
 mod timers;
 mod timers_ipc;
+mod timers_terminal;
 mod timers_terminal_interactive;
 mod timers_terminal_shell;
-mod timers_terminal;
 #[cfg(test)]
 mod timers_tests;
 

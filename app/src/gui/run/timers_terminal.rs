@@ -16,7 +16,7 @@ use crate::gui::ui_sync::{
     push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
 };
 use cligj_terminal::render::ColoredLine;
-use cligj_terminal::types::RawPtyEvent;
+use cligj_terminal::types::{RawPtyEvent, ResetReason};
 
 const INTERACTIVE_TRAILING_BLANK_KEEP: usize = 1;
 
@@ -133,13 +133,9 @@ fn append_interactive_snapshot_with_reflow_policy(
     let tail_overlap = longest_history_snapshot_overlap(&tab.interactive_history_lines, &snapshot);
     let seen_overlap = longest_snapshot_prefix_seen(&tab.interactive_history_lines, &snapshot);
     let overlap = tail_overlap.max(seen_overlap);
-    if replace_reflow_without_overlap
-        && overlap == 0
-        && !tab.interactive_history_lines.is_empty()
-        && snapshot.len() > 3
-    {
-        tab.interactive_history_lines.clear();
-    }
+    // Preserve archived conversation even when a full-screen TUI redraw/reflow produces a snapshot
+    // with no shared prefix. Clearing here made the history window drop earlier Codex replies.
+    let _ = replace_reflow_without_overlap;
     tab.interactive_history_lines
         .extend(snapshot.into_iter().skip(overlap));
 
@@ -223,6 +219,29 @@ fn archive_repainted_block_if_new(tab: &mut TabState, lines: &[ColoredLine]) {
     tab.interactive_last_archived_signature = signature;
 }
 
+pub(super) fn maybe_archive_interactive_frame_before_reset(
+    tab: &mut TabState,
+    next_frame: &[ColoredLine],
+) {
+    if tab.interactive_frame_lines.is_empty() {
+        return;
+    }
+
+    let current_visible = visible_interactive_lines(&tab.interactive_frame_lines);
+    if current_visible.is_empty() {
+        return;
+    }
+    let next_visible = visible_interactive_lines(next_frame);
+    if !next_visible.is_empty()
+        && interactive_frame_signature(&current_visible)
+            == interactive_frame_signature(&next_visible)
+    {
+        return;
+    }
+
+    archive_repainted_block_if_new(tab, &current_visible);
+}
+
 pub(super) fn maybe_archive_repainted_frame_before_replace(
     tab: &mut TabState,
     next_frame: &[ColoredLine],
@@ -247,7 +266,10 @@ pub(super) fn maybe_archive_repainted_frame_before_replace(
     }
 }
 
-pub(super) fn snapshot_starts_mid_interactive_frame(lines: &[ColoredLine], markers: &[String]) -> bool {
+pub(super) fn snapshot_starts_mid_interactive_frame(
+    lines: &[ColoredLine],
+    markers: &[String],
+) -> bool {
     let Some(first_visible) = lines
         .iter()
         .map(line_plain_text)
@@ -308,7 +330,11 @@ pub(super) fn compose_interactive_terminal_lines(tab: &mut TabState) {
     reset_terminal_model_cache(tab);
 }
 
-pub(super) fn compact_terminal_lines_after_snapshot(tab: &mut TabState, leading: usize, force: bool) {
+pub(super) fn compact_terminal_lines_after_snapshot(
+    tab: &mut TabState,
+    leading: usize,
+    force: bool,
+) {
     if leading == 0 || tab.terminal_lines.is_empty() {
         return;
     }
@@ -365,6 +391,7 @@ struct PendingTabUpdate {
     changed_indices: Vec<usize>,
     append_text: String,
     reset_terminal_buffer: bool,
+    reset_reason: Option<ResetReason>,
 }
 
 fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, PendingTabUpdate>) {
@@ -378,6 +405,7 @@ fn fold_chunk_into_pending(chunk: TerminalChunk, pending: &mut HashMap<u64, Pend
     if chunk.replace {
         if chunk.reset_terminal_buffer {
             entry.reset_terminal_buffer = true;
+            entry.reset_reason = chunk.reset_reason;
         }
         entry.cursor_row = chunk.cursor_row;
         entry.cursor_col = chunk.cursor_col;
@@ -449,6 +477,7 @@ fn apply_replace_lines_update(
             tab,
             &update.changed_indices,
             update.reset_terminal_buffer,
+            update.reset_reason,
             update.cursor_row,
             update.cursor_col,
             chunk_first_idx,
@@ -460,6 +489,7 @@ fn apply_replace_lines_update(
             tab,
             &update.changed_indices,
             update.reset_terminal_buffer,
+            update.reset_reason,
             update.cursor_row,
             update.cursor_col,
             chunk_first_idx,
@@ -649,37 +679,39 @@ pub(crate) fn spawn_terminal_stream_dispatcher(
     });
 
     let app_weak_bg = app.as_weak();
-    thread::spawn(move || loop {
-        let first = match rx.recv() {
-            Ok(c) => c,
-            Err(_) => break,
-        };
-        ipc.publish_terminal_chunk(first.tab_id, first.text.as_str(), first.replace);
-        if let Ok(mut q) = queue.lock() {
-            q.push_back(first);
-            const MAX_BATCH: usize = 256;
-            while q.len() < MAX_BATCH {
-                let Ok(c) = rx.try_recv() else {
-                    break;
-                };
-                ipc.publish_terminal_chunk(c.tab_id, c.text.as_str(), c.replace);
-                q.push_back(c);
+    thread::spawn(move || {
+        loop {
+            let first = match rx.recv() {
+                Ok(c) => c,
+                Err(_) => break,
+            };
+            ipc.publish_terminal_chunk(first.tab_id, first.text.as_str(), first.replace);
+            if let Ok(mut q) = queue.lock() {
+                q.push_back(first);
+                const MAX_BATCH: usize = 256;
+                while q.len() < MAX_BATCH {
+                    let Ok(c) = rx.try_recv() else {
+                        break;
+                    };
+                    ipc.publish_terminal_chunk(c.tab_id, c.text.as_str(), c.replace);
+                    q.push_back(c);
+                }
+            } else {
+                break;
             }
-        } else {
-            break;
-        }
 
-        if wake_scheduled.swap(true, Ordering::AcqRel) {
-            continue;
-        }
-        if app_weak_bg
-            .upgrade_in_event_loop(|ui| {
-                ui.invoke_terminal_data_ready();
-            })
-            .is_err()
-        {
-            wake_scheduled.store(false, Ordering::Release);
-            break;
+            if wake_scheduled.swap(true, Ordering::AcqRel) {
+                continue;
+            }
+            if app_weak_bg
+                .upgrade_in_event_loop(|ui| {
+                    ui.invoke_terminal_data_ready();
+                })
+                .is_err()
+            {
+                wake_scheduled.store(false, Ordering::Release);
+                break;
+            }
         }
     })
 }

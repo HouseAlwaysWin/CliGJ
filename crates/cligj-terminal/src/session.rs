@@ -13,7 +13,7 @@ use wezterm_term::{Line, Terminal, TerminalSize};
 use crate::ansi::bytes_include_clear_screen_sequence_for_rows;
 use crate::pty::{PtyPair, PtyProcess, PtyReader, PtyWriter};
 use crate::render::{ColoredLine, line_to_colored_spans};
-use crate::types::{ControlCommand, RawPtyEvent, ReaderRenderMode, TerminalRender};
+use crate::types::{ControlCommand, RawPtyEvent, ReaderRenderMode, ResetReason, TerminalRender};
 
 const CONPTY_SNAPSHOT_MAX_LINES: usize = 240;
 const CONPTY_RESIZE_SETTLE_MS: u64 = 120;
@@ -135,6 +135,7 @@ fn run_session_loop(
     let mut last_snapshot_fp: Option<u64> = None;
     let mut line_cache: Vec<(u64, ColoredLine)> = Vec::new();
     let mut pending_reset = false;
+    let mut pending_reset_reason: Option<ResetReason> = None;
     let mut render_mode = initial_render_mode;
     let mut last_alt_screen_active = false;
     let mut interactive_snapshot_floor = 0usize;
@@ -190,6 +191,7 @@ fn run_session_loop(
                         line_cache.clear();
                         last_snapshot_fp = None;
                         pending_reset = true;
+                        pending_reset_reason = Some(ResetReason::ClearScreen);
                         if pending_interactive_floor_reset != Some(InteractiveFloorReset::ModeStart)
                         {
                             pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
@@ -219,6 +221,7 @@ fn run_session_loop(
                     last_snapshot_fp = None;
                     if size_changed {
                         pending_reset = true;
+                        pending_reset_reason = Some(ResetReason::Resize);
                         if render_mode == ReaderRenderMode::InteractiveAi
                             && pending_interactive_floor_reset
                                 != Some(InteractiveFloorReset::ModeStart)
@@ -238,6 +241,7 @@ fn run_session_loop(
                         line_cache.clear();
                         last_snapshot_fp = None;
                         pending_reset = true;
+                        pending_reset_reason = Some(ResetReason::RenderMode);
                         pending_interactive_floor_reset = (render_mode
                             == ReaderRenderMode::InteractiveAi)
                             .then_some(InteractiveFloorReset::ModeStart);
@@ -257,6 +261,7 @@ fn run_session_loop(
             line_cache.clear();
             last_snapshot_fp = None;
             pending_reset = true;
+            pending_reset_reason = Some(ResetReason::AltScreen);
             last_alt_screen_active = alt_screen_active;
         }
 
@@ -340,7 +345,10 @@ fn run_session_loop(
         render.raw_pty_events = std::mem::take(&mut pending_raw_pty_events);
         render.filled = filled;
         render.reset_terminal_buffer = pending_reset;
+        render.reset_reason =
+            pending_reset.then_some(pending_reset_reason.unwrap_or(ResetReason::ClearScreen));
         pending_reset = false;
+        pending_reset_reason = None;
         on_chunk(render);
     }
 }
@@ -440,6 +448,7 @@ fn terminal_render_from_lines_cached(
         filled: num_lines > term_screen_rows,
         changed_indices,
         reset_terminal_buffer: false,
+        reset_reason: None,
     }
 }
 
@@ -472,5 +481,6 @@ fn terminal_render_from_lines_full(
         filled: render_window_len > term_screen_rows,
         changed_indices: Vec::new(),
         reset_terminal_buffer: false,
+        reset_reason: None,
     }
 }

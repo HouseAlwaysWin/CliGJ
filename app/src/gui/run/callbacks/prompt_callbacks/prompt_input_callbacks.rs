@@ -275,7 +275,10 @@ pub(super) fn connect(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
                         let tab = &mut s.tabs[cur];
                         // If the user is actively typing in interactive raw mode, keep following
                         // the latest output so prompt redraws don't end up off-screen.
-                        if raw_tty && !is_nav && tab.terminal_mode == crate::gui::state::TerminalMode::InteractiveAi {
+                        if raw_tty
+                            && !is_nav
+                            && tab.terminal_mode == crate::gui::state::TerminalMode::InteractiveAi
+                        {
                             tab.interactive_follow_output = true;
                         }
                     }
