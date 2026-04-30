@@ -16,8 +16,8 @@
       "name": "CliGJ (debug exe, CodeLLDB)",
       "type": "lldb",
       "request": "launch",
-      "preLaunchTask": "cargo: build (debug)",
-      "program": "${workspaceFolder}\\target\\debug\\CliGJ.exe",
+      "preLaunchTask": "cargo: build (fastdev)",
+      "program": "${workspaceFolder}\\target\\fastdev\\CliGJ.exe",
       "cwd": "${workspaceFolder}",
       "env": {
         "RUST_BACKTRACE": "1",
@@ -26,11 +26,36 @@
       }
     },
     {
+      "name": "CliGJ (debug exe, cppvsdbg)",
+      "type": "cppvsdbg",
+      "request": "launch",
+      "preLaunchTask": "cargo: build (fastdev)",
+      "program": "${workspaceFolder}\\target\\fastdev\\CliGJ.exe",
+      "args": [],
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "environment": [
+        {
+          "name": "RUST_BACKTRACE",
+          "value": "1"
+        },
+        {
+          "name": "RUST_LOG",
+          "value": "debug"
+        },
+        {
+          "name": "SLINT_DEBUG_PERFORMANCE_OVERLAY",
+          "value": "1"
+        }
+      ],
+      "console": "integratedTerminal"
+    },
+    {
       "name": "CliGJ (cargo run, no debugger)",
       "type": "pwa-node",
       "request": "launch",
       "runtimeExecutable": "cargo",
-      "runtimeArgs": ["run"],
+      "runtimeArgs": ["runf"],
       "cwd": "${workspaceFolder}",
       "console": "integratedTerminal",
       "env": {

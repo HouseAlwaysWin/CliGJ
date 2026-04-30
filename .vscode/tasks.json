@@ -10,6 +10,14 @@
       "problemMatcher": ["$rustc"]
     },
     {
+      "label": "cargo: build (fastdev)",
+      "type": "shell",
+      "command": "cargo",
+      "args": ["buildf"],
+      "group": "build",
+      "problemMatcher": ["$rustc"]
+    },
+    {
       "label": "cargo: check",
       "type": "shell",
       "command": "cargo",
