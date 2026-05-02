@@ -49,7 +49,8 @@ pub(crate) fn scrollable_terminal_line_count(tab: &TabState) -> usize {
 }
 
 pub(crate) fn terminal_row_height_px(tab: &TabState) -> f32 {
-    tab.terminal_row_height_px.max(DEFAULT_TERMINAL_ROW_HEIGHT_PX)
+    tab.terminal_row_height_px
+        .max(DEFAULT_TERMINAL_ROW_HEIGHT_PX)
 }
 
 pub(crate) fn terminal_scroll_top_for_tab(tab: &TabState, viewport_height_px: f32) -> f32 {

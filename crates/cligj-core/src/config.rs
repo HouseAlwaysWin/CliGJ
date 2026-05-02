@@ -254,12 +254,7 @@ impl AppConfig {
             .as_str()
             .map(str::trim)
             .filter(|s| !s.is_empty())
-            .and_then(|s| {
-                s.trim_end_matches('%')
-                    .trim()
-                    .parse::<i32>()
-                    .ok()
-            })
+            .and_then(|s| s.trim_end_matches('%').trim().parse::<i32>().ok())
     }
 
     pub fn set_ui_language(&mut self, language: &str) {

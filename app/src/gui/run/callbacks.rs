@@ -79,11 +79,7 @@ pub(crate) fn connect(
         Rc::clone(&history_window_visible),
         Rc::clone(&history_refresh_on_tab_change),
     );
-    prompt_callbacks::connect_prompt_and_picker(
-        app,
-        Rc::clone(&state),
-        Rc::clone(&history_window),
-    );
+    prompt_callbacks::connect_prompt_and_picker(app, Rc::clone(&state), Rc::clone(&history_window));
     terminal_callbacks::connect_chips(app, Rc::clone(&state), ipc.clone());
     terminal_callbacks::connect_terminal_selection(app, Rc::clone(&state));
     terminal_callbacks::connect_terminal_context_menu(app, Rc::clone(&state));

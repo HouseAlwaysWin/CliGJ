@@ -10,7 +10,7 @@ use crate::gui::interactive_commands::{self, spec_for_label};
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::GuiState;
 use crate::gui::ui_sync::tab_update_from_ui;
-use crate::gui::zoom::{adjust_ui_zoom_percent, reset_ui_zoom_percent, UI_ZOOM_STEP_PERCENT};
+use crate::gui::zoom::{UI_ZOOM_STEP_PERCENT, adjust_ui_zoom_percent, reset_ui_zoom_percent};
 use cligj_terminal::key_encoding::{self, MOD_CTRL, MOD_SHIFT};
 use cligj_terminal::prompt_key::PromptKeyAction;
 use cligj_workspace as workspace_files;
@@ -21,10 +21,7 @@ use crate::gui::run::helpers::{
     inject_paths_and_images_from_paths, is_local_prompt_edit_key, push_prompt_image,
 };
 
-fn schedule_submit_current_prompt(
-    app_weak: slint::Weak<AppWindow>,
-    state: Rc<RefCell<GuiState>>,
-) {
+fn schedule_submit_current_prompt(app_weak: slint::Weak<AppWindow>, state: Rc<RefCell<GuiState>>) {
     slint::Timer::single_shot(std::time::Duration::from_millis(0), move || {
         let Some(ui) = app_weak.upgrade() else {
             return;

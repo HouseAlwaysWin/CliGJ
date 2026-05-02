@@ -4,7 +4,9 @@ use cligj_core::config::AppConfig;
 
 use super::slint_ui::{AppTheme, AppWindow, TerminalHistoryWindow};
 use super::state::{GuiState, TerminalMode};
-use super::ui_sync::{clamp_saved_scroll_top, push_terminal_view_to_ui, terminal_scroll_top_for_tab};
+use super::ui_sync::{
+    clamp_saved_scroll_top, push_terminal_view_to_ui, terminal_scroll_top_for_tab,
+};
 
 pub(crate) const DEFAULT_UI_ZOOM_PERCENT: i32 = 100;
 pub(crate) const MIN_UI_ZOOM_PERCENT: i32 = 70;
@@ -54,7 +56,9 @@ fn apply_ui_zoom_globals(
 ) {
     ui.global::<AppTheme>().set_ui_zoom_factor(factor);
     if let Some(history_window) = history_window {
-        history_window.global::<AppTheme>().set_ui_zoom_factor(factor);
+        history_window
+            .global::<AppTheme>()
+            .set_ui_zoom_factor(factor);
     }
 }
 
@@ -65,14 +69,14 @@ fn refresh_current_terminal_after_zoom(ui: &AppWindow, s: &mut GuiState) {
     let current = s.current;
     let tab = &mut s.tabs[current];
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
-    let scroll = if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output
-    {
-        terminal_scroll_top_for_tab(tab, vh)
-    } else if tab.auto_scroll {
-        terminal_scroll_top_for_tab(tab, vh)
-    } else {
-        clamp_saved_scroll_top(tab, vh)
-    };
+    let scroll =
+        if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else if tab.auto_scroll {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else {
+            clamp_saved_scroll_top(tab, vh)
+        };
     ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
     push_terminal_view_to_ui(ui, tab, Some(scroll));
     tab.terminal_saved_scroll_top_px = scroll;
@@ -136,13 +140,7 @@ pub(crate) fn reset_ui_zoom_percent(
     s: &mut GuiState,
     persist: bool,
 ) -> Result<i32, String> {
-    apply_ui_zoom_percent(
-        ui,
-        history_window,
-        s,
-        DEFAULT_UI_ZOOM_PERCENT,
-        persist,
-    )
+    apply_ui_zoom_percent(ui, history_window, s, DEFAULT_UI_ZOOM_PERCENT, persist)
 }
 
 #[cfg(test)]

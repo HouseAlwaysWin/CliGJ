@@ -34,21 +34,24 @@ pub(super) fn line_plain_text(line: &ColoredLine) -> String {
     text
 }
 
-fn strip_interactive_prompt_prefix(text: &str) -> &str {
+fn strip_interactive_prompt_prefix(text: &str) -> Option<&str> {
     let trimmed = text.trim_start();
     let Some(first) = trimmed.chars().next() else {
-        return "";
+        return None;
     };
-    if matches!(first, '\u{203a}' | '>') {
+    if first == '\u{203a}' {
         let rest = &trimmed[first.len_utf8()..];
-        return rest.strip_prefix(' ').unwrap_or(rest);
+        return Some(rest.strip_prefix(' ').unwrap_or(rest));
     }
-    trimmed
+    if let Some(rest) = trimmed.strip_prefix("> ") {
+        return Some(rest);
+    }
+    None
 }
 
 fn extract_interactive_prompt_from_line(line: &ColoredLine) -> Option<String> {
     let line_text = line_plain_text(line);
-    let prompt = strip_interactive_prompt_prefix(line_text.as_str()).trim_end();
+    let prompt = strip_interactive_prompt_prefix(line_text.as_str())?.trim_end();
     if prompt.is_empty() {
         return None;
     }
@@ -81,15 +84,36 @@ fn sync_interactive_prompt_to_composer(ui: &AppWindow, tab: &mut TabState) {
         return;
     };
     let current_ui = ui.get_ws_prompt().to_string();
-    let can_sync = current_ui.is_empty()
-        || (current_ui == tab.composer_pty_mirror && extracted.starts_with(current_ui.as_str()));
-    if !can_sync || extracted == current_ui {
+    if !should_sync_interactive_prompt(
+        current_ui.as_str(),
+        tab.composer_pty_mirror.as_str(),
+        extracted.as_str(),
+    ) {
         return;
     }
     let next = SharedString::from(extracted.as_str());
     ui.set_ws_prompt(next.clone());
     tab.prompt = next;
     tab.composer_pty_mirror = extracted;
+}
+
+pub(super) fn should_sync_interactive_prompt(
+    current_ui: &str,
+    composer_pty_mirror: &str,
+    extracted: &str,
+) -> bool {
+    if extracted.is_empty() || extracted == current_ui {
+        return false;
+    }
+    let Some(first) = current_ui.chars().next() else {
+        return false;
+    };
+    // Never repopulate the composer after submit/clear from an echoed terminal line.
+    // Only allow terminal -> composer sync while the terminal is extending the same
+    // command-like prompt text that already exists in the UI.
+    matches!(first, '/' | '@' | '#')
+        && current_ui == composer_pty_mirror
+        && extracted.starts_with(current_ui)
 }
 
 fn line_has_shell_preamble_marker(line: &ColoredLine) -> bool {

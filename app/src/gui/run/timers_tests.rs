@@ -93,6 +93,30 @@ fn interactive_prompt_from_cursor_line_ignores_empty_prompt() {
 }
 
 #[test]
+fn interactive_prompt_from_cursor_line_ignores_status_line_without_prompt_marker() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![line("gpt-5.4 xhigh · D:\\Projects\\CliGJ")];
+    tab.terminal_cursor_row = Some(0);
+    tab.terminal_cursor_col = Some(10);
+
+    assert_eq!(interactive_prompt_from_cursor_line(&tab), None);
+}
+
+#[test]
+fn interactive_prompt_from_cursor_line_ignores_banner_line_without_prompt_space() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![line(">_ OpenAI Codex (v0.128.0)")];
+    tab.terminal_cursor_row = Some(0);
+    tab.terminal_cursor_col = Some(3);
+
+    assert_eq!(interactive_prompt_from_cursor_line(&tab), None);
+}
+
+#[test]
 fn interactive_prompt_from_visible_footer_falls_back_when_cursor_is_elsewhere() {
     let (tx, _rx) = std::sync::mpsc::channel();
     let mut tab = crate::gui::state::TabState::new(1, tx, None);
@@ -107,6 +131,43 @@ fn interactive_prompt_from_visible_footer_falls_back_when_cursor_is_elsewhere() 
 
     let prompt = interactive_prompt_from_visible_footer(&tab);
     assert_eq!(prompt.as_deref(), Some("/skills"));
+}
+
+#[test]
+fn interactive_prompt_from_visible_footer_ignores_plain_slash_output() {
+    let (tx, _rx) = std::sync::mpsc::channel();
+    let mut tab = crate::gui::state::TabState::new(1, tx, None);
+    tab.terminal_mode = crate::gui::state::TerminalMode::InteractiveAi;
+    tab.terminal_lines = vec![
+        line("Tip: Try /model to change model"),
+        line("/memories configure memory use and generation"),
+        line("Use Enter to submit"),
+    ];
+
+    assert_eq!(interactive_prompt_from_visible_footer(&tab), None);
+}
+
+#[test]
+fn interactive_prompt_sync_does_not_repopulate_cleared_ui_prompt() {
+    assert!(!should_sync_interactive_prompt(
+        "",
+        "",
+        "Run /review on my current changes"
+    ));
+}
+
+#[test]
+fn interactive_prompt_sync_allows_terminal_to_extend_existing_ui_prompt() {
+    assert!(should_sync_interactive_prompt("/rev", "/rev", "/review"));
+}
+
+#[test]
+fn interactive_prompt_sync_ignores_non_command_text() {
+    assert!(!should_sync_interactive_prompt(
+        "Run /review",
+        "Run /review",
+        "Run /review on my current changes"
+    ));
 }
 
 #[test]
