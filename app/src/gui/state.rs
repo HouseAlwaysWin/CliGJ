@@ -145,6 +145,12 @@ pub struct TabState {
     pub(crate) last_pushed_viewport_height: f32,
     /// Current viewer row height in logical pixels; must stay in sync with `GjViewer.row-height`.
     pub(crate) terminal_row_height_px: f32,
+    /// Visible interactive menu option rows within the current terminal viewport.
+    pub(crate) terminal_menu_rows: Vec<usize>,
+    /// Active row inside [`TabState::terminal_menu_rows`], when an interactive menu is detected.
+    pub(crate) terminal_menu_active_row: Option<usize>,
+    /// Last menu row we already navigated to via mouse hover but have not observed from PTY repaint yet.
+    pub(crate) terminal_menu_pending_row: Option<usize>,
     /// Last pushed global first row index for sliced terminal model.
     pub(crate) last_window_first: usize,
     /// Last pushed global last row index for sliced terminal model.
@@ -301,6 +307,9 @@ impl TabState {
             last_pushed_scroll_top: -1.0,
             last_pushed_viewport_height: -1.0,
             terminal_row_height_px: 18.0,
+            terminal_menu_rows: Vec::new(),
+            terminal_menu_active_row: None,
+            terminal_menu_pending_row: None,
             last_window_first: usize::MAX,
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
@@ -389,6 +398,9 @@ impl TabState {
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();
+        self.terminal_menu_rows.clear();
+        self.terminal_menu_active_row = None;
+        self.terminal_menu_pending_row = None;
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
@@ -415,12 +427,80 @@ impl TabState {
         self.terminal_model_rows.clear();
         self.terminal_model_hashes.clear();
         self.terminal_model_dirty.clear();
+        self.terminal_menu_rows.clear();
+        self.terminal_menu_active_row = None;
+        self.terminal_menu_pending_row = None;
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
         self.terminal_cursor_row = None;
         self.terminal_cursor_col = None;
         self.terminal_physical_origin = 0;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn new_for_test() -> Self {
+        Self {
+            id: 1,
+            file_path: String::new(),
+            prompt_picked_images: Vec::new(),
+            selected_line: 0,
+            selected_context: SharedString::new(),
+            prompt: SharedString::new(),
+            prompt_undo_stack: Vec::new(),
+            prompt_redo_stack: Vec::new(),
+            cmd_type: default_cmd_type().to_string(),
+            terminal_mode: TerminalMode::Shell,
+            terminal_text: String::new(),
+            auto_scroll: false,
+            terminal_select_mode: false,
+            raw_input_mode: false,
+            command_history: Vec::new(),
+            history_cursor: None,
+            history_draft: String::new(),
+            prompt_picked_files_abs: Vec::new(),
+            prompt_picked_file_origins: Vec::new(),
+            prompt_last_file_origin: None,
+            prompt_picked_selections: Vec::new(),
+            terminal_lines: Vec::new(),
+            interactive_history_lines: Vec::new(),
+            interactive_frame_lines: Vec::new(),
+            interactive_last_archived_signature: String::new(),
+            terminal_model_rows: HashMap::new(),
+            terminal_model_hashes: HashMap::new(),
+            terminal_model_dirty: HashSet::new(),
+            terminal_slint_model: Rc::new(VecModel::default()),
+            terminal_scroll_top_px: 0.0,
+            terminal_view_height_px: 600.0,
+            last_pushed_scroll_top: -1.0,
+            last_pushed_viewport_height: -1.0,
+            terminal_row_height_px: 18.0,
+            terminal_menu_rows: Vec::new(),
+            terminal_menu_active_row: None,
+            terminal_menu_pending_row: None,
+            last_window_first: usize::MAX,
+            last_window_last: usize::MAX,
+            last_window_total: usize::MAX,
+            composer_pty_mirror: String::new(),
+            terminal_cursor_row: None,
+            terminal_cursor_col: None,
+            terminal_physical_origin: 0,
+            terminal_scroll_resync_next: false,
+            terminal_saved_scroll_top_px: 0.0,
+            interactive_follow_output: true,
+            terminal_pinned_footer_lines: 0,
+            terminal_pinned_footer_override: None,
+            interactive_launcher_program: String::new(),
+            interactive_markers: Vec::new(),
+            interactive_archive_repainted_frames: false,
+            raw_pty_events: Vec::new(),
+            raw_pty_event_bytes: 0,
+            last_pty_cols: 120,
+            last_pty_rows: 40,
+            pty_process: None,
+            pty_writer: None,
+            pty_control_tx: None,
+        }
     }
 
     pub fn append_raw_pty_events(&mut self, events: Vec<RawPtyEvent>) {

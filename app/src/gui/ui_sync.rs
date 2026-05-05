@@ -14,6 +14,7 @@ use cligj_workspace as workspace_files;
 use super::slint_ui::{AppWindow, PromptImageChip};
 use super::slint_ui::{TermLine, TermSpan};
 use super::state::{TabState, TerminalMode};
+use super::terminal_menu;
 use super::zoom::DEFAULT_TERMINAL_ROW_HEIGHT_PX;
 
 /// Extra rows above/below the visible band (matches prior Slint overscan intent).
@@ -425,6 +426,10 @@ pub(crate) fn push_terminal_view_to_ui(
     ui.set_ws_terminal_pinned_lines(ModelRc::new(VecModel::from(footer_rows)));
 
     if body_n == 0 {
+        tab.terminal_menu_rows.clear();
+        tab.terminal_menu_active_row = None;
+        ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
+        ui.set_ws_terminal_menu_active_row(-1);
         if tab.last_window_total != 0 {
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
@@ -453,6 +458,18 @@ pub(crate) fn push_terminal_view_to_ui(
     let last =
         (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, body_n as isize - 1) as usize;
     let first = first.min(last);
+    terminal_menu::refresh_terminal_menu_state(tab, first, last);
+    let window_len = last - first + 1;
+    let mut menu_flags = vec![false; window_len];
+    for &row in &tab.terminal_menu_rows {
+        if row >= first && row <= last {
+            menu_flags[row - first] = true;
+        }
+    }
+    ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(menu_flags)));
+    ui.set_ws_terminal_menu_active_row(
+        tab.terminal_menu_active_row.map(|row| row as i32).unwrap_or(-1),
+    );
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != body_n;
     let content_changed =
@@ -466,7 +483,6 @@ pub(crate) fn push_terminal_view_to_ui(
     }
 
     let model = &tab.terminal_slint_model;
-    let window_len = last - first + 1;
 
     // 視窗範圍或總長度改變，或者是髒行需要更新
     if window_changed || total_changed || content_changed || model.row_count() != window_len {
@@ -606,6 +622,8 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     sync_prompt_file_chips_to_ui(ui, tab);
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
+    ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
+    ui.set_ws_terminal_menu_active_row(-1);
     ui.set_ws_terminal_pin_lines(SharedString::from(
         tab.terminal_pinned_footer_lines.to_string().as_str(),
     ));

@@ -13,6 +13,8 @@ export component GjWorkspace inherits Rectangle {
     in-out property <[TermLine]> terminal-pinned-lines;
     in-out property <int> terminal-line-offset: 0;
     in-out property <int> terminal-total-lines: 0;
+    in-out property <[bool]> terminal-menu-option-flags: [];
+    in-out property <int> terminal-menu-active-row: -1;
     in-out property <bool> auto-scroll;
     in-out property <bool> terminal-select-mode;
     in-out property <int> selected-line;
@@ -55,6 +57,8 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-wheel(int) -> bool;
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
+    callback terminal-menu-option-hovered(int);
+    callback terminal-menu-option-chosen(int);
     callback interactive-command-selected(string);
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
@@ -94,6 +98,8 @@ export component GjWorkspace inherits Rectangle {
             terminal-pinned-lines: root.terminal-pinned-lines;
             terminal-line-offset: root.terminal-line-offset;
             terminal-total-lines: root.terminal-total-lines;
+            terminal-menu-option-flags: root.terminal-menu-option-flags;
+            terminal-menu-active-row: root.terminal-menu-active-row;
             auto-scroll: root.auto-scroll;
             selection-mode: root.terminal-select-mode;
             raw-input-enabled: root.raw-input-enabled;
@@ -116,6 +122,12 @@ export component GjWorkspace inherits Rectangle {
             }
             terminal-context-clear-requested => {
                 root.terminal-context-clear-requested();
+            }
+            terminal-menu-option-hovered(row) => {
+                root.terminal-menu-option-hovered(row);
+            }
+            terminal-menu-option-chosen(row) => {
+                root.terminal-menu-option-chosen(row);
             }
             vertical-stretch: 1;
             min-height: 0px;

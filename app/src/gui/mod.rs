@@ -15,6 +15,7 @@ mod run;
 mod shell_profiles;
 mod slint_ui;
 mod state;
+mod terminal_menu;
 mod ui_sync;
 #[cfg(target_os = "windows")]
 mod windows_tray;

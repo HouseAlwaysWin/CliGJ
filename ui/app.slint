@@ -46,6 +46,8 @@ export component AppWindow inherits Window {
     in-out property <[TermLine]> ws-terminal-pinned-lines: [];
     in-out property <int> ws-terminal-line-offset: 0;
     in-out property <int> ws-terminal-total-lines: 0;
+    in-out property <[bool]> ws-terminal-menu-option-flags: [];
+    in-out property <int> ws-terminal-menu-active-row: -1;
     in-out property <bool> ws-auto-scroll: false;
     in-out property <bool> ws-terminal-select-mode: false;
     in-out property <bool> ws-rename-open: false;
@@ -138,6 +140,8 @@ export component AppWindow inherits Window {
     callback terminal-wheel(int) -> bool;
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
+    callback terminal-menu-option-hovered(int);
+    callback terminal-menu-option-chosen(int);
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
@@ -330,6 +334,8 @@ export component AppWindow inherits Window {
                         terminal-pinned-lines <=> root.ws-terminal-pinned-lines;
                         terminal-line-offset <=> root.ws-terminal-line-offset;
                         terminal-total-lines <=> root.ws-terminal-total-lines;
+                        terminal-menu-option-flags <=> root.ws-terminal-menu-option-flags;
+                        terminal-menu-active-row <=> root.ws-terminal-menu-active-row;
                         auto-scroll <=> root.ws-auto-scroll;
                         terminal-select-mode <=> root.ws-terminal-select-mode;
                         selected-line <=> root.ws-selected-line;
@@ -430,6 +436,12 @@ export component AppWindow inherits Window {
                         }
                         terminal-context-clear-requested => {
                             root.terminal-context-clear-requested();
+                        }
+                        terminal-menu-option-hovered(row) => {
+                            root.terminal-menu-option-hovered(row);
+                        }
+                        terminal-menu-option-chosen(row) => {
+                            root.terminal-menu-option-chosen(row);
                         }
                     }
                 }

@@ -1,5 +1,6 @@
 mod chips_selection_callbacks;
 mod history_callbacks;
+mod menu_callbacks;
 mod tab_actions_callbacks;
 mod viewport_callbacks;
 
@@ -20,6 +21,10 @@ pub(super) fn connect_terminal_selection(app: &AppWindow, state: Rc<RefCell<GuiS
 
 pub(super) fn connect_terminal_context_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     chips_selection_callbacks::connect_terminal_context_menu(app, state);
+}
+
+pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
+    menu_callbacks::connect_terminal_menu(app, state);
 }
 
 pub(super) fn connect_terminal_history(

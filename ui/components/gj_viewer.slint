@@ -11,6 +11,8 @@ export component GjViewer inherits Rectangle {
     in property <int> terminal-line-offset: 0;
     /// Full document line count (for scroll extent and selection clamping).
     in property <int> terminal-total-lines: 0;
+    in property <[bool]> terminal-menu-option-flags: [];
+    in property <int> terminal-menu-active-row: -1;
     in property <bool> auto-scroll: false;
     in property <bool> selection-mode: false;
     in property <bool> raw-input-enabled: false;
@@ -27,6 +29,8 @@ export component GjViewer inherits Rectangle {
     callback terminal-wheel(int) -> bool;
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
+    callback terminal-menu-option-hovered(int);
+    callback terminal-menu-option-chosen(int);
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px * AppTheme.ui_zoom_factor;
     /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
@@ -174,6 +178,14 @@ export component GjViewer inherits Rectangle {
         return root.line_h0(global-idx, line-len) <= root.line_h1(global-idx, line-len);
     }
 
+    function is-menu-option-row(global-row: int) -> bool {
+        let local = global-row - root.terminal-line-offset;
+        local >= 0
+            && local < root.terminal-lines.length
+            && local < root.terminal-menu-option-flags.length
+            && root.terminal-menu-option-flags[local]
+    }
+
     function begin-selection(mx: length, my: length) {
         if (root.terminal-total-lines <= 0) {
             return;
@@ -313,6 +325,15 @@ export component GjViewer inherits Rectangle {
                     property <int> hl0: root.line_h0(gidx, line.char-count);
                     property <int> hl1: root.line_h1(gidx, line.char-count);
                     property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
+                    property <bool> menu_option: root.is-menu-option-row(gidx);
+                    property <bool> menu_active: root.terminal-menu-active-row == gidx;
+                    if (menu_option && menu_active) : Rectangle {
+                        x: 0px;
+                        y: 0px;
+                        width: parent.width;
+                        height: parent.height;
+                        background: #ffffff16;
+                    }
 
                     // We still use HorizontalLayout for spans as they have dynamic width, 
                     // but it's now flatter.
@@ -405,6 +426,48 @@ export component GjViewer inherits Rectangle {
                             vertical-alignment: center;
                             horizontal-alignment: left;
                         }
+                    }
+                }
+            }
+        }
+    }
+
+    if (!root.raw-input-enabled) : Rectangle {
+        z: 102;
+        x: root.terminal-left-inset;
+        y: 0px;
+        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
+        height: sv.height;
+        clip: true;
+        background: #00000000;
+
+        for line[idx] in root.terminal-lines: Rectangle {
+            x: 0px;
+            y: (root.terminal-line-offset + idx) * root.row-height + sv.viewport-y;
+            width: parent.width;
+            height: root.row-height;
+            background: #00000000;
+
+            property <int> gidx: root.terminal-line-offset + idx;
+            property <bool> menu_option: idx < root.terminal-menu-option-flags.length
+                && root.terminal-menu-option-flags[idx];
+
+            if (menu_option) : Rectangle {
+                width: parent.width;
+                height: parent.height;
+                background: #00000000;
+
+                row_ta := TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    mouse-cursor: pointer;
+                    pointer-event(event) => {
+                        if (event.kind == PointerEventKind.move) {
+                            root.terminal-menu-option-hovered(gidx);
+                        }
+                    }
+                    clicked => {
+                        root.terminal-menu-option-chosen(gidx);
                     }
                 }
             }

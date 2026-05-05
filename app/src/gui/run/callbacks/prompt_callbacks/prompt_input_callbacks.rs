@@ -8,10 +8,11 @@ use crate::gui::at_picker::commit_at_file_pick;
 use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::interactive_commands::{self, spec_for_label};
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
-use crate::gui::state::GuiState;
+use crate::gui::state::{GuiState, TerminalMode};
+use crate::gui::terminal_menu;
 use crate::gui::ui_sync::tab_update_from_ui;
 use crate::gui::zoom::{UI_ZOOM_STEP_PERCENT, adjust_ui_zoom_percent, reset_ui_zoom_percent};
-use cligj_terminal::key_encoding::{self, MOD_CTRL, MOD_SHIFT};
+use cligj_terminal::key_encoding::{self, MOD_ALT, MOD_CTRL, MOD_META, MOD_SHIFT};
 use cligj_terminal::prompt_key::PromptKeyAction;
 use cligj_workspace as workspace_files;
 
@@ -110,6 +111,29 @@ fn handle_zoom_shortcut(
 
     if let Err(e) = result {
         eprintln!("CliGJ: ui zoom shortcut: {e}");
+    }
+    true
+}
+
+fn inject_plain_interactive_key(
+    ui: &AppWindow,
+    state: &Rc<RefCell<GuiState>>,
+    key: &str,
+) -> bool {
+    let Some(bytes) = terminal_menu::plain_key_bytes(key) else {
+        return false;
+    };
+    let mut s = state.borrow_mut();
+    if s.current >= s.tabs.len() {
+        return false;
+    }
+    let current = s.current;
+    if s.tabs[current].terminal_mode != TerminalMode::InteractiveAi {
+        return false;
+    }
+    s.tabs[current].interactive_follow_output = true;
+    if let Err(e) = s.inject_bytes_into_current(ui, &bytes) {
+        eprintln!("CliGJ: plain interactive key: {e}");
     }
     true
 }
@@ -288,6 +312,25 @@ pub(super) fn connect(
                     return true;
                 }
                 _ => {}
+            }
+        }
+        if !raw_tty
+            && matches!(key_str, "UpArrow" | "DownArrow")
+            && (mod_mask as u32 & (MOD_CTRL | MOD_SHIFT | MOD_ALT | MOD_META)) == MOD_ALT
+            && inject_plain_interactive_key(&ui, &st_keys, key_str)
+        {
+            return true;
+        }
+        if !raw_tty
+            && matches!(key_str, "Return" | "\n" | "\r")
+            && (mod_mask as u32 & (MOD_CTRL | MOD_SHIFT | MOD_ALT | MOD_META)) == 0
+        {
+            let has_menu = {
+                let s = st_keys.borrow();
+                s.current < s.tabs.len() && terminal_menu::has_terminal_menu(&s.tabs[s.current])
+            };
+            if has_menu && inject_plain_interactive_key(&ui, &st_keys, "Return") {
+                return true;
             }
         }
         match cligj_terminal::prompt_key::route_prompt_key(raw_tty, mod_mask as u32, key_str, shift)
