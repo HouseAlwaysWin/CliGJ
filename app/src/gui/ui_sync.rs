@@ -33,8 +33,15 @@ thread_local! {
 
 /// Scroll offset in px (content top) matching [`GjViewer`] / PTY row math — use when Slint's
 /// `terminal-scroll-top-px` getter may still reflect another tab or an older frame.
-pub(crate) fn terminal_pinned_footer_start(tab: &TabState) -> Option<usize> {
-    let pinned_rows = tab.terminal_pinned_footer_lines;
+pub(crate) fn effective_terminal_pinned_footer_lines(tab: &TabState) -> usize {
+    if terminal_menu::has_terminal_menu(tab) {
+        0
+    } else {
+        tab.terminal_pinned_footer_lines
+    }
+}
+
+fn terminal_pinned_footer_start_with_rows(tab: &TabState, pinned_rows: usize) -> Option<usize> {
     if pinned_rows == 0 {
         return None;
     }
@@ -45,8 +52,16 @@ pub(crate) fn terminal_pinned_footer_start(tab: &TabState) -> Option<usize> {
     Some(n.saturating_sub(pinned_rows))
 }
 
+pub(crate) fn terminal_pinned_footer_start(tab: &TabState) -> Option<usize> {
+    terminal_pinned_footer_start_with_rows(tab, effective_terminal_pinned_footer_lines(tab))
+}
+
+fn scrollable_terminal_line_count_with_rows(tab: &TabState, pinned_rows: usize) -> usize {
+    terminal_pinned_footer_start_with_rows(tab, pinned_rows).unwrap_or(tab.terminal_lines.len())
+}
+
 pub(crate) fn scrollable_terminal_line_count(tab: &TabState) -> usize {
-    terminal_pinned_footer_start(tab).unwrap_or(tab.terminal_lines.len())
+    scrollable_terminal_line_count_with_rows(tab, effective_terminal_pinned_footer_lines(tab))
 }
 
 pub(crate) fn terminal_row_height_px(tab: &TabState) -> f32 {
@@ -323,6 +338,61 @@ fn empty_term_line() -> TermLine {
     }
 }
 
+fn terminal_window_bounds(
+    body_n: usize,
+    scroll_top: f32,
+    row_height: f32,
+    viewport_height: f32,
+) -> Option<(usize, usize)> {
+    if body_n == 0 {
+        return None;
+    }
+    let first_f = (scroll_top / row_height).floor() as isize;
+    let first = first_f
+        .saturating_sub(TERMINAL_ROW_OVERSCAN as isize)
+        .max(0) as usize;
+    let last_visible_bottom = scroll_top + viewport_height;
+    let last_visible = (last_visible_bottom / row_height).ceil() as isize;
+    let last =
+        (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, body_n as isize - 1) as usize;
+    Some((first.min(last), last))
+}
+
+fn terminal_view_near_bottom(
+    body_n: usize,
+    scroll_top: f32,
+    row_height: f32,
+    viewport_height: f32,
+) -> bool {
+    let content_height = body_n as f32 * row_height;
+    scroll_top + viewport_height + row_height * 2.0 >= content_height
+}
+
+fn refresh_terminal_menu_for_visible_range(
+    tab: &mut TabState,
+    body_n: usize,
+    footer_start: Option<usize>,
+    scroll_top: f32,
+    row_height: f32,
+    viewport_height: f32,
+) -> Option<(usize, usize)> {
+    let (first, last) = terminal_window_bounds(body_n, scroll_top, row_height, viewport_height)?;
+    let detect_last = if footer_start.is_some()
+        && terminal_view_near_bottom(body_n, scroll_top, row_height, viewport_height)
+    {
+        tab.terminal_lines.len().saturating_sub(1)
+    } else {
+        last
+    };
+    terminal_menu::refresh_terminal_menu_state(tab, first, detect_last);
+    Some((first, last))
+}
+
+fn pin_lines_text(pinned_rows: usize) -> SharedString {
+    let text = pinned_rows.to_string();
+    SharedString::from(text.as_str())
+}
+
 fn rendered_term_line_for_index(
     tab: &TabState,
     idx: usize,
@@ -411,9 +481,37 @@ pub(crate) fn push_terminal_view_to_ui(
     tab.terminal_view_height_px = vh;
     tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
     let row_height = terminal_row_height_px(tab);
-
-    let footer_start = terminal_pinned_footer_start(tab);
-    let body_n = scrollable_terminal_line_count(tab);
+    let configured_pinned_rows = tab.terminal_pinned_footer_lines;
+    let mut effective_pinned_rows = effective_terminal_pinned_footer_lines(tab);
+    let mut footer_start = terminal_pinned_footer_start(tab);
+    let mut body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
+    let mut bounds = refresh_terminal_menu_for_visible_range(
+        tab,
+        body_n,
+        footer_start,
+        scroll_top,
+        row_height,
+        vh,
+    );
+    let desired_pinned_rows = if terminal_menu::has_terminal_menu(tab) {
+        0
+    } else {
+        configured_pinned_rows
+    };
+    if desired_pinned_rows != effective_pinned_rows {
+        effective_pinned_rows = desired_pinned_rows;
+        footer_start = terminal_pinned_footer_start_with_rows(tab, effective_pinned_rows);
+        body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
+        bounds = refresh_terminal_menu_for_visible_range(
+            tab,
+            body_n,
+            footer_start,
+            scroll_top,
+            row_height,
+            vh,
+        );
+    }
+    ui.set_ws_terminal_pin_lines(pin_lines_text(effective_pinned_rows));
     let footer_rows: Vec<TermLine> = footer_start
         .map(|start| {
             (start..tab.terminal_lines.len())
@@ -450,17 +548,8 @@ pub(crate) fn push_terminal_view_to_ui(
         ui.window().request_redraw();
         return;
     }
-
-    let first_f = (scroll_top / row_height).floor() as isize;
-    let first = first_f
-        .saturating_sub(TERMINAL_ROW_OVERSCAN as isize)
-        .max(0) as usize;
-    let last_visible_bottom = scroll_top + vh;
-    let last_visible = (last_visible_bottom / row_height).ceil() as isize;
-    let last =
-        (last_visible + TERMINAL_ROW_OVERSCAN as isize).clamp(0, body_n as isize - 1) as usize;
-    let first = first.min(last);
-    terminal_menu::refresh_terminal_menu_state(tab, first, last);
+    let (first, last) =
+        bounds.unwrap_or_else(|| terminal_window_bounds(body_n, scroll_top, row_height, vh).unwrap_or((0, 0)));
     let window_len = last - first + 1;
     let mut menu_flags = vec![false; window_len];
     for &row in &tab.terminal_menu_rows {
@@ -641,9 +730,7 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_terminal_menu_active_row(-1);
     ui.set_ws_terminal_menu_first_row(-1);
     ui.set_ws_terminal_menu_last_row(-1);
-    ui.set_ws_terminal_pin_lines(SharedString::from(
-        tab.terminal_pinned_footer_lines.to_string().as_str(),
-    ));
+    ui.set_ws_terminal_pin_lines(pin_lines_text(effective_terminal_pinned_footer_lines(tab)));
     tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
 
     let n = scrollable_terminal_line_count(tab);

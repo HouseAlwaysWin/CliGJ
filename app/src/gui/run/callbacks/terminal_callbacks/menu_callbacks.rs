@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
+use std::time::{Duration, Instant};
 
 use slint::ComponentHandle;
 
@@ -49,6 +50,7 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
     });
 
     let st_edge = Rc::clone(&state);
+    let last_edge_nav = Rc::new(RefCell::new(None::<(i32, Instant)>));
     let app_weak = app.as_weak();
     app.on_terminal_menu_edge_hovered(move |direction| {
         let Some(ui) = app_weak.upgrade() else {
@@ -56,6 +58,18 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         };
         if direction == 0 {
             return;
+        }
+        {
+            let now = Instant::now();
+            let mut last = last_edge_nav.borrow_mut();
+            if let Some((prev_direction, prev_at)) = *last {
+                if prev_direction == direction
+                    && now.saturating_duration_since(prev_at) < Duration::from_millis(110)
+                {
+                    return;
+                }
+            }
+            *last = Some((direction, now));
         }
         let Ok(mut s) = st_edge.try_borrow_mut() else {
             return;

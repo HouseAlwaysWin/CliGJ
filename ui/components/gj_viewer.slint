@@ -108,25 +108,45 @@ export component GjViewer inherits Rectangle {
         }
     }
 
+    function document-line-count() -> int {
+        root.terminal-total-lines + root.terminal-pinned-lines.length
+    }
+
     function clamp-row(raw: int) -> int {
-        if (root.terminal-total-lines <= 0) {
+        let total = root.document-line-count();
+        if (total <= 0) {
             0
         } else {
-            min(max(raw, 0), root.terminal-total-lines - 1)
+            min(max(raw, 0), total - 1)
         }
     }
 
     /// Global document row from mouse Y.
     function row-from-y(mouse-y: length) -> int {
-        clamp-row(floor((mouse-y - sv.viewport-y) / root.row-height))
+        if (mouse-y >= sv.height) {
+            clamp-row(root.terminal-total-lines + floor((mouse-y - sv.height) / root.row-height))
+        } else {
+            clamp-row(floor((mouse-y - sv.viewport-y) / root.row-height))
+        }
     }
 
-    function col-from-x(mx: length, global-row: int) -> int {
+    function char-count-for-row(global-row: int) -> int {
+        if (global-row >= root.terminal-total-lines) {
+            let pinned = global-row - root.terminal-total-lines;
+            if (pinned >= 0 && pinned < root.terminal-pinned-lines.length) {
+                return root.terminal-pinned-lines[pinned].char-count;
+            }
+            return 0;
+        }
         let local = global-row - root.terminal-line-offset;
         if (local < 0 || local >= root.terminal-lines.length) {
             return 0;
         }
-        let len = root.terminal-lines[local].char-count;
+        root.terminal-lines[local].char-count
+    }
+
+    function col-from-x(mx: length, global-row: int) -> int {
+        let len = root.char-count-for-row(global-row);
         if (len <= 0) {
             return 0;
         }
@@ -212,7 +232,7 @@ export component GjViewer inherits Rectangle {
     }
 
     function menu-edge-direction(my: length) -> int {
-        if (!root.pointer-inside) {
+        if (!root.pointer-inside || my < 0px || my > sv.height) {
             return 0;
         }
         let first = root.terminal-menu-first-row;
@@ -243,8 +263,9 @@ export component GjViewer inherits Rectangle {
         }
         let row = root.menu-row-from-point(root.last-pointer-x, root.last-pointer-y);
         if (row >= 0) {
+            let should_emit_hover = row != root.hover-menu-row || row != root.terminal-menu-active-row;
             root.hover-menu-row = row;
-            if (trigger-row-hover) {
+            if (trigger-row-hover && should_emit_hover) {
                 root.terminal-menu-option-hovered(row);
             }
             return;
@@ -268,7 +289,7 @@ export component GjViewer inherits Rectangle {
     }
 
     function begin-selection(mx: length, my: length) {
-        if (root.terminal-total-lines <= 0) {
+        if (root.document-line-count() <= 0) {
             return;
         }
         let row = root.row-from-y(my);
@@ -284,7 +305,7 @@ export component GjViewer inherits Rectangle {
     }
 
     function update-selection(mx: length, my: length) {
-        if (!root.drag-active || root.terminal-total-lines <= 0) {
+        if (!root.drag-active || root.document-line-count() <= 0) {
             return;
         }
         let row = root.row-from-y(my);
@@ -344,7 +365,7 @@ export component GjViewer inherits Rectangle {
     }
 
     public function sync-menu-hover() {
-        root.sync-menu-hover-from-pointer(false, true);
+        root.sync-menu-hover-from-pointer(true, true);
     }
 
     // Auto-scroll is driven from Rust (`refresh_current_terminal`) so it stays in sync with
@@ -412,13 +433,12 @@ export component GjViewer inherits Rectangle {
                     property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
                     property <bool> menu_option: root.is-menu-option-row(gidx);
                     property <bool> menu_active: root.terminal-menu-active-row == gidx;
-                    property <bool> menu_hover: root.hover-menu-row == gidx;
-                    if (menu_option && (menu_active || menu_hover)) : Rectangle {
+                    if (menu_option && menu_active) : Rectangle {
                         x: 0px;
                         y: 0px;
                         width: parent.width;
                         height: parent.height;
-                        background: menu_hover ? #2d76d840 : #ffffff16;
+                        background: #ffffff16;
                     }
 
                     // We still use HorizontalLayout for spans as they have dynamic width, 
@@ -494,6 +514,11 @@ export component GjViewer inherits Rectangle {
                 height: parent.height;
                 clip: true;
 
+                property <int> gidx: root.terminal-total-lines + idx;
+                property <int> hl0: root.line_h0(gidx, line.char-count);
+                property <int> hl1: root.line_h1(gidx, line.char-count);
+                property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
+
                 HorizontalLayout {
                     spacing: 0px;
                     padding: 0px;
@@ -513,6 +538,14 @@ export component GjViewer inherits Rectangle {
                             horizontal-alignment: left;
                         }
                     }
+                }
+
+                if (hl_visible) : Rectangle {
+                    x: hl0 * root.char-width;
+                    y: 0px;
+                    width: (hl1 - hl0 + 1) * root.char-width;
+                    height: root.row-height;
+                    background: #55a8e8a0;
                 }
             }
         }
@@ -571,24 +604,22 @@ export component GjViewer inherits Rectangle {
                     let next = sv.viewport-y - delta;
                     sv.viewport-y = root.clamp-viewport-y(next);
                     root.sync-menu-hover-from-pointer(false, false);
-                } else if (root.pending-menu-click-row >= 0) {
-                    let row_delta = abs(self.mouse-y - root.pending-menu-click-y);
-                    let col_delta = abs(self.mouse-x - root.pending-menu-click-x);
-                    let moved_far = row_delta > root.row-height / 2 || col_delta > root.char-width * 2;
-                    let changed_row = root.menu-row-from-point(self.mouse-x, self.mouse-y) != root.pending-menu-click-row;
+            } else if (root.pending-menu-click-row >= 0) {
+                let row_delta = abs(self.mouse-y - root.pending-menu-click-y);
+                let col_delta = abs(self.mouse-x - root.pending-menu-click-x);
+                let moved_far = row_delta > root.row-height / 2 || col_delta > root.char-width * 2;
+                let changed_row = root.menu-row-from-point(self.mouse-x, self.mouse-y) != root.pending-menu-click-row;
                     if (moved_far || changed_row) {
                         let start_x = root.pending-menu-click-x;
                         let start_y = root.pending-menu-click-y;
-                        root.pending-menu-click-row = -1;
-                        root.begin-selection(start_x, start_y);
-                        root.auto-scroll-selection(self.mouse-y);
-                        root.update-selection(self.mouse-x, self.mouse-y);
-                    } else {
-                        root.sync-menu-hover-from-pointer(true, true);
-                    }
-                } else if (root.drag-active) {
+                    root.pending-menu-click-row = -1;
+                    root.begin-selection(start_x, start_y);
                     root.auto-scroll-selection(self.mouse-y);
                     root.update-selection(self.mouse-x, self.mouse-y);
+                }
+            } else if (root.drag-active) {
+                root.auto-scroll-selection(self.mouse-y);
+                root.update-selection(self.mouse-x, self.mouse-y);
                 } else {
                     root.sync-menu-hover-from-pointer(true, true);
                 }
