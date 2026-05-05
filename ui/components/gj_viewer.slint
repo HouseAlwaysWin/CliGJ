@@ -202,6 +202,23 @@ export component GjViewer inherits Rectangle {
         root.selected-context = "terminal-selection";
     }
 
+    function clamp-viewport-y(next: length) -> length {
+        let max-y = min(0px, sv.height - sv.viewport-height);
+        max(max-y, min(0px, next))
+    }
+
+    function auto-scroll-selection(my: length) {
+        if (!root.drag-active) {
+            return;
+        }
+        let edge-band = min(max(root.row-height, 12px), sv.height / 2);
+        if (my < edge-band) {
+            sv.viewport-y = root.clamp-viewport-y(sv.viewport-y + (edge-band - my));
+        } else if (my > sv.height - edge-band) {
+            sv.viewport-y = root.clamp-viewport-y(sv.viewport-y - (my - (sv.height - edge-band)));
+        }
+    }
+
     function end-selection() {
         if (!root.drag-active) {
             return;
@@ -408,8 +425,7 @@ export component GjViewer inherits Rectangle {
             }
             // Natural wheel: up -> move toward top (viewport-y increases toward 0).
             let next = sv.viewport-y + event.delta-y;
-            let max-y = min(0px, sv.height - sv.viewport-height);
-            sv.viewport-y = max(max-y, min(0px, next));
+            sv.viewport-y = root.clamp-viewport-y(next);
             return accept;
         }
     }
@@ -451,9 +467,9 @@ export component GjViewer inherits Rectangle {
 
                 // Scrolling down (mouse moves down, delta > 0) should decrease viewport-y.
                 let next = sv.viewport-y - delta;
-                let max-y = min(0px, sv.height - sv.viewport-height);
-                sv.viewport-y = max(max-y, min(0px, next));
+                sv.viewport-y = root.clamp-viewport-y(next);
             } else if (root.drag-active) {
+                root.auto-scroll-selection(self.mouse-y);
                 root.update-selection(self.mouse-x, self.mouse-y);
             }
         }
