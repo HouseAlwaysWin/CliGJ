@@ -17,7 +17,9 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         if row < 0 {
             return;
         }
-        let mut s = st_hover.borrow_mut();
+        let Ok(mut s) = st_hover.try_borrow_mut() else {
+            return;
+        };
         if s.current >= s.tabs.len() {
             return;
         }
@@ -46,6 +48,40 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         }
     });
 
+    let st_edge = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_menu_edge_hovered(move |direction| {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        if direction == 0 {
+            return;
+        }
+        let Ok(mut s) = st_edge.try_borrow_mut() else {
+            return;
+        };
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let tab = &mut s.tabs[current];
+        if tab.terminal_mode != TerminalMode::InteractiveAi {
+            return;
+        }
+        let Some((target_row, bytes)) = terminal_menu::move_menu_edge_bytes(tab, direction) else {
+            return;
+        };
+        if bytes.is_empty() {
+            terminal_menu::mark_menu_pending_row(tab, target_row);
+            return;
+        }
+        tab.interactive_follow_output = true;
+        terminal_menu::mark_menu_pending_row(tab, target_row);
+        if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
+            eprintln!("CliGJ: terminal menu edge hover: {e}");
+        }
+    });
+
     let st_menu = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_terminal_menu_option_chosen(move |row| {
@@ -55,7 +91,9 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         if row < 0 {
             return;
         }
-        let mut s = st_menu.borrow_mut();
+        let Ok(mut s) = st_menu.try_borrow_mut() else {
+            return;
+        };
         if s.current >= s.tabs.len() {
             return;
         }

@@ -13,6 +13,8 @@ export component GjViewer inherits Rectangle {
     in property <int> terminal-total-lines: 0;
     in property <[bool]> terminal-menu-option-flags: [];
     in property <int> terminal-menu-active-row: -1;
+    in property <int> terminal-menu-first-row: -1;
+    in property <int> terminal-menu-last-row: -1;
     in property <bool> auto-scroll: false;
     in property <bool> selection-mode: false;
     in property <bool> raw-input-enabled: false;
@@ -30,6 +32,7 @@ export component GjViewer inherits Rectangle {
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
     callback terminal-menu-option-hovered(int);
+    callback terminal-menu-edge-hovered(int);
     callback terminal-menu-option-chosen(int);
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px * AppTheme.ui_zoom_factor;
@@ -48,6 +51,13 @@ export component GjViewer inherits Rectangle {
     private property <bool> middle-drag-active: false;
     private property <length> middle-drag-anchor-y: 0px;
     private property <length> middle-drag-current-y: 0px;
+    private property <bool> pointer-inside: false;
+    private property <length> last-pointer-x: 0px;
+    private property <length> last-pointer-y: 0px;
+    private property <int> hover-menu-row: -1;
+    private property <int> pending-menu-click-row: -1;
+    private property <length> pending-menu-click-x: 0px;
+    private property <length> pending-menu-click-y: 0px;
     // Normalized inclusive range (document order).
     private property <bool> sel_forward: root.drag-start-row < root.drag-end-row
         || (root.drag-start-row == root.drag-end-row && root.drag-start-col <= root.drag-end-col);
@@ -186,6 +196,77 @@ export component GjViewer inherits Rectangle {
             && root.terminal-menu-option-flags[local]
     }
 
+    function menu-row-from-point(mx: length, my: length) -> int {
+        if (!root.pointer-inside
+                || mx < 0px
+                || mx > self.width
+                || my < 0px
+                || my > sv.height) {
+            return -1;
+        }
+        let row = root.row-from-y(my);
+        if (root.is-menu-option-row(row)) {
+            return row;
+        }
+        -1
+    }
+
+    function menu-edge-direction(my: length) -> int {
+        if (!root.pointer-inside) {
+            return 0;
+        }
+        let first = root.terminal-menu-first-row;
+        let last = root.terminal-menu-last-row;
+        if (first < 0 || last < 0) {
+            return 0;
+        }
+        let band = min(max(root.row-height, 14px), root.row-height * 1.5);
+        let top_y = (first - root.terminal-line-offset) * root.row-height;
+        let bottom_y = (last - root.terminal-line-offset + 1) * root.row-height;
+        if (my < top_y && top_y - my <= band) {
+            return -1;
+        }
+        if (my > bottom_y && my - bottom_y <= band) {
+            return 1;
+        }
+        0
+    }
+
+    function sync-menu-hover-from-pointer(trigger-row-hover: bool, trigger-edge-hover: bool) {
+        if (root.raw-input-enabled
+                || root.drag-active
+                || root.middle-drag-active
+                || root.context-menu-open
+                || !root.pointer-inside) {
+            root.hover-menu-row = -1;
+            return;
+        }
+        let row = root.menu-row-from-point(root.last-pointer-x, root.last-pointer-y);
+        if (row >= 0) {
+            root.hover-menu-row = row;
+            if (trigger-row-hover) {
+                root.terminal-menu-option-hovered(row);
+            }
+            return;
+        }
+        let edge = root.menu-edge-direction(root.last-pointer-y);
+        if (edge < 0) {
+            root.hover-menu-row = root.terminal-menu-first-row;
+            if (trigger-edge-hover) {
+                root.terminal-menu-edge-hovered(-1);
+            }
+            return;
+        }
+        if (edge > 0) {
+            root.hover-menu-row = root.terminal-menu-last-row;
+            if (trigger-edge-hover) {
+                root.terminal-menu-edge-hovered(1);
+            }
+            return;
+        }
+        root.hover-menu-row = -1;
+    }
+
     function begin-selection(mx: length, my: length) {
         if (root.terminal-total-lines <= 0) {
             return;
@@ -262,6 +343,10 @@ export component GjViewer inherits Rectangle {
         sv.viewport-y = -(t * 1px);
     }
 
+    public function sync-menu-hover() {
+        root.sync-menu-hover-from-pointer(false, true);
+    }
+
     // Auto-scroll is driven from Rust (`refresh_current_terminal`) so it stays in sync with
     // windowing math. A Slint `changed terminal-total-lines` handler here fought that logic
     // and caused races (blank terminal / flicker on new tabs).
@@ -327,12 +412,13 @@ export component GjViewer inherits Rectangle {
                     property <bool> hl_visible: root.line_highlight_visible(gidx, line.char-count);
                     property <bool> menu_option: root.is-menu-option-row(gidx);
                     property <bool> menu_active: root.terminal-menu-active-row == gidx;
-                    if (menu_option && menu_active) : Rectangle {
+                    property <bool> menu_hover: root.hover-menu-row == gidx;
+                    if (menu_option && (menu_active || menu_hover)) : Rectangle {
                         x: 0px;
                         y: 0px;
                         width: parent.width;
                         height: parent.height;
-                        background: #ffffff16;
+                        background: menu_hover ? #2d76d840 : #ffffff16;
                     }
 
                     // We still use HorizontalLayout for spans as they have dynamic width, 
@@ -432,48 +518,6 @@ export component GjViewer inherits Rectangle {
         }
     }
 
-    if (!root.raw-input-enabled) : Rectangle {
-        z: 102;
-        x: root.terminal-left-inset;
-        y: 0px;
-        width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
-        height: sv.height;
-        clip: true;
-        background: #00000000;
-
-        for line[idx] in root.terminal-lines: Rectangle {
-            x: 0px;
-            y: (root.terminal-line-offset + idx) * root.row-height + sv.viewport-y;
-            width: parent.width;
-            height: root.row-height;
-            background: #00000000;
-
-            property <int> gidx: root.terminal-line-offset + idx;
-            property <bool> menu_option: idx < root.terminal-menu-option-flags.length
-                && root.terminal-menu-option-flags[idx];
-
-            if (menu_option) : Rectangle {
-                width: parent.width;
-                height: parent.height;
-                background: #00000000;
-
-                row_ta := TouchArea {
-                    width: parent.width;
-                    height: parent.height;
-                    mouse-cursor: pointer;
-                    pointer-event(event) => {
-                        if (event.kind == PointerEventKind.move) {
-                            root.terminal-menu-option-hovered(gidx);
-                        }
-                    }
-                    clicked => {
-                        root.terminal-menu-option-chosen(gidx);
-                    }
-                }
-            }
-        }
-    }
-
     // Wheel layer: always active for terminal scrolling / interactive follow.
     TouchArea {
         z: 100;
@@ -503,37 +547,93 @@ export component GjViewer inherits Rectangle {
         y: 0px;
         width: max(0px, parent.width - root.terminal-left-inset - root.scrollbar-gutter);
         height: parent.height;
-        mouse-cursor: root.middle-drag-active ? MouseCursor.move : MouseCursor.default;
+        mouse-cursor: root.middle-drag-active
+            ? MouseCursor.move
+            : (root.hover-menu-row >= 0 ? MouseCursor.pointer : MouseCursor.default);
+        changed has-hover => {
+            root.pointer-inside = self.has-hover;
+            if (!self.has-hover) {
+                root.hover-menu-row = -1;
+                root.pending-menu-click-row = -1;
+                return;
+            }
+            root.last-pointer-x = self.mouse-x;
+            root.last-pointer-y = self.mouse-y;
+            root.sync-menu-hover-from-pointer(true, true);
+        }
         pointer-event(e) => {
-            if (e.kind == PointerEventKind.down && e.button == PointerEventButton.middle) {
+            if (e.kind == PointerEventKind.move) {
+                root.last-pointer-x = self.mouse-x;
+                root.last-pointer-y = self.mouse-y;
+                if (root.middle-drag-active) {
+                    let delta = self.mouse-y - root.middle-drag-current-y;
+                    root.middle-drag-current-y = self.mouse-y;
+                    let next = sv.viewport-y - delta;
+                    sv.viewport-y = root.clamp-viewport-y(next);
+                    root.sync-menu-hover-from-pointer(false, false);
+                } else if (root.pending-menu-click-row >= 0) {
+                    let row_delta = abs(self.mouse-y - root.pending-menu-click-y);
+                    let col_delta = abs(self.mouse-x - root.pending-menu-click-x);
+                    let moved_far = row_delta > root.row-height / 2 || col_delta > root.char-width * 2;
+                    let changed_row = root.menu-row-from-point(self.mouse-x, self.mouse-y) != root.pending-menu-click-row;
+                    if (moved_far || changed_row) {
+                        let start_x = root.pending-menu-click-x;
+                        let start_y = root.pending-menu-click-y;
+                        root.pending-menu-click-row = -1;
+                        root.begin-selection(start_x, start_y);
+                        root.auto-scroll-selection(self.mouse-y);
+                        root.update-selection(self.mouse-x, self.mouse-y);
+                    } else {
+                        root.sync-menu-hover-from-pointer(true, true);
+                    }
+                } else if (root.drag-active) {
+                    root.auto-scroll-selection(self.mouse-y);
+                    root.update-selection(self.mouse-x, self.mouse-y);
+                } else {
+                    root.sync-menu-hover-from-pointer(true, true);
+                }
+            } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.middle) {
                 root.context-menu-open = false;
+                root.pending-menu-click-row = -1;
                 root.middle-drag-active = true;
                 root.middle-drag-anchor-y = self.mouse-y;
                 root.middle-drag-current-y = self.mouse-y;
             } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.middle) {
                 root.middle-drag-active = false;
+                root.sync-menu-hover-from-pointer(false, false);
             } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.left) {
                 root.context-menu-open = false;
-                root.begin-selection(self.mouse-x, self.mouse-y);
+                root.last-pointer-x = self.mouse-x;
+                root.last-pointer-y = self.mouse-y;
+                let click_row = root.menu-row-from-point(self.mouse-x, self.mouse-y);
+                if (!root.raw-input-enabled && click_row >= 0) {
+                    root.hover-menu-row = click_row;
+                    root.pending-menu-click-row = click_row;
+                    root.pending-menu-click-x = self.mouse-x;
+                    root.pending-menu-click-y = self.mouse-y;
+                } else {
+                    root.pending-menu-click-row = -1;
+                    root.begin-selection(self.mouse-x, self.mouse-y);
+                }
             } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.right) {
+                root.pending-menu-click-row = -1;
                 root.context-menu-x = min(self.mouse-x, max(0px, self.width - 134px));
                 root.context-menu-y = min(self.mouse-y, max(0px, self.height - 66px));
                 root.context-menu-open = true;
             } else if (e.kind == PointerEventKind.up && e.button == PointerEventButton.left) {
-                root.end-selection();
-            }
-        }
-        moved => {
-            if (root.middle-drag-active) {
-                let delta = self.mouse-y - root.middle-drag-current-y;
-                root.middle-drag-current-y = self.mouse-y;
-
-                // Scrolling down (mouse moves down, delta > 0) should decrease viewport-y.
-                let next = sv.viewport-y - delta;
-                sv.viewport-y = root.clamp-viewport-y(next);
-            } else if (root.drag-active) {
-                root.auto-scroll-selection(self.mouse-y);
-                root.update-selection(self.mouse-x, self.mouse-y);
+                root.last-pointer-x = self.mouse-x;
+                root.last-pointer-y = self.mouse-y;
+                if (root.pending-menu-click-row >= 0) {
+                    let hover_row = root.menu-row-from-point(self.mouse-x, self.mouse-y);
+                    let click_row = root.pending-menu-click-row;
+                    root.pending-menu-click-row = -1;
+                    if (hover_row == click_row) {
+                        root.terminal-menu-option-chosen(click_row);
+                    }
+                } else {
+                    root.end-selection();
+                }
+                root.sync-menu-hover-from-pointer(false, false);
             }
         }
     }

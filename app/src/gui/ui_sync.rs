@@ -430,6 +430,8 @@ pub(crate) fn push_terminal_view_to_ui(
         tab.terminal_menu_active_row = None;
         ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
         ui.set_ws_terminal_menu_active_row(-1);
+        ui.set_ws_terminal_menu_first_row(-1);
+        ui.set_ws_terminal_menu_last_row(-1);
         if tab.last_window_total != 0 {
             ui.set_ws_terminal_line_offset(0);
             ui.set_ws_terminal_total_lines(0);
@@ -469,6 +471,12 @@ pub(crate) fn push_terminal_view_to_ui(
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(menu_flags)));
     ui.set_ws_terminal_menu_active_row(
         tab.terminal_menu_active_row.map(|row| row as i32).unwrap_or(-1),
+    );
+    ui.set_ws_terminal_menu_first_row(
+        tab.terminal_menu_rows.first().copied().map(|row| row as i32).unwrap_or(-1),
+    );
+    ui.set_ws_terminal_menu_last_row(
+        tab.terminal_menu_rows.last().copied().map(|row| row as i32).unwrap_or(-1),
     );
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != body_n;
@@ -553,6 +561,13 @@ pub(crate) fn push_terminal_view_to_ui(
     tab.last_pushed_scroll_top = scroll_top;
     tab.last_pushed_viewport_height = vh;
 
+    // Defer hover resync to the next event-loop tick. Calling the Slint callback synchronously
+    // here can re-enter `on_terminal_menu_option_hovered` while the caller still holds
+    // `GuiState`'s `RefCell`, which panics with "already borrowed".
+    let ui_weak = ui.as_weak();
+    let _ = ui_weak.upgrade_in_event_loop(|ui| {
+        ui.invoke_ws_sync_terminal_menu_hover();
+    });
     ui.window().request_redraw();
 }
 
@@ -624,6 +639,8 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_raw_input(tab.raw_input_mode);
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
     ui.set_ws_terminal_menu_active_row(-1);
+    ui.set_ws_terminal_menu_first_row(-1);
+    ui.set_ws_terminal_menu_last_row(-1);
     ui.set_ws_terminal_pin_lines(SharedString::from(
         tab.terminal_pinned_footer_lines.to_string().as_str(),
     ));

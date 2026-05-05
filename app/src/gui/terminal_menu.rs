@@ -83,6 +83,31 @@ pub(crate) fn activate_menu_row_bytes(tab: &TabState, row: usize) -> Option<Vec<
     Some(out)
 }
 
+pub(crate) fn move_menu_edge_bytes(tab: &TabState, direction: i32) -> Option<(usize, Vec<u8>)> {
+    if !has_terminal_menu(tab) || tab.terminal_menu_rows.len() < 2 {
+        return None;
+    }
+    if direction < 0 {
+        let target_row = *tab.terminal_menu_rows.first()?;
+        let bytes = if effective_menu_row(tab) == Some(target_row) {
+            plain_key_bytes("UpArrow")?
+        } else {
+            move_menu_row_bytes(tab, target_row)?
+        };
+        return Some((target_row, bytes));
+    }
+    if direction > 0 {
+        let target_row = *tab.terminal_menu_rows.last()?;
+        let bytes = if effective_menu_row(tab) == Some(target_row) {
+            plain_key_bytes("DownArrow")?
+        } else {
+            move_menu_row_bytes(tab, target_row)?
+        };
+        return Some((target_row, bytes));
+    }
+    None
+}
+
 pub(crate) fn mark_menu_pending_row(tab: &mut TabState, row: usize) {
     if tab.terminal_menu_rows.contains(&row) {
         tab.terminal_menu_pending_row = Some(row);

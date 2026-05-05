@@ -529,6 +529,7 @@ fn default_interactive_markers(name: &str, command: &str) -> Vec<String> {
             "implement {feature}",
             "/model to change",
         ],
+        "opencode" => vec!["opencode"],
         "claude" => vec!["claude"],
         "copilot" => vec!["copilot"],
         _ => Vec::new(),
@@ -541,7 +542,7 @@ fn default_interactive_markers(name: &str, command: &str) -> Vec<String> {
 fn default_interactive_archive_repainted_frames(name: &str, command: &str) -> bool {
     matches!(
         interactive_program_name(name, command).as_str(),
-        "gemini" | "codex"
+        "gemini" | "codex" | "opencode"
     )
 }
 

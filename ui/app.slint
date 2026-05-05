@@ -48,6 +48,8 @@ export component AppWindow inherits Window {
     in-out property <int> ws-terminal-total-lines: 0;
     in-out property <[bool]> ws-terminal-menu-option-flags: [];
     in-out property <int> ws-terminal-menu-active-row: -1;
+    in-out property <int> ws-terminal-menu-first-row: -1;
+    in-out property <int> ws-terminal-menu-last-row: -1;
     in-out property <bool> ws-auto-scroll: false;
     in-out property <bool> ws-terminal-select-mode: false;
     in-out property <bool> ws-rename-open: false;
@@ -141,6 +143,7 @@ export component AppWindow inherits Window {
     callback terminal-context-copy-requested;
     callback terminal-context-clear-requested;
     callback terminal-menu-option-hovered(int);
+    callback terminal-menu-edge-hovered(int);
     callback terminal-menu-option-chosen(int);
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
@@ -197,6 +200,10 @@ export component AppWindow inherits Window {
 
     public function ws_apply_terminal_scroll_top_px(px: float) {
         workspace.apply-terminal-scroll-top-px(px);
+    }
+
+    public function ws_sync_terminal_menu_hover() {
+        workspace.sync-terminal-menu-hover();
     }
 
     public function ws_scroll_at_picker_into_view() {
@@ -336,6 +343,8 @@ export component AppWindow inherits Window {
                         terminal-total-lines <=> root.ws-terminal-total-lines;
                         terminal-menu-option-flags <=> root.ws-terminal-menu-option-flags;
                         terminal-menu-active-row <=> root.ws-terminal-menu-active-row;
+                        terminal-menu-first-row <=> root.ws-terminal-menu-first-row;
+                        terminal-menu-last-row <=> root.ws-terminal-menu-last-row;
                         auto-scroll <=> root.ws-auto-scroll;
                         terminal-select-mode <=> root.ws-terminal-select-mode;
                         selected-line <=> root.ws-selected-line;
@@ -439,6 +448,9 @@ export component AppWindow inherits Window {
                         }
                         terminal-menu-option-hovered(row) => {
                             root.terminal-menu-option-hovered(row);
+                        }
+                        terminal-menu-edge-hovered(direction) => {
+                            root.terminal-menu-edge-hovered(direction);
                         }
                         terminal-menu-option-chosen(row) => {
                             root.terminal-menu-option-chosen(row);

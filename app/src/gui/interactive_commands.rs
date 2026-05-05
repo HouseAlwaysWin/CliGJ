@@ -13,6 +13,7 @@ pub(crate) fn default_interactive_command_pairs() -> Vec<InteractiveCommandSpec>
     vec![
         InteractiveCommandConfig::with_defaults("Gemini".into(), "gemini".into(), 8),
         InteractiveCommandConfig::with_defaults("Codex".into(), "codex".into(), 0),
+        InteractiveCommandConfig::with_defaults("OpenCode".into(), "opencode".into(), 0),
         InteractiveCommandConfig::with_defaults("Claude".into(), "claude".into(), 0),
         InteractiveCommandConfig::with_defaults("Copilot".into(), "copilot".into(), 0),
     ]
@@ -127,7 +128,9 @@ pub(crate) fn spec_for_label(line_label: &str, gs: &GuiState) -> Option<Interact
 }
 
 pub(crate) fn spec_for_program(program: &str, gs: &GuiState) -> Option<InteractiveCommandSpec> {
-    spec_for_program_in_specs(program, &gs.interactive_commands).cloned()
+    spec_for_program_in_specs(program, &gs.interactive_commands)
+        .cloned()
+        .or_else(|| builtin_spec_for_program(program))
 }
 
 /// Built-in entries from seed config (same display `name` as in default_interactive_command_pairs).
@@ -135,6 +138,10 @@ pub(crate) fn is_reserved_preset_display_name(name: &str) -> bool {
     default_interactive_command_pairs()
         .iter()
         .any(|spec| spec.name == name)
+}
+
+fn builtin_spec_for_program(program: &str) -> Option<InteractiveCommandSpec> {
+    spec_for_program_in_specs(program, &default_interactive_command_pairs()).cloned()
 }
 
 pub(crate) fn normalized_program_name(text: &str) -> String {
