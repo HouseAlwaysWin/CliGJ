@@ -22,8 +22,13 @@ export component GjViewer inherits Rectangle {
     in property <bool> raw-input-enabled: false;
     in-out property <int> selected-line;
     in-out property <string> selected-context;
-    /// Monospace cell width (approx. 13px Cascadia Code; tune if selection drifts).
-    private property <length> char-width: 7.8px * AppTheme.ui_zoom_factor;
+    /// Approximate cell width used only for PTY grid resize calculations.
+    private property <length> grid-char-width: 7.8px * AppTheme.ui_zoom_factor;
+    /// Rendered cell width based on the current PTY column count; this keeps hit-testing aligned
+    /// with centered modals where fixed-width estimates accumulate noticeable drift.
+    private property <length> char-width: root.last-resize-cols > 0
+        ? (self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.last-resize-cols
+        : root.grid-char-width;
     private property <length> stripe-width: 3px;
     private property <length> scrollbar-gutter: 14px;
     private property <length> pinned-footer-height: root.terminal-pinned-lines.length * root.row-height;
@@ -79,7 +84,7 @@ export component GjViewer inherits Rectangle {
     /// Notifies the PTY of the current grid size (for reflow). Kept in one place so
     /// window resize + explicit bump (e.g. tab switch) stay in sync.
     function sync-terminal-grid-to-pty() {
-        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.char-width);
+        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.grid-char-width);
         let rows = floor(self.height / root.row-height);
         if (cols > 0 && rows > 0
             && (cols != root.last-resize-cols || rows != root.last-resize-rows))
@@ -101,7 +106,7 @@ export component GjViewer inherits Rectangle {
     /// 分頁載入時呼叫：強制送出 resize，忽略去抖。
     /// 新分頁的 PTY 可能還在 120×40，必須確保 resize 到實際 viewer 尺寸。
     public function bump-terminal-size() {
-        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.char-width);
+        let cols = floor((self.width - root.terminal-left-inset - root.scrollbar-gutter - root.stripe-width) / root.grid-char-width);
         let rows = floor(self.height / root.row-height);
         if (cols > 0 && rows > 0) {
             root.last-resize-cols = cols;

@@ -160,6 +160,7 @@ pub(crate) fn effective_menu_row(tab: &TabState) -> Option<usize> {
 }
 
 pub(crate) fn menu_hit_cols(line: &ColoredLine) -> Option<(i32, i32)> {
+    const MENU_HIT_PADDING_COLS: i32 = 2;
     let mut first = None;
     let mut last = None;
     let mut col = 0i32;
@@ -172,7 +173,10 @@ pub(crate) fn menu_hit_cols(line: &ColoredLine) -> Option<(i32, i32)> {
             col += 1;
         }
     }
-    Some((first?, last?))
+    Some((
+        first?.saturating_sub(MENU_HIT_PADDING_COLS),
+        last?.saturating_add(MENU_HIT_PADDING_COLS),
+    ))
 }
 
 pub(crate) fn refresh_terminal_menu_state(
@@ -709,6 +713,10 @@ fn classify_highlight_menu_row(
         return Some(HighlightMenuRowKind::Indicator);
     }
 
+    if looks_like_modal_header(trimmed) || looks_like_search_placeholder(trimmed) {
+        return Some(HighlightMenuRowKind::Detail);
+    }
+
     if is_highlight_menu_header(line, trimmed, indent_bytes) {
         return None;
     }
@@ -797,6 +805,23 @@ fn is_menu_scroll_indicator(text: &str) -> bool {
     matches!(
         text.trim(),
         "\u{25b2}" | "\u{25bc}" | "\u{25b4}" | "\u{25be}" | "^" | "v"
+    )
+}
+
+fn looks_like_modal_header(text: &str) -> bool {
+    split_gap_columns(text).is_some_and(|(left, right)| {
+        let left = left.trim();
+        let right = right.trim().to_ascii_lowercase();
+        !left.is_empty()
+            && matches!(right.as_str(), "esc" | "escape" | "close" | "cancel")
+            && left.split_whitespace().count() <= 6
+    })
+}
+
+fn looks_like_search_placeholder(text: &str) -> bool {
+    matches!(
+        text.trim().to_ascii_lowercase().as_str(),
+        "search" | "filter"
     )
 }
 
@@ -1295,6 +1320,23 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 6);
         assert_eq!(tab.terminal_menu_rows, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(tab.terminal_menu_active_row, Some(1));
+    }
+
+    #[test]
+    fn provider_menu_ignores_title_and_search_rows() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("Connect a provider    esc"),
+            line("Search"),
+            accented_line("Popular"),
+            line("Alibaba Coding Plan"),
+            highlighted_line("Venice AI"),
+            line("AIHubMix"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 5);
+        assert_eq!(tab.terminal_menu_rows, vec![3, 4, 5]);
+        assert_eq!(tab.terminal_menu_active_row, Some(4));
     }
 
     #[test]
