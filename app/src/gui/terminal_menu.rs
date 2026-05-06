@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use cligj_terminal::key_encoding;
 use cligj_terminal::render::ColoredLine;
 
@@ -5,8 +7,12 @@ use super::state::{TabState, TerminalMode};
 
 const MENU_MAX_LABEL_CHARS: usize = 120;
 const MENU_MAX_WORDS: usize = 16;
+const PLAIN_MENU_MAX_LABEL_CHARS: usize = 48;
+const PLAIN_MENU_MAX_WORDS: usize = 6;
 const DEFAULT_BG_COLORS: &[[u8; 3]] = &[[0, 0, 0], [10, 10, 15], [18, 18, 18]];
+// Some Windows/codepage fallback paths degrade the selection chevron into literal question marks.
 const ARROW_MARKERS: &[&str] = &[
+    "??",
     "\u{276f}",
     "\u{203a}",
     ">",
@@ -19,6 +25,7 @@ const RADIO_SELECTED_MARKERS: &[&str] = &["\u{25cf}", "\u{25c9}"];
 const RADIO_UNSELECTED_MARKERS: &[&str] = &["\u{25cb}", "\u{25ef}"];
 const CHECKBOX_SELECTED_MARKERS: &[&str] = &["[x]", "[X]", "[*]", "(x)", "(X)", "(*)"];
 const CHECKBOX_UNSELECTED_MARKERS: &[&str] = &["[ ]", "( )"];
+const FRAME_MARKERS: &[char] = &['│', '┃', '║', '|'];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum MenuFamily {
@@ -37,6 +44,7 @@ struct ParsedMenuLine {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct ParsedCommandMenuLine {
     indent_bytes: usize,
+    slash_command: bool,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -114,7 +122,7 @@ pub(crate) fn mark_menu_pending_row(tab: &mut TabState, row: usize) {
     }
 }
 
-fn effective_menu_row(tab: &TabState) -> Option<usize> {
+pub(crate) fn effective_menu_row(tab: &TabState) -> Option<usize> {
     if let Some(row) = tab.terminal_menu_pending_row {
         if tab.terminal_menu_rows.contains(&row) {
             return Some(row);
@@ -136,6 +144,7 @@ pub(crate) fn refresh_terminal_menu_state(
     {
         tab.terminal_menu_rows.clear();
         tab.terminal_menu_active_row = None;
+        tab.terminal_menu_pending_row = None;
         return;
     }
 
@@ -186,16 +195,28 @@ pub(crate) fn refresh_terminal_menu_state(
             last,
             parsed.indent_bytes,
         );
-        if rows.len() >= 2 {
-            let active_row = find_highlighted_row(&tab.terminal_lines, &rows)
-                .or_else(|| cursor_row.filter(|cursor| rows.contains(cursor)))
-                .or_else(|| rows.first().copied());
-            let score = rows.len() * 14
+        let slash_like = command_block_has_slash_label(&tab.terminal_lines, &rows);
+        let effective_rows = if slash_like {
+            filter_command_rows(&tab.terminal_lines, &rows, true)
+        } else {
+            rows.clone()
+        };
+        if effective_rows.len() >= 2 {
+            let highlighted_row = find_highlighted_row(&tab.terminal_lines, &effective_rows);
+            // Plain two-column status blocks (for example Codex model/cwd banners) are not menus.
+            if highlighted_row.is_none() && !slash_like {
+                row = rows.last().copied().unwrap_or(row) + 1;
+                continue;
+            }
+            let active_row = highlighted_row
+                .or_else(|| cursor_row.filter(|cursor| effective_rows.contains(cursor)))
+                .or_else(|| effective_rows.first().copied());
+            let score = effective_rows.len() * 14
                 + usize::from(active_row.is_some()) * 3
-                + usize::from(find_highlighted_row(&tab.terminal_lines, &rows).is_some()) * 6;
+                + usize::from(highlighted_row.is_some()) * 6;
             if score > best.score {
                 best = MenuCandidate {
-                    rows: rows.clone(),
+                    rows: effective_rows,
                     active_row,
                     score,
                 };
@@ -253,13 +274,15 @@ pub(crate) fn refresh_terminal_menu_state(
         let rows = build_highlight_block(&tab.terminal_lines, cursor, visible_first, last);
         if rows.len() >= 2 {
             let highlighted = line_has_non_default_bg(&tab.terminal_lines[cursor]);
-            let score = rows.len() * if highlighted { 7 } else { 5 } + if highlighted { 4 } else { 1 };
-            if score > best.score {
-                best = MenuCandidate {
-                    rows,
-                    active_row: Some(cursor),
-                    score,
-                };
+            if highlighted {
+                let score = rows.len() * 7 + 4;
+                if score > best.score {
+                    best = MenuCandidate {
+                        rows,
+                        active_row: Some(cursor),
+                        score,
+                    };
+                }
             }
         }
     }
@@ -368,7 +391,8 @@ fn build_command_menu_block(
 }
 
 fn parse_arrow_selected_line(text: &str) -> Option<ParsedMenuLine> {
-    let trimmed = text.trim_end();
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
     let indent_bytes = leading_whitespace_bytes(trimmed);
     let rest = &trimmed[indent_bytes..];
     let label = strip_prefixed_label(rest, ARROW_MARKERS)?;
@@ -380,14 +404,17 @@ fn parse_arrow_selected_line(text: &str) -> Option<ParsedMenuLine> {
 }
 
 fn parse_arrow_block_line(text: &str, indent_bytes: usize) -> Option<ParsedMenuLine> {
-    let trimmed = text.trim_end();
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
     let line_indent = leading_whitespace_bytes(trimmed);
-    if line_indent != indent_bytes {
+    if line_indent != indent_bytes && line_indent != indent_bytes.saturating_add(2) {
         return None;
     }
-    let rest = &trimmed[indent_bytes..];
+    // `indent_bytes` comes from another row in the same candidate block, so it may not be a
+    // valid UTF-8 boundary for this row. Treat that as "not the same menu block", not a panic.
+    let rest = trimmed.get(indent_bytes..)?;
     if let Some(label) = strip_prefixed_label(rest, ARROW_MARKERS) {
-        if is_menuish_label(label) {
+        if line_indent == indent_bytes && is_menuish_label(label) {
             return Some(ParsedMenuLine {
                 family: MenuFamily::Arrow,
                 indent_bytes,
@@ -425,14 +452,18 @@ fn parse_explicit_family_line(text: &str) -> Option<ParsedMenuLine> {
 }
 
 fn parse_command_menu_line(text: &str) -> Option<ParsedCommandMenuLine> {
-    let trimmed = text.trim_end();
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
     let indent_bytes = leading_whitespace_bytes(trimmed);
     let rest = &trimmed[indent_bytes..];
     let (label, desc) = split_gap_columns(rest)?;
     if !is_command_label(label) || !is_command_description(desc) {
         return None;
     }
-    Some(ParsedCommandMenuLine { indent_bytes })
+    Some(ParsedCommandMenuLine {
+        indent_bytes,
+        slash_command: label.trim_start().starts_with('/'),
+    })
 }
 
 fn parse_prefixed_family_line(
@@ -441,7 +472,8 @@ fn parse_prefixed_family_line(
     selected_prefixes: &[&str],
     unselected_prefixes: &[&str],
 ) -> Option<ParsedMenuLine> {
-    let trimmed = text.trim_end();
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
     let indent_bytes = leading_whitespace_bytes(trimmed);
     let rest = &trimmed[indent_bytes..];
     if let Some(label) = strip_prefixed_label(rest, selected_prefixes) {
@@ -492,13 +524,52 @@ fn is_plain_menu_candidate(line: &ColoredLine, base_indent: usize) -> bool {
     if !line_has_visible_text(line) {
         return false;
     }
-    let text = line_plain_text(line);
+    let text = normalize_optional_side_frame(line_plain_text(line).as_str()).into_owned();
     let trimmed = text.trim();
-    if !is_menuish_label(trimmed) {
+    if trimmed.is_empty()
+        || trimmed.chars().count() > PLAIN_MENU_MAX_LABEL_CHARS
+        || trimmed.split_whitespace().count() > PLAIN_MENU_MAX_WORDS
+    {
         return false;
     }
     let indent = leading_whitespace_bytes(text.as_str());
     indent.abs_diff(base_indent) <= 2
+}
+
+fn normalize_optional_side_frame(text: &str) -> Cow<'_, str> {
+    let trimmed = text.trim_end();
+    let indent_bytes = leading_whitespace_bytes(trimmed);
+    let Some(mut rest) = trimmed.get(indent_bytes..) else {
+        return Cow::Borrowed(trimmed);
+    };
+
+    if let Some(ch) = rest.chars().next() {
+        if FRAME_MARKERS.contains(&ch) {
+            rest = &rest[ch.len_utf8()..];
+            if let Some(next) = rest.chars().next() {
+                if next.is_whitespace() {
+                    rest = &rest[next.len_utf8()..];
+                }
+            }
+        } else {
+            return Cow::Borrowed(trimmed);
+        }
+    } else {
+        return Cow::Borrowed(trimmed);
+    }
+
+    rest = rest.trim_end_matches(char::is_whitespace);
+    if let Some(ch) = rest.chars().last() {
+        if FRAME_MARKERS.contains(&ch) {
+            rest = &rest[..rest.len() - ch.len_utf8()];
+            rest = rest.trim_end_matches(char::is_whitespace);
+        }
+    }
+
+    let mut normalized = String::with_capacity(indent_bytes + rest.len());
+    normalized.push_str(&trimmed[..indent_bytes]);
+    normalized.push_str(rest);
+    Cow::Owned(normalized)
 }
 
 fn split_gap_columns(text: &str) -> Option<(&str, &str)> {
@@ -546,7 +617,10 @@ fn is_command_label(text: &str) -> bool {
     let Some(first) = chars.next() else {
         return false;
     };
-    if trimmed.chars().count() > 32 || trimmed.chars().any(|ch| ch.is_whitespace()) {
+    if trimmed.chars().count() > 32
+        || trimmed.chars().any(|ch| ch.is_whitespace())
+        || trimmed.ends_with(':')
+    {
         return false;
     }
     if !(first == '/' || first.is_ascii_alphanumeric()) {
@@ -565,10 +639,78 @@ fn is_command_description(text: &str) -> bool {
         && trimmed.chars().any(|ch| ch.is_ascii_alphabetic())
 }
 
+fn command_block_has_slash_label(lines: &[ColoredLine], rows: &[usize]) -> bool {
+    rows.iter().copied().any(|row| {
+        let Some(line) = lines.get(row) else {
+            return false;
+        };
+        parse_command_menu_line(line_plain_text(line).as_str())
+            .is_some_and(|parsed| parsed.slash_command)
+    })
+}
+
+fn filter_command_rows(lines: &[ColoredLine], rows: &[usize], slash_command: bool) -> Vec<usize> {
+    rows.iter()
+        .copied()
+        .filter(|&row| {
+            let Some(line) = lines.get(row) else {
+                return false;
+            };
+            parse_command_menu_line(line_plain_text(line).as_str())
+                .is_some_and(|parsed| parsed.slash_command == slash_command)
+        })
+        .collect()
+}
+
 fn find_highlighted_row(lines: &[ColoredLine], rows: &[usize]) -> Option<usize> {
     rows.iter()
         .copied()
         .find(|&row| lines.get(row).is_some_and(line_has_non_default_bg))
+        .or_else(|| find_accented_fg_row(lines, rows))
+}
+
+fn find_accented_fg_row(lines: &[ColoredLine], rows: &[usize]) -> Option<usize> {
+    let mut best: Option<(usize, usize)> = None;
+    let mut tie = false;
+    for &row in rows {
+        let Some(line) = lines.get(row) else {
+            continue;
+        };
+        let score = line_accented_fg_visible_chars(line);
+        if score < 4 {
+            continue;
+        }
+        match best {
+            None => {
+                best = Some((row, score));
+                tie = false;
+            }
+            Some((_, best_score)) if score > best_score => {
+                best = Some((row, score));
+                tie = false;
+            }
+            Some((_, best_score)) if score == best_score => {
+                tie = true;
+            }
+            _ => {}
+        }
+    }
+    if tie {
+        return None;
+    }
+    best.map(|(row, _)| row)
+}
+
+fn line_accented_fg_visible_chars(line: &ColoredLine) -> usize {
+    line.spans
+        .iter()
+        .filter(|span| is_accent_color(span.fg))
+        .map(|span| span.text.chars().filter(|ch| !ch.is_whitespace()).count())
+        .sum()
+}
+
+fn is_accent_color(rgb: [u8; 3]) -> bool {
+    rgb[0].abs_diff(rgb[1]) > 12 || rgb[1].abs_diff(rgb[2]) > 12 || rgb[0].abs_diff(rgb[2]) > 12
 }
 
 fn line_has_visible_text(line: &ColoredLine) -> bool {
@@ -622,6 +764,17 @@ mod tests {
                 text: text.to_string(),
                 fg: [18, 18, 18],
                 bg: [40, 120, 210],
+            }],
+        }
+    }
+
+    fn accented_line(text: &str) -> ColoredLine {
+        ColoredLine {
+            blank: false,
+            spans: vec![ColoredSpan {
+                text: text.to_string(),
+                fg: [90, 220, 230],
+                bg: [18, 18, 18],
             }],
         }
     }
@@ -703,5 +856,82 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 3);
         assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
         assert_eq!(tab.terminal_menu_active_row, Some(0));
+    }
+
+    #[test]
+    fn detects_framed_command_menu() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            highlighted_line("│ /agents    Switch agent │"),
+            line("│ /connect   Connect provider │"),
+            line("│ /editor    Open editor │"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
+        assert_eq!(tab.terminal_menu_active_row, Some(0));
+    }
+
+    #[test]
+    fn detects_fg_accented_command_menu_active_row() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("/fast                    toggle Fast mode"),
+            accented_line("/permissions             choose what Codex is allowed to do"),
+            line("/keymap                  remap TUI shortcuts"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
+        assert_eq!(tab.terminal_menu_active_row, Some(1));
+    }
+
+    #[test]
+    fn does_not_detect_unhighlighted_prompt_footer_as_menu() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_cursor_row = Some(1);
+        tab.terminal_lines = vec![
+            line("Tip: Try /model to change model"),
+            line("> /skills"),
+            line("Use Enter to submit"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert!(tab.terminal_menu_rows.is_empty());
+        assert_eq!(tab.terminal_menu_active_row, None);
+    }
+
+    #[test]
+    fn does_not_detect_codex_status_block_as_command_menu() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("model      gpt-5.4 xhigh /model to change"),
+            line("cwd        D:\\Projects\\CliGJ"),
+            line("approval   never"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert!(tab.terminal_menu_rows.is_empty());
+        assert_eq!(tab.terminal_menu_active_row, None);
+    }
+
+    #[test]
+    fn slash_command_menu_ignores_non_slash_helper_rows() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("help       Use arrows to pick a command"),
+            highlighted_line("/logout    log out of Codex"),
+            line("/exit      exit Codex"),
+            line("/feedback  send logs to maintainers"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 3);
+        assert_eq!(tab.terminal_menu_rows, vec![1, 2, 3]);
+        assert_eq!(tab.terminal_menu_active_row, Some(1));
+    }
+
+    #[test]
+    fn arrow_block_parser_ignores_non_boundary_indent_on_unicode_rows() {
+        assert_eq!(parse_arrow_block_line("▄▄▄▄▄▄", 1), None);
     }
 }

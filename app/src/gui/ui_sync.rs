@@ -559,7 +559,9 @@ pub(crate) fn push_terminal_view_to_ui(
     }
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(menu_flags)));
     ui.set_ws_terminal_menu_active_row(
-        tab.terminal_menu_active_row.map(|row| row as i32).unwrap_or(-1),
+        terminal_menu::effective_menu_row(tab)
+            .map(|row| row as i32)
+            .unwrap_or(-1),
     );
     ui.set_ws_terminal_menu_first_row(
         tab.terminal_menu_rows.first().copied().map(|row| row as i32).unwrap_or(-1),

@@ -241,8 +241,8 @@ export component GjViewer inherits Rectangle {
             return 0;
         }
         let band = min(max(root.row-height, 14px), root.row-height * 1.5);
-        let top_y = (first - root.terminal-line-offset) * root.row-height;
-        let bottom_y = (last - root.terminal-line-offset + 1) * root.row-height;
+        let top_y = first * root.row-height + sv.viewport-y;
+        let bottom_y = (last + 1) * root.row-height + sv.viewport-y;
         if (my < top_y && top_y - my <= band) {
             return -1;
         }
@@ -286,6 +286,36 @@ export component GjViewer inherits Rectangle {
             return;
         }
         root.hover-menu-row = -1;
+    }
+
+    function handle-pointer-move(mx: length, my: length) {
+        root.last-pointer-x = mx;
+        root.last-pointer-y = my;
+        if (root.middle-drag-active) {
+            let delta = my - root.middle-drag-current-y;
+            root.middle-drag-current-y = my;
+            let next = sv.viewport-y - delta;
+            sv.viewport-y = root.clamp-viewport-y(next);
+            root.sync-menu-hover-from-pointer(false, false);
+        } else if (root.pending-menu-click-row >= 0) {
+            let row_delta = abs(my - root.pending-menu-click-y);
+            let col_delta = abs(mx - root.pending-menu-click-x);
+            let moved_far = row_delta > root.row-height / 2 || col_delta > root.char-width * 2;
+            let changed_row = root.menu-row-from-point(mx, my) != root.pending-menu-click-row;
+            if (moved_far || changed_row) {
+                let start_x = root.pending-menu-click-x;
+                let start_y = root.pending-menu-click-y;
+                root.pending-menu-click-row = -1;
+                root.begin-selection(start_x, start_y);
+                root.auto-scroll-selection(my);
+                root.update-selection(mx, my);
+            }
+        } else if (root.drag-active) {
+            root.auto-scroll-selection(my);
+            root.update-selection(mx, my);
+        } else {
+            root.sync-menu-hover-from-pointer(true, true);
+        }
     }
 
     function begin-selection(mx: length, my: length) {
@@ -374,7 +404,8 @@ export component GjViewer inherits Rectangle {
 
     sv := ScrollView {
         visible: true;
-        mouse-drag-pan-enabled: true;
+        // Left-drag is reserved for terminal text selection; wheel and middle-drag handle scrolling.
+        mouse-drag-pan-enabled: false;
         horizontal-scrollbar-policy: always-off;
         vertical-scrollbar-policy: always-on;
         x: root.terminal-left-inset;
@@ -594,35 +625,12 @@ export component GjViewer inherits Rectangle {
             root.last-pointer-y = self.mouse-y;
             root.sync-menu-hover-from-pointer(true, true);
         }
+        moved => {
+            root.handle-pointer-move(self.mouse-x, self.mouse-y);
+        }
         pointer-event(e) => {
             if (e.kind == PointerEventKind.move) {
-                root.last-pointer-x = self.mouse-x;
-                root.last-pointer-y = self.mouse-y;
-                if (root.middle-drag-active) {
-                    let delta = self.mouse-y - root.middle-drag-current-y;
-                    root.middle-drag-current-y = self.mouse-y;
-                    let next = sv.viewport-y - delta;
-                    sv.viewport-y = root.clamp-viewport-y(next);
-                    root.sync-menu-hover-from-pointer(false, false);
-            } else if (root.pending-menu-click-row >= 0) {
-                let row_delta = abs(self.mouse-y - root.pending-menu-click-y);
-                let col_delta = abs(self.mouse-x - root.pending-menu-click-x);
-                let moved_far = row_delta > root.row-height / 2 || col_delta > root.char-width * 2;
-                let changed_row = root.menu-row-from-point(self.mouse-x, self.mouse-y) != root.pending-menu-click-row;
-                    if (moved_far || changed_row) {
-                        let start_x = root.pending-menu-click-x;
-                        let start_y = root.pending-menu-click-y;
-                    root.pending-menu-click-row = -1;
-                    root.begin-selection(start_x, start_y);
-                    root.auto-scroll-selection(self.mouse-y);
-                    root.update-selection(self.mouse-x, self.mouse-y);
-                }
-            } else if (root.drag-active) {
-                root.auto-scroll-selection(self.mouse-y);
-                root.update-selection(self.mouse-x, self.mouse-y);
-                } else {
-                    root.sync-menu-hover-from-pointer(true, true);
-                }
+                root.handle-pointer-move(self.mouse-x, self.mouse-y);
             } else if (e.kind == PointerEventKind.down && e.button == PointerEventButton.middle) {
                 root.context-menu-open = false;
                 root.pending-menu-click-row = -1;
@@ -662,6 +670,9 @@ export component GjViewer inherits Rectangle {
                         root.terminal-menu-option-chosen(click_row);
                     }
                 } else {
+                    if (root.drag-active) {
+                        root.update-selection(self.mouse-x, self.mouse-y);
+                    }
                     root.end-selection();
                 }
                 root.sync-menu-hover-from-pointer(false, false);
