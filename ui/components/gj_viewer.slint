@@ -12,6 +12,8 @@ export component GjViewer inherits Rectangle {
     /// Full document line count (for scroll extent and selection clamping).
     in property <int> terminal-total-lines: 0;
     in property <[bool]> terminal-menu-option-flags: [];
+    in property <[int]> terminal-menu-hit-start-cols: [];
+    in property <[int]> terminal-menu-hit-end-cols: [];
     in property <int> terminal-menu-active-row: -1;
     in property <int> terminal-menu-first-row: -1;
     in property <int> terminal-menu-last-row: -1;
@@ -216,6 +218,31 @@ export component GjViewer inherits Rectangle {
             && root.terminal-menu-option-flags[local]
     }
 
+    function menu-hit-start-col(global-row: int) -> int {
+        let local = global-row - root.terminal-line-offset;
+        if (local < 0 || local >= root.terminal-menu-hit-start-cols.length) {
+            return -1;
+        }
+        root.terminal-menu-hit-start-cols[local]
+    }
+
+    function menu-hit-end-col(global-row: int) -> int {
+        let local = global-row - root.terminal-line-offset;
+        if (local < 0 || local >= root.terminal-menu-hit-end-cols.length) {
+            return -1;
+        }
+        root.terminal-menu-hit-end-cols[local]
+    }
+
+    function menu-point-hits-row(mx: length, global-row: int) -> bool {
+        let start = root.menu-hit-start-col(global-row);
+        let end = root.menu-hit-end-col(global-row);
+        start >= 0
+            && end >= start
+            && mx >= root.stripe-width + start * root.char-width
+            && mx <= root.stripe-width + (end + 1) * root.char-width
+    }
+
     function menu-row-from-point(mx: length, my: length) -> int {
         if (!root.pointer-inside
                 || mx < 0px
@@ -225,7 +252,7 @@ export component GjViewer inherits Rectangle {
             return -1;
         }
         let row = root.row-from-y(my);
-        if (root.is-menu-option-row(row)) {
+        if (root.is-menu-option-row(row) && root.menu-point-hits-row(mx, row)) {
             return row;
         }
         -1

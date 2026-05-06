@@ -14,6 +14,8 @@ export component GjWorkspace inherits Rectangle {
     in-out property <int> terminal-line-offset: 0;
     in-out property <int> terminal-total-lines: 0;
     in-out property <[bool]> terminal-menu-option-flags: [];
+    in-out property <[int]> terminal-menu-hit-start-cols: [];
+    in-out property <[int]> terminal-menu-hit-end-cols: [];
     in-out property <int> terminal-menu-active-row: -1;
     in-out property <int> terminal-menu-first-row: -1;
     in-out property <int> terminal-menu-last-row: -1;
@@ -106,6 +108,8 @@ export component GjWorkspace inherits Rectangle {
             terminal-line-offset: root.terminal-line-offset;
             terminal-total-lines: root.terminal-total-lines;
             terminal-menu-option-flags: root.terminal-menu-option-flags;
+            terminal-menu-hit-start-cols: root.terminal-menu-hit-start-cols;
+            terminal-menu-hit-end-cols: root.terminal-menu-hit-end-cols;
             terminal-menu-active-row: root.terminal-menu-active-row;
             terminal-menu-first-row: root.terminal-menu-first-row;
             terminal-menu-last-row: root.terminal-menu-last-row;

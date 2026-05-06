@@ -47,6 +47,8 @@ export component AppWindow inherits Window {
     in-out property <int> ws-terminal-line-offset: 0;
     in-out property <int> ws-terminal-total-lines: 0;
     in-out property <[bool]> ws-terminal-menu-option-flags: [];
+    in-out property <[int]> ws-terminal-menu-hit-start-cols: [];
+    in-out property <[int]> ws-terminal-menu-hit-end-cols: [];
     in-out property <int> ws-terminal-menu-active-row: -1;
     in-out property <int> ws-terminal-menu-first-row: -1;
     in-out property <int> ws-terminal-menu-last-row: -1;
@@ -342,6 +344,8 @@ export component AppWindow inherits Window {
                         terminal-line-offset <=> root.ws-terminal-line-offset;
                         terminal-total-lines <=> root.ws-terminal-total-lines;
                         terminal-menu-option-flags <=> root.ws-terminal-menu-option-flags;
+                        terminal-menu-hit-start-cols <=> root.ws-terminal-menu-hit-start-cols;
+                        terminal-menu-hit-end-cols <=> root.ws-terminal-menu-hit-end-cols;
                         terminal-menu-active-row <=> root.ws-terminal-menu-active-row;
                         terminal-menu-first-row <=> root.ws-terminal-menu-first-row;
                         terminal-menu-last-row <=> root.ws-terminal-menu-last-row;

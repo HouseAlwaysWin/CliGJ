@@ -2,11 +2,26 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::terminal_menu;
+
+fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &mut GuiState) {
+    ui.set_ws_prompt(SharedString::new());
+    if state.current >= state.tabs.len() {
+        return;
+    }
+    let raw = ui.get_ws_raw_input();
+    let current = state.current;
+    let tab = &mut state.tabs[current];
+    tab.prompt = SharedString::new();
+    tab.composer_pty_mirror.clear();
+    tab.history_cursor = None;
+    tab.history_draft.clear();
+    state.timer_snapshot = Some((current, String::new(), raw));
+}
 
 pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
     let st_hover = Rc::clone(&state);
@@ -113,7 +128,8 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         }
         let current = s.current;
         let target_row = row as usize;
-        let Some(bytes) = terminal_menu::activate_menu_row_bytes(&s.tabs[current], target_row) else {
+        let Some(bytes) = terminal_menu::activate_menu_row_bytes(&s.tabs[current], target_row)
+        else {
             return;
         };
         if s.tabs[current].terminal_mode == TerminalMode::InteractiveAi {
@@ -122,6 +138,8 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         terminal_menu::mark_menu_pending_row(&mut s.tabs[current], target_row);
         if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
             eprintln!("CliGJ: terminal menu click: {e}");
+        } else {
+            clear_forwarded_interactive_prompt(&ui, &mut s);
         }
     });
 }

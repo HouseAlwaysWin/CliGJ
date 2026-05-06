@@ -527,6 +527,8 @@ pub(crate) fn push_terminal_view_to_ui(
         tab.terminal_menu_rows.clear();
         tab.terminal_menu_active_row = None;
         ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
+        ui.set_ws_terminal_menu_hit_start_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));
+        ui.set_ws_terminal_menu_hit_end_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));
         ui.set_ws_terminal_menu_active_row(-1);
         ui.set_ws_terminal_menu_first_row(-1);
         ui.set_ws_terminal_menu_last_row(-1);
@@ -548,26 +550,45 @@ pub(crate) fn push_terminal_view_to_ui(
         ui.window().request_redraw();
         return;
     }
-    let (first, last) =
-        bounds.unwrap_or_else(|| terminal_window_bounds(body_n, scroll_top, row_height, vh).unwrap_or((0, 0)));
+    let (first, last) = bounds.unwrap_or_else(|| {
+        terminal_window_bounds(body_n, scroll_top, row_height, vh).unwrap_or((0, 0))
+    });
     let window_len = last - first + 1;
     let mut menu_flags = vec![false; window_len];
+    let mut menu_hit_start_cols = vec![-1; window_len];
+    let mut menu_hit_end_cols = vec![-1; window_len];
     for &row in &tab.terminal_menu_rows {
         if row >= first && row <= last {
             menu_flags[row - first] = true;
+            if let Some(line) = tab.terminal_lines.get(row) {
+                if let Some((start_col, end_col)) = terminal_menu::menu_hit_cols(line) {
+                    menu_hit_start_cols[row - first] = start_col;
+                    menu_hit_end_cols[row - first] = end_col;
+                }
+            }
         }
     }
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(menu_flags)));
+    ui.set_ws_terminal_menu_hit_start_cols(ModelRc::new(VecModel::from(menu_hit_start_cols)));
+    ui.set_ws_terminal_menu_hit_end_cols(ModelRc::new(VecModel::from(menu_hit_end_cols)));
     ui.set_ws_terminal_menu_active_row(
         terminal_menu::effective_menu_row(tab)
             .map(|row| row as i32)
             .unwrap_or(-1),
     );
     ui.set_ws_terminal_menu_first_row(
-        tab.terminal_menu_rows.first().copied().map(|row| row as i32).unwrap_or(-1),
+        tab.terminal_menu_rows
+            .first()
+            .copied()
+            .map(|row| row as i32)
+            .unwrap_or(-1),
     );
     ui.set_ws_terminal_menu_last_row(
-        tab.terminal_menu_rows.last().copied().map(|row| row as i32).unwrap_or(-1),
+        tab.terminal_menu_rows
+            .last()
+            .copied()
+            .map(|row| row as i32)
+            .unwrap_or(-1),
     );
     let window_changed = tab.last_window_first != first || tab.last_window_last != last;
     let total_changed = tab.last_window_total != body_n;
@@ -729,6 +750,8 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
     ui.set_ws_raw_input(tab.raw_input_mode);
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
+    ui.set_ws_terminal_menu_hit_start_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));
+    ui.set_ws_terminal_menu_hit_end_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));
     ui.set_ws_terminal_menu_active_row(-1);
     ui.set_ws_terminal_menu_first_row(-1);
     ui.set_ws_terminal_menu_last_row(-1);

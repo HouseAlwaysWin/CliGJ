@@ -115,11 +115,7 @@ fn handle_zoom_shortcut(
     true
 }
 
-fn inject_plain_interactive_key(
-    ui: &AppWindow,
-    state: &Rc<RefCell<GuiState>>,
-    key: &str,
-) -> bool {
+fn inject_plain_interactive_key(ui: &AppWindow, state: &Rc<RefCell<GuiState>>, key: &str) -> bool {
     let Some(bytes) = terminal_menu::plain_key_bytes(key) else {
         return false;
     };
@@ -136,6 +132,22 @@ fn inject_plain_interactive_key(
         eprintln!("CliGJ: plain interactive key: {e}");
     }
     true
+}
+
+fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &Rc<RefCell<GuiState>>) {
+    ui.set_ws_prompt(SharedString::new());
+    let mut s = state.borrow_mut();
+    if s.current >= s.tabs.len() {
+        return;
+    }
+    let raw = ui.get_ws_raw_input();
+    let current = s.current;
+    let tab = &mut s.tabs[current];
+    tab.prompt = SharedString::new();
+    tab.composer_pty_mirror.clear();
+    tab.history_cursor = None;
+    tab.history_draft.clear();
+    s.timer_snapshot = Some((current, String::new(), raw));
 }
 
 pub(super) fn connect(
@@ -330,6 +342,7 @@ pub(super) fn connect(
                 s.current < s.tabs.len() && terminal_menu::has_terminal_menu(&s.tabs[s.current])
             };
             if has_menu && inject_plain_interactive_key(&ui, &st_keys, "Return") {
+                clear_forwarded_interactive_prompt(&ui, &st_keys);
                 return true;
             }
         }

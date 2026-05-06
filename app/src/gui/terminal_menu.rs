@@ -9,21 +9,30 @@ const MENU_MAX_LABEL_CHARS: usize = 120;
 const MENU_MAX_WORDS: usize = 16;
 const PLAIN_MENU_MAX_LABEL_CHARS: usize = 48;
 const PLAIN_MENU_MAX_WORDS: usize = 6;
+const COMMAND_LABEL_MAX_CHARS: usize = 48;
+const COMMAND_LABEL_MAX_WORDS: usize = 5;
+const COMMAND_DESCRIPTION_MAX_CHARS: usize = 240;
 const DEFAULT_BG_COLORS: &[[u8; 3]] = &[[0, 0, 0], [10, 10, 15], [18, 18, 18]];
 // Some Windows/codepage fallback paths degrade the selection chevron into literal question marks.
 const ARROW_MARKERS: &[&str] = &[
-    "??",
-    "\u{276f}",
-    "\u{203a}",
-    ">",
-    "\u{25b6}",
-    "\u{25b8}",
-    "\u{2192}",
-    "\u{00bb}",
+    "??", "\u{276f}", "\u{203a}", ">", "\u{25b6}", "\u{25b8}", "\u{2192}", "\u{00bb}",
 ];
 const RADIO_SELECTED_MARKERS: &[&str] = &["\u{25cf}", "\u{25c9}"];
 const RADIO_UNSELECTED_MARKERS: &[&str] = &["\u{25cb}", "\u{25ef}"];
-const CHECKBOX_SELECTED_MARKERS: &[&str] = &["[x]", "[X]", "[*]", "(x)", "(X)", "(*)"];
+const CHECKBOX_SELECTED_MARKERS: &[&str] = &[
+    "[x]",
+    "[X]",
+    "[*]",
+    "[\u{221a}]",
+    "[\u{2713}]",
+    "[\u{2714}]",
+    "(x)",
+    "(X)",
+    "(*)",
+    "(\u{221a})",
+    "(\u{2713})",
+    "(\u{2714})",
+];
 const CHECKBOX_UNSELECTED_MARKERS: &[&str] = &["[ ]", "( )"];
 const FRAME_MARKERS: &[char] = &['│', '┃', '║', '|'];
 
@@ -54,6 +63,22 @@ struct MenuCandidate {
     score: usize,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum DescribedMenuRowKind {
+    Selectable,
+    Detail,
+    Blank,
+    Indicator,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HighlightMenuRowKind {
+    Selectable,
+    Detail,
+    Blank,
+    Indicator,
+}
+
 pub(crate) fn has_terminal_menu(tab: &TabState) -> bool {
     tab.terminal_menu_active_row.is_some() && tab.terminal_menu_rows.len() >= 2
 }
@@ -67,7 +92,10 @@ pub(crate) fn move_menu_row_bytes(tab: &TabState, row: usize) -> Option<Vec<u8>>
         return None;
     }
     let active_row = effective_menu_row(tab)?;
-    let active_idx = tab.terminal_menu_rows.iter().position(|&r| r == active_row)?;
+    let active_idx = tab
+        .terminal_menu_rows
+        .iter()
+        .position(|&r| r == active_row)?;
     let target_idx = tab.terminal_menu_rows.iter().position(|&r| r == row)?;
 
     let mut out = Vec::new();
@@ -131,6 +159,22 @@ pub(crate) fn effective_menu_row(tab: &TabState) -> Option<usize> {
     tab.terminal_menu_active_row
 }
 
+pub(crate) fn menu_hit_cols(line: &ColoredLine) -> Option<(i32, i32)> {
+    let mut first = None;
+    let mut last = None;
+    let mut col = 0i32;
+    for span in &line.spans {
+        for ch in span.text.chars() {
+            if !ch.is_whitespace() {
+                first.get_or_insert(col);
+                last = Some(col);
+            }
+            col += 1;
+        }
+    }
+    Some((first?, last?))
+}
+
 pub(crate) fn refresh_terminal_menu_state(
     tab: &mut TabState,
     visible_first: usize,
@@ -169,7 +213,9 @@ pub(crate) fn refresh_terminal_menu_state(
         if rows.len() < 2 {
             continue;
         }
-        let active_row = cursor_row.filter(|cursor| rows.contains(cursor)).or(Some(row));
+        let active_row = cursor_row
+            .filter(|cursor| rows.contains(cursor))
+            .or(Some(row));
         let score = rows.len() * 12 + usize::from(active_row == cursor_row) * 4;
         if score > best.score {
             best = MenuCandidate {
@@ -236,7 +282,11 @@ pub(crate) fn refresh_terminal_menu_state(
             continue;
         }
         let mut rows = vec![row];
-        let mut selected_rows = if parsed.selected { vec![row] } else { Vec::new() };
+        let mut selected_rows = if parsed.selected {
+            vec![row]
+        } else {
+            Vec::new()
+        };
         let mut end = row;
         while end < last {
             let next_text = line_plain_text(&tab.terminal_lines[end + 1]);
@@ -269,6 +319,62 @@ pub(crate) fn refresh_terminal_menu_state(
         row = end + 1;
     }
 
+    row = visible_first;
+    while row <= last {
+        let text = line_plain_text(&tab.terminal_lines[row]);
+        let Some(parsed) = parse_explicit_family_line(text.as_str()) else {
+            row += 1;
+            continue;
+        };
+        let (rows, highlighted_row, end) = build_described_explicit_menu_block(
+            &tab.terminal_lines,
+            row,
+            visible_first,
+            last,
+            parsed.family,
+            parsed.indent_bytes,
+        );
+        if rows.len() >= 2 {
+            let active_row = highlighted_row
+                .or_else(|| cursor_row.filter(|cursor| rows.contains(cursor)))
+                .or_else(|| rows.first().copied());
+            let score = rows.len() * 13
+                + usize::from(active_row == cursor_row) * 4
+                + usize::from(highlighted_row.is_some()) * 5;
+            if score > best.score {
+                best = MenuCandidate {
+                    rows,
+                    active_row,
+                    score,
+                };
+            }
+        }
+        row = end + 1;
+    }
+
+    row = visible_first;
+    while row <= last {
+        if !line_has_non_default_bg(&tab.terminal_lines[row]) {
+            row += 1;
+            continue;
+        }
+        let (rows, active_row, end) =
+            build_highlighted_single_column_menu_block(&tab.terminal_lines, row, last);
+        if rows.len() >= 2 {
+            let score = rows.len() * 11
+                + usize::from(active_row == cursor_row) * 4
+                + usize::from(active_row.is_some()) * 5;
+            if score > best.score {
+                best = MenuCandidate {
+                    rows,
+                    active_row,
+                    score,
+                };
+            }
+        }
+        row = end + 1;
+    }
+
     if let Some(cursor) = cursor_row {
         let rows = build_highlight_block(&tab.terminal_lines, cursor, visible_first, last);
         if rows.len() >= 2 {
@@ -288,10 +394,9 @@ pub(crate) fn refresh_terminal_menu_state(
 
     tab.terminal_menu_rows = best.rows;
     tab.terminal_menu_active_row = best.active_row;
-    if tab
-        .terminal_menu_pending_row
-        .is_some_and(|row| !tab.terminal_menu_rows.contains(&row) || tab.terminal_menu_active_row == Some(row))
-    {
+    if tab.terminal_menu_pending_row.is_some_and(|row| {
+        !tab.terminal_menu_rows.contains(&row) || tab.terminal_menu_active_row == Some(row)
+    }) {
         tab.terminal_menu_pending_row = None;
     }
 }
@@ -389,6 +494,107 @@ fn build_command_menu_block(
     (start..=end).collect()
 }
 
+fn build_described_explicit_menu_block(
+    lines: &[ColoredLine],
+    anchor_row: usize,
+    _visible_first: usize,
+    visible_last: usize,
+    family: MenuFamily,
+    indent_bytes: usize,
+) -> (Vec<usize>, Option<usize>, usize) {
+    let mut rows = Vec::new();
+    let mut highlighted_row = None;
+    let mut last_selectable = anchor_row;
+    let mut blank_run = 0usize;
+    let mut row = anchor_row;
+
+    while row <= visible_last {
+        let text = line_plain_text(&lines[row]);
+        let kind = classify_described_menu_row(text.as_str(), family, indent_bytes);
+        match kind {
+            Some(DescribedMenuRowKind::Selectable) => {
+                rows.push(row);
+                last_selectable = row;
+                blank_run = 0;
+                if line_has_non_default_bg(&lines[row]) {
+                    highlighted_row = Some(row);
+                }
+                row += 1;
+            }
+            Some(DescribedMenuRowKind::Detail) | Some(DescribedMenuRowKind::Indicator) => {
+                blank_run = 0;
+                row += 1;
+            }
+            Some(DescribedMenuRowKind::Blank) => {
+                if rows.is_empty() {
+                    break;
+                }
+                blank_run += 1;
+                if blank_run > 1 {
+                    break;
+                }
+                row += 1;
+            }
+            None => break,
+        }
+    }
+
+    (rows, highlighted_row, last_selectable)
+}
+
+fn build_highlighted_single_column_menu_block(
+    lines: &[ColoredLine],
+    anchor_row: usize,
+    visible_last: usize,
+) -> (Vec<usize>, Option<usize>, usize) {
+    let base_text = line_plain_text(&lines[anchor_row]);
+    let normalized = normalize_optional_side_frame(base_text.as_str());
+    let base_indent = leading_whitespace_bytes(normalized.as_ref());
+
+    let mut rows = vec![anchor_row];
+    let mut last_selectable = anchor_row;
+    let mut blank_run = 0usize;
+    let mut row = anchor_row + 1;
+    while row <= visible_last {
+        let text = line_plain_text(&lines[row]);
+        match classify_highlight_menu_row(&lines[row], text.as_str(), base_indent) {
+            Some(HighlightMenuRowKind::Selectable) => {
+                rows.push(row);
+                last_selectable = row;
+                blank_run = 0;
+                row += 1;
+            }
+            Some(HighlightMenuRowKind::Detail) | Some(HighlightMenuRowKind::Indicator) => {
+                blank_run = 0;
+                row += 1;
+            }
+            Some(HighlightMenuRowKind::Blank) => {
+                blank_run += 1;
+                if blank_run > 1 {
+                    break;
+                }
+                row += 1;
+            }
+            None => break,
+        }
+    }
+
+    let mut row = anchor_row;
+    while row > 0 {
+        let prev_row = row - 1;
+        let text = line_plain_text(&lines[prev_row]);
+        match classify_highlight_menu_row(&lines[prev_row], text.as_str(), base_indent) {
+            Some(HighlightMenuRowKind::Selectable) => {
+                rows.insert(0, prev_row);
+                row = prev_row;
+            }
+            _ => break,
+        }
+    }
+
+    (rows, Some(anchor_row), last_selectable)
+}
+
 fn parse_arrow_selected_line(text: &str) -> Option<ParsedMenuLine> {
     let normalized = normalize_optional_side_frame(text);
     let trimmed = normalized.as_ref();
@@ -448,6 +654,74 @@ fn parse_explicit_family_line(text: &str) -> Option<ParsedMenuLine> {
             CHECKBOX_UNSELECTED_MARKERS,
         )
     })
+}
+
+fn classify_described_menu_row(
+    text: &str,
+    family: MenuFamily,
+    indent_bytes: usize,
+) -> Option<DescribedMenuRowKind> {
+    if text.trim().is_empty() {
+        return Some(DescribedMenuRowKind::Blank);
+    }
+
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
+    let line_indent = leading_whitespace_bytes(trimmed);
+
+    if let Some(parsed) = parse_explicit_family_line(trimmed) {
+        if parsed.family == family && line_indent.abs_diff(indent_bytes) <= 2 {
+            return Some(DescribedMenuRowKind::Selectable);
+        }
+    }
+
+    if parse_arrow_selected_line(trimmed).is_some()
+        || (line_indent == indent_bytes && parse_arrow_block_line(trimmed, indent_bytes).is_some())
+    {
+        return Some(DescribedMenuRowKind::Selectable);
+    }
+
+    if is_menu_scroll_indicator(trimmed) {
+        return Some(DescribedMenuRowKind::Indicator);
+    }
+
+    if line_indent > indent_bytes && line_has_visible_text_from_text(trimmed) {
+        return Some(DescribedMenuRowKind::Detail);
+    }
+
+    None
+}
+
+fn classify_highlight_menu_row(
+    line: &ColoredLine,
+    text: &str,
+    indent_bytes: usize,
+) -> Option<HighlightMenuRowKind> {
+    if text.trim().is_empty() {
+        return Some(HighlightMenuRowKind::Blank);
+    }
+
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref();
+    let line_indent = leading_whitespace_bytes(trimmed);
+
+    if is_menu_scroll_indicator(trimmed) {
+        return Some(HighlightMenuRowKind::Indicator);
+    }
+
+    if is_highlight_menu_header(line, trimmed, indent_bytes) {
+        return None;
+    }
+
+    if line_indent > indent_bytes && line_has_visible_text_from_text(trimmed) {
+        return Some(HighlightMenuRowKind::Detail);
+    }
+
+    if is_highlight_menu_selectable_text(trimmed, indent_bytes) {
+        return Some(HighlightMenuRowKind::Selectable);
+    }
+
+    None
 }
 
 fn parse_command_menu_line(text: &str) -> Option<ParsedCommandMenuLine> {
@@ -517,6 +791,39 @@ fn is_menuish_label(label: &str) -> bool {
     char_len > 0
         && char_len <= MENU_MAX_LABEL_CHARS
         && trimmed.split_whitespace().count() <= MENU_MAX_WORDS
+}
+
+fn is_menu_scroll_indicator(text: &str) -> bool {
+    matches!(
+        text.trim(),
+        "\u{25b2}" | "\u{25bc}" | "\u{25b4}" | "\u{25be}" | "^" | "v"
+    )
+}
+
+fn is_highlight_menu_selectable_text(text: &str, indent_bytes: usize) -> bool {
+    let normalized = normalize_optional_side_frame(text);
+    let trimmed = normalized.as_ref().trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let line_indent = leading_whitespace_bytes(normalized.as_ref());
+    let char_len = trimmed.chars().count();
+    line_indent.abs_diff(indent_bytes) <= 2
+        && char_len <= 80
+        && trimmed.split_whitespace().count() <= 12
+        && !trimmed.ends_with(':')
+}
+
+fn is_highlight_menu_header(line: &ColoredLine, text: &str, indent_bytes: usize) -> bool {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return false;
+    }
+    let line_indent = leading_whitespace_bytes(text);
+    line_indent.abs_diff(indent_bytes) <= 2
+        && !line_has_non_default_bg(line)
+        && line_accented_fg_visible_chars(line) >= 3
+        && trimmed.split_whitespace().count() <= 3
 }
 
 fn is_plain_menu_candidate(line: &ColoredLine, base_indent: usize) -> bool {
@@ -616,8 +923,8 @@ fn is_command_label(text: &str) -> bool {
     let Some(first) = chars.next() else {
         return false;
     };
-    if trimmed.chars().count() > 32
-        || trimmed.chars().any(|ch| ch.is_whitespace())
+    if trimmed.chars().count() > COMMAND_LABEL_MAX_CHARS
+        || trimmed.split_whitespace().count() > COMMAND_LABEL_MAX_WORDS
         || trimmed.ends_with(':')
     {
         return false;
@@ -627,14 +934,31 @@ fn is_command_label(text: &str) -> bool {
     }
     trimmed.chars().all(|ch| {
         ch.is_ascii_alphanumeric()
-            || matches!(ch, '/' | '-' | '_' | '.' | ':' | '+' | '#' | '?' | '@')
+            || ch.is_ascii_whitespace()
+            || matches!(
+                ch,
+                '/' | '-'
+                    | '_'
+                    | '.'
+                    | ':'
+                    | '+'
+                    | '#'
+                    | '?'
+                    | '@'
+                    | '&'
+                    | '\''
+                    | '"'
+                    | ','
+                    | '('
+                    | ')'
+            )
     })
 }
 
 fn is_command_description(text: &str) -> bool {
     let trimmed = text.trim();
     !trimmed.is_empty()
-        && trimmed.chars().count() <= 120
+        && trimmed.chars().count() <= COMMAND_DESCRIPTION_MAX_CHARS
         && trimmed.chars().any(|ch| ch.is_ascii_alphabetic())
 }
 
@@ -718,6 +1042,10 @@ fn line_has_visible_text(line: &ColoredLine) -> bool {
         .any(|span| span.text.chars().any(|ch| !ch.is_whitespace()))
 }
 
+fn line_has_visible_text_from_text(text: &str) -> bool {
+    text.chars().any(|ch| !ch.is_whitespace())
+}
+
 fn line_has_non_default_bg(line: &ColoredLine) -> bool {
     line.spans.iter().any(|span| {
         span.text.chars().any(|ch| !ch.is_whitespace()) && !DEFAULT_BG_COLORS.contains(&span.bg)
@@ -797,7 +1125,9 @@ mod tests {
             line("Edit"),
             highlighted_line("Delete"),
             line("Cancel"),
-            line("Long paragraph lines should not become a menu because they exceed the label guard"),
+            line(
+                "Long paragraph lines should not become a menu because they exceed the label guard",
+            ),
         ];
         refresh_terminal_menu_state(&mut tab, 0, 3);
         assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
@@ -887,6 +1217,84 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 3);
         assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
         assert_eq!(tab.terminal_menu_active_row, Some(0));
+    }
+
+    #[test]
+    fn detects_multi_word_gemini_submenu_items() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            highlighted_line("add directory      Add a workspace directory"),
+            line("remove directory   Remove a workspace directory"),
+            line("list directories   Show configured directories"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
+        assert_eq!(tab.terminal_menu_active_row, Some(0));
+    }
+
+    #[test]
+    fn detects_checkbox_menu_with_descriptions_and_action_row() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("[\u{2713}] auth"),
+            line("    Current authentication info"),
+            line("[\u{2713}] code-changes"),
+            line("    Lines added/removed in the session (not shown when zero)"),
+            line("[\u{2713}] token-count"),
+            line("    Total tokens used in the session (not shown when zero)"),
+            line("[\u{2713}] Show footer labels"),
+            line(""),
+            highlighted_line("> Reset to default footer"),
+            line(""),
+            line("\u{25bc}"),
+            line("Enter to select · ↑/↓ to navigate · ←/→ to reorder · Esc to close"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 11);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 2, 4, 6, 8]);
+        assert_eq!(tab.terminal_menu_active_row, Some(8));
+    }
+
+    #[test]
+    fn detects_codex_permissions_menu_with_long_descriptions() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line(
+                "1. Read Only                     Codex can read files in the current workspace. Approval is required to edit files or access the internet.",
+            ),
+            accented_line(
+                "2. Default (non-admin sandbox)  Codex can read and edit files in the current workspace, and run commands. Approval is required to access the internet or edit other files.",
+            ),
+            line(
+                "3. Auto-review (current)        Same workspace-write permissions as Default, but eligible `on-request` approvals are routed through the auto-reviewer subagent.",
+            ),
+            line(
+                "4. Full Access                  Codex can edit files outside this workspace and access the internet without asking for approval. Exercise caution when using.",
+            ),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 3);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2, 3]);
+        assert_eq!(tab.terminal_menu_active_row, Some(1));
+    }
+
+    #[test]
+    fn detects_highlighted_single_column_provider_menu() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            accented_line("Popular"),
+            highlighted_line("OpenCode Zen (Recommended)"),
+            line("OpenCode Go  Low cost subscription for everyone"),
+            line("OpenAI (ChatGPT Plus/Pro or API key)"),
+            line("GitHub Copilot"),
+            line("Anthropic (API key)"),
+            line("Google"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 6);
+        assert_eq!(tab.terminal_menu_rows, vec![1, 2, 3, 4, 5, 6]);
+        assert_eq!(tab.terminal_menu_active_row, Some(1));
     }
 
     #[test]
