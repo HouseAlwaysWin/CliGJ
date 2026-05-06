@@ -137,7 +137,6 @@ pub(crate) fn refresh_terminal_menu_state(
     visible_last: usize,
 ) {
     if tab.terminal_mode != TerminalMode::InteractiveAi
-        || tab.raw_input_mode
         || tab.terminal_lines.is_empty()
         || visible_first > visible_last
         || visible_first >= tab.terminal_lines.len()
@@ -830,9 +829,41 @@ mod tests {
     }
 
     #[test]
+    fn edge_hover_moves_past_visible_boundary_when_requested() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_menu_rows = vec![4, 5, 6];
+
+        tab.terminal_menu_active_row = Some(4);
+        let (target_row, bytes) = move_menu_edge_bytes(&tab, -1).unwrap();
+        assert_eq!(target_row, 4);
+        assert_eq!(bytes, plain_key_bytes("UpArrow").unwrap());
+
+        tab.terminal_menu_active_row = Some(6);
+        let (target_row, bytes) = move_menu_edge_bytes(&tab, 1).unwrap();
+        assert_eq!(target_row, 6);
+        assert_eq!(bytes, plain_key_bytes("DownArrow").unwrap());
+    }
+
+    #[test]
     fn detects_plain_slash_command_menu() {
         let mut tab = TabState::new_for_test();
         tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("/help    Show help"),
+            highlighted_line("/model   Choose model"),
+            line("/review  Review changes"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 2);
+        assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
+        assert_eq!(tab.terminal_menu_active_row, Some(1));
+    }
+
+    #[test]
+    fn detects_command_menu_while_raw_input_mode_is_enabled() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.raw_input_mode = true;
         tab.terminal_lines = vec![
             line("/help    Show help"),
             highlighted_line("/model   Choose model"),

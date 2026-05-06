@@ -241,20 +241,22 @@ export component GjViewer inherits Rectangle {
             return 0;
         }
         let band = min(max(root.row-height, 14px), root.row-height * 1.5);
+        let min_gap = min(max(4px * AppTheme.ui_zoom_factor, root.row-height / 4), root.row-height / 2);
         let top_y = first * root.row-height + sv.viewport-y;
         let bottom_y = (last + 1) * root.row-height + sv.viewport-y;
-        if (my < top_y && top_y - my <= band) {
+        let top_gap = top_y - my;
+        if (top_gap >= min_gap && top_gap <= band) {
             return -1;
         }
-        if (my > bottom_y && my - bottom_y <= band) {
+        let bottom_gap = my - bottom_y;
+        if (bottom_gap >= min_gap && bottom_gap <= band) {
             return 1;
         }
         0
     }
 
     function sync-menu-hover-from-pointer(trigger-row-hover: bool, trigger-edge-hover: bool) {
-        if (root.raw-input-enabled
-                || root.drag-active
+        if (root.drag-active
                 || root.middle-drag-active
                 || root.context-menu-open
                 || !root.pointer-inside) {
@@ -645,7 +647,7 @@ export component GjViewer inherits Rectangle {
                 root.last-pointer-x = self.mouse-x;
                 root.last-pointer-y = self.mouse-y;
                 let click_row = root.menu-row-from-point(self.mouse-x, self.mouse-y);
-                if (!root.raw-input-enabled && click_row >= 0) {
+                if (click_row >= 0) {
                     root.hover-menu-row = click_row;
                     root.pending-menu-click-row = click_row;
                     root.pending-menu-click-x = self.mouse-x;
