@@ -147,6 +147,7 @@ export component AppWindow inherits Window {
     callback terminal-menu-option-hovered(int);
     callback terminal-menu-edge-hovered(int);
     callback terminal-menu-option-chosen(int);
+    callback terminal-menu-debug(int, int, int, int);
     callback terminal-data-ready;
     callback prompt-image-zoom-requested(int);
     callback interactive-command-selected(string);
@@ -458,6 +459,9 @@ export component AppWindow inherits Window {
                         }
                         terminal-menu-option-chosen(row) => {
                             root.terminal-menu-option-chosen(row);
+                        }
+                        terminal-menu-debug(raw_row, hit_row, hit_start, hit_end) => {
+                            root.terminal-menu-debug(raw_row, hit_row, hit_start, hit_end);
                         }
                     }
                 }

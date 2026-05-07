@@ -3,7 +3,7 @@ use std::borrow::Cow;
 use cligj_terminal::key_encoding;
 use cligj_terminal::render::ColoredLine;
 
-use super::state::{TabState, TerminalMode};
+use super::state::{TabState, TerminalMenuHitMode, TerminalMode};
 
 const MENU_MAX_LABEL_CHARS: usize = 120;
 const MENU_MAX_WORDS: usize = 16;
@@ -60,6 +60,7 @@ struct ParsedCommandMenuLine {
 struct MenuCandidate {
     rows: Vec<usize>,
     active_row: Option<usize>,
+    hit_mode: TerminalMenuHitMode,
     score: usize,
 }
 
@@ -179,6 +180,31 @@ pub(crate) fn menu_hit_cols(line: &ColoredLine) -> Option<(i32, i32)> {
     ))
 }
 
+pub(crate) fn menu_block_hit_cols(
+    lines: &[ColoredLine],
+    rows: &[usize],
+) -> Option<(i32, i32)> {
+    let mut block_start: Option<i32> = None;
+    let mut block_end: Option<i32> = None;
+    for &row in rows {
+        let Some(line) = lines.get(row) else {
+            continue;
+        };
+        let Some((start_col, end_col)) = menu_hit_cols(line) else {
+            continue;
+        };
+        block_start = Some(match block_start {
+            Some(existing) => existing.min(start_col),
+            None => start_col,
+        });
+        block_end = Some(match block_end {
+            Some(existing) => existing.max(end_col),
+            None => end_col,
+        });
+    }
+    Some((block_start?, block_end?))
+}
+
 pub(crate) fn refresh_terminal_menu_state(
     tab: &mut TabState,
     visible_first: usize,
@@ -192,6 +218,7 @@ pub(crate) fn refresh_terminal_menu_state(
         tab.terminal_menu_rows.clear();
         tab.terminal_menu_active_row = None;
         tab.terminal_menu_pending_row = None;
+        tab.terminal_menu_hit_mode = TerminalMenuHitMode::RowOnly;
         return;
     }
 
@@ -225,6 +252,7 @@ pub(crate) fn refresh_terminal_menu_state(
             best = MenuCandidate {
                 rows,
                 active_row,
+                hit_mode: TerminalMenuHitMode::RowOnly,
                 score,
             };
         }
@@ -267,6 +295,7 @@ pub(crate) fn refresh_terminal_menu_state(
                 best = MenuCandidate {
                     rows: effective_rows,
                     active_row,
+                    hit_mode: TerminalMenuHitMode::RowOnly,
                     score,
                 };
             }
@@ -316,6 +345,7 @@ pub(crate) fn refresh_terminal_menu_state(
                 best = MenuCandidate {
                     rows,
                     active_row,
+                    hit_mode: TerminalMenuHitMode::RowOnly,
                     score,
                 };
             }
@@ -349,6 +379,7 @@ pub(crate) fn refresh_terminal_menu_state(
                 best = MenuCandidate {
                     rows,
                     active_row,
+                    hit_mode: TerminalMenuHitMode::RowOnly,
                     score,
                 };
             }
@@ -365,13 +396,20 @@ pub(crate) fn refresh_terminal_menu_state(
         let (rows, active_row, end) =
             build_highlighted_single_column_menu_block(&tab.terminal_lines, row, last);
         if rows.len() >= 2 {
+            let modal_context = highlight_menu_has_modal_context(&tab.terminal_lines, &rows);
             let score = rows.len() * 11
                 + usize::from(active_row == cursor_row) * 4
-                + usize::from(active_row.is_some()) * 5;
+                + usize::from(active_row.is_some()) * 5
+                + usize::from(modal_context) * 80;
             if score > best.score {
                 best = MenuCandidate {
                     rows,
                     active_row,
+                    hit_mode: if modal_context {
+                        TerminalMenuHitMode::RowExact
+                    } else {
+                        TerminalMenuHitMode::TextBounds
+                    },
                     score,
                 };
             }
@@ -389,6 +427,7 @@ pub(crate) fn refresh_terminal_menu_state(
                     best = MenuCandidate {
                         rows,
                         active_row: Some(cursor),
+                        hit_mode: TerminalMenuHitMode::TextBounds,
                         score,
                     };
                 }
@@ -398,6 +437,7 @@ pub(crate) fn refresh_terminal_menu_state(
 
     tab.terminal_menu_rows = best.rows;
     tab.terminal_menu_active_row = best.active_row;
+    tab.terminal_menu_hit_mode = best.hit_mode;
     if tab.terminal_menu_pending_row.is_some_and(|row| {
         !tab.terminal_menu_rows.contains(&row) || tab.terminal_menu_active_row == Some(row)
     }) {
@@ -1017,6 +1057,25 @@ fn find_highlighted_row(lines: &[ColoredLine], rows: &[usize]) -> Option<usize> 
         .or_else(|| find_accented_fg_row(lines, rows))
 }
 
+fn highlight_menu_has_modal_context(lines: &[ColoredLine], rows: &[usize]) -> bool {
+    let Some(&first_row) = rows.first() else {
+        return false;
+    };
+    let start = first_row.saturating_sub(4);
+    for row in start..first_row {
+        let Some(line) = lines.get(row) else {
+            continue;
+        };
+        let text = line_plain_text(line);
+        let normalized = normalize_optional_side_frame(text.as_str());
+        let trimmed = normalized.as_ref().trim();
+        if looks_like_modal_header(trimmed) || looks_like_search_placeholder(trimmed) {
+            return true;
+        }
+    }
+    false
+}
+
 fn find_accented_fg_row(lines: &[ColoredLine], rows: &[usize]) -> Option<usize> {
     let mut best: Option<(usize, usize)> = None;
     let mut tie = false;
@@ -1242,6 +1301,7 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 3);
         assert_eq!(tab.terminal_menu_rows, vec![0, 1, 2]);
         assert_eq!(tab.terminal_menu_active_row, Some(0));
+        assert_eq!(tab.terminal_menu_hit_mode, TerminalMenuHitMode::RowOnly);
     }
 
     #[test]
@@ -1320,6 +1380,22 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 6);
         assert_eq!(tab.terminal_menu_rows, vec![1, 2, 3, 4, 5, 6]);
         assert_eq!(tab.terminal_menu_active_row, Some(1));
+        assert_eq!(tab.terminal_menu_hit_mode, TerminalMenuHitMode::TextBounds);
+    }
+
+    #[test]
+    fn menu_block_hit_cols_uses_full_menu_width() {
+        let lines = vec![
+            line("clear      Clear the screen and start a new session"),
+            line("compress   Compresses the context by replacing it with a summary"),
+            line("dir        Manage workspace directories"),
+        ];
+        let row0 = menu_hit_cols(&lines[0]).unwrap();
+        let row1 = menu_hit_cols(&lines[1]).unwrap();
+        let row2 = menu_hit_cols(&lines[2]).unwrap();
+        let block = menu_block_hit_cols(&lines, &[0, 1, 2]).unwrap();
+        assert_eq!(block.0, row0.0.min(row1.0).min(row2.0));
+        assert_eq!(block.1, row0.1.max(row1.1).max(row2.1));
     }
 
     #[test]
@@ -1337,6 +1413,29 @@ mod tests {
         refresh_terminal_menu_state(&mut tab, 0, 5);
         assert_eq!(tab.terminal_menu_rows, vec![3, 4, 5]);
         assert_eq!(tab.terminal_menu_active_row, Some(4));
+        assert_eq!(tab.terminal_menu_hit_mode, TerminalMenuHitMode::RowExact);
+    }
+
+    #[test]
+    fn provider_modal_beats_background_command_menu() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_lines = vec![
+            line("/ask      Ask a question"),
+            highlighted_line("/build    Build the project"),
+            line("/run      Run the project"),
+            line("/edit     Edit settings"),
+            line("Connect a provider    esc"),
+            line("Search"),
+            accented_line("Popular"),
+            line("Alibaba Coding Plan"),
+            highlighted_line("Venice AI"),
+            line("AIHubMix"),
+        ];
+        refresh_terminal_menu_state(&mut tab, 0, 9);
+        assert_eq!(tab.terminal_menu_rows, vec![7, 8, 9]);
+        assert_eq!(tab.terminal_menu_active_row, Some(8));
+        assert_eq!(tab.terminal_menu_hit_mode, TerminalMenuHitMode::RowExact);
     }
 
     #[test]

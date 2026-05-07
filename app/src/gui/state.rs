@@ -93,6 +93,14 @@ pub(crate) enum TerminalMode {
     InteractiveAi,
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) enum TerminalMenuHitMode {
+    #[default]
+    RowOnly,
+    RowExact,
+    TextBounds,
+}
+
 pub struct TabState {
     pub(crate) id: u64,
     pub(crate) file_path: String,
@@ -151,6 +159,8 @@ pub struct TabState {
     pub(crate) terminal_menu_active_row: Option<usize>,
     /// Last menu row we already navigated to via mouse hover but have not observed from PTY repaint yet.
     pub(crate) terminal_menu_pending_row: Option<usize>,
+    /// How mouse hit-testing should behave for the currently detected interactive menu.
+    pub(crate) terminal_menu_hit_mode: TerminalMenuHitMode,
     /// Last pushed global first row index for sliced terminal model.
     pub(crate) last_window_first: usize,
     /// Last pushed global last row index for sliced terminal model.
@@ -310,6 +320,7 @@ impl TabState {
             terminal_menu_rows: Vec::new(),
             terminal_menu_active_row: None,
             terminal_menu_pending_row: None,
+            terminal_menu_hit_mode: TerminalMenuHitMode::RowOnly,
             last_window_first: usize::MAX,
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
@@ -401,6 +412,7 @@ impl TabState {
         self.terminal_menu_rows.clear();
         self.terminal_menu_active_row = None;
         self.terminal_menu_pending_row = None;
+        self.terminal_menu_hit_mode = TerminalMenuHitMode::RowOnly;
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
@@ -430,6 +442,7 @@ impl TabState {
         self.terminal_menu_rows.clear();
         self.terminal_menu_active_row = None;
         self.terminal_menu_pending_row = None;
+        self.terminal_menu_hit_mode = TerminalMenuHitMode::RowOnly;
         self.last_window_first = usize::MAX;
         self.last_window_last = usize::MAX;
         self.last_window_total = usize::MAX;
@@ -478,6 +491,7 @@ impl TabState {
             terminal_menu_rows: Vec::new(),
             terminal_menu_active_row: None,
             terminal_menu_pending_row: None,
+            terminal_menu_hit_mode: TerminalMenuHitMode::RowOnly,
             last_window_first: usize::MAX,
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,

@@ -64,6 +64,7 @@ export component GjWorkspace inherits Rectangle {
     callback terminal-menu-option-hovered(int);
     callback terminal-menu-edge-hovered(int);
     callback terminal-menu-option-chosen(int);
+    callback terminal-menu-debug(int, int, int, int);
     callback interactive-command-selected(string);
     callback manage-interactive-commands-requested;
     callback terminal-history-requested;
@@ -144,6 +145,9 @@ export component GjWorkspace inherits Rectangle {
             }
             terminal-menu-option-chosen(row) => {
                 root.terminal-menu-option-chosen(row);
+            }
+            terminal-menu-debug(raw_row, hit_row, hit_start, hit_end) => {
+                root.terminal-menu-debug(raw_row, hit_row, hit_start, hit_end);
             }
             vertical-stretch: 1;
             min-height: 0px;

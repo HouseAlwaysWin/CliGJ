@@ -41,6 +41,7 @@ export component GjViewer inherits Rectangle {
     callback terminal-menu-option-hovered(int);
     callback terminal-menu-edge-hovered(int);
     callback terminal-menu-option-chosen(int);
+    callback terminal-menu-debug(int, int, int, int);
     private property <length> terminal-left-inset: 8px;
     private property <length> row-height: 18px * AppTheme.ui_zoom_factor;
     /// 追蹤上次送出的 grid 尺寸，避免每像素 resize 觸發 PTY resize 風暴
@@ -65,6 +66,10 @@ export component GjViewer inherits Rectangle {
     private property <int> pending-menu-click-row: -1;
     private property <length> pending-menu-click-x: 0px;
     private property <length> pending-menu-click-y: 0px;
+    private property <int> last-debug-raw-row: -9999;
+    private property <int> last-debug-hit-row: -9999;
+    private property <int> last-debug-hit-start: -9999;
+    private property <int> last-debug-hit-end: -9999;
     // Normalized inclusive range (document order).
     private property <bool> sel_forward: root.drag-start-row < root.drag-end-row
         || (root.drag-start-row == root.drag-end-row && root.drag-start-col <= root.drag-end-col);
@@ -242,10 +247,44 @@ export component GjViewer inherits Rectangle {
     function menu-point-hits-row(mx: length, global-row: int) -> bool {
         let start = root.menu-hit-start-col(global-row);
         let end = root.menu-hit-end-col(global-row);
-        start >= 0
-            && end >= start
-            && mx >= root.stripe-width + start * root.char-width
+        if (start == -2 && end == -2) {
+            return global-row >= 0;
+        }
+        if (start < 0 || end < start) {
+            return global-row >= 0;
+        }
+        mx >= root.stripe-width + start * root.char-width
             && mx <= root.stripe-width + (end + 1) * root.char-width
+    }
+
+    function nearest-menu-option-row(global-row: int) -> int {
+        let first = root.terminal-menu-first-row;
+        let last = root.terminal-menu-last-row;
+        if (first < 0 || last < 0 || global-row < first || global-row > last) {
+            return -1;
+        }
+        if (root.is-menu-option-row(global-row)) {
+            return global-row;
+        }
+        if (global-row - 1 >= first && root.is-menu-option-row(global-row - 1)) {
+            return global-row - 1;
+        }
+        if (global-row + 1 <= last && root.is-menu-option-row(global-row + 1)) {
+            return global-row + 1;
+        }
+        if (global-row - 2 >= first && root.is-menu-option-row(global-row - 2)) {
+            return global-row - 2;
+        }
+        if (global-row + 2 <= last && root.is-menu-option-row(global-row + 2)) {
+            return global-row + 2;
+        }
+        if (global-row - 3 >= first && root.is-menu-option-row(global-row - 3)) {
+            return global-row - 3;
+        }
+        if (global-row + 3 <= last && root.is-menu-option-row(global-row + 3)) {
+            return global-row + 3;
+        }
+        -1
     }
 
     function menu-row-from-point(mx: length, my: length) -> int {
@@ -256,11 +295,58 @@ export component GjViewer inherits Rectangle {
                 || my > sv.height) {
             return -1;
         }
-        let row = root.row-from-y(my);
-        if (root.is-menu-option-row(row) && root.menu-point-hits-row(mx, row)) {
-            return row;
+        let raw_row = root.row-from-y(my);
+        if (root.is-menu-option-row(raw_row) && root.menu-point-hits-row(mx, raw_row)) {
+            return raw_row;
+        }
+        let hit_row = root.nearest-menu-option-row(raw_row);
+        if (hit_row >= 0
+                && root.menu-hit-start-col(hit_row) == -1
+                && root.menu-point-hits-row(mx, hit_row)) {
+            return hit_row;
         }
         -1
+    }
+
+    function debug-raw-row(my: length) -> int {
+        if (root.pointer-inside && my >= 0px && my <= sv.height) {
+            root.row-from-y(my)
+        } else {
+            -1
+        }
+    }
+
+    function debug-hit-start(hit-row: int) -> int {
+        if (hit-row >= 0) {
+            root.menu-hit-start-col(hit-row)
+        } else {
+            -1
+        }
+    }
+
+    function debug-hit-end(hit-row: int) -> int {
+        if (hit-row >= 0) {
+            root.menu-hit-end-col(hit-row)
+        } else {
+            -1
+        }
+    }
+
+    function emit-menu-debug(mx: length, my: length) {
+        let raw_row = root.debug-raw-row(my);
+        let hit_row = root.menu-row-from-point(mx, my);
+        let hit_start = root.debug-hit-start(hit_row);
+        let hit_end = root.debug-hit-end(hit_row);
+        if (raw_row != root.last-debug-raw-row
+                || hit_row != root.last-debug-hit-row
+                || hit_start != root.last-debug-hit-start
+                || hit_end != root.last-debug-hit-end) {
+            root.last-debug-raw-row = raw_row;
+            root.last-debug-hit-row = hit_row;
+            root.last-debug-hit-start = hit_start;
+            root.last-debug-hit-end = hit_end;
+            root.terminal-menu-debug(raw_row, hit_row, hit_start, hit_end);
+        }
     }
 
     function menu-edge-direction(my: length) -> int {
@@ -325,6 +411,7 @@ export component GjViewer inherits Rectangle {
     function handle-pointer-move(mx: length, my: length) {
         root.last-pointer-x = mx;
         root.last-pointer-y = my;
+        root.emit-menu-debug(mx, my);
         if (root.middle-drag-active) {
             let delta = my - root.middle-drag-current-y;
             root.middle-drag-current-y = my;
@@ -657,6 +744,7 @@ export component GjViewer inherits Rectangle {
             }
             root.last-pointer-x = self.mouse-x;
             root.last-pointer-y = self.mouse-y;
+            root.emit-menu-debug(self.mouse-x, self.mouse-y);
             root.sync-menu-hover-from-pointer(true, true);
         }
         moved => {

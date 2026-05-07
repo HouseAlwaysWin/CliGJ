@@ -1,3 +1,5 @@
+use std::fs::OpenOptions;
+use std::io::Write;
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
@@ -7,6 +9,28 @@ use slint::{ComponentHandle, SharedString};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::terminal_menu;
+
+fn is_opencode_tab(cmd_type: &str, launcher_program: &str) -> bool {
+    cmd_type.eq_ignore_ascii_case("OpenCode") || launcher_program.eq_ignore_ascii_case("opencode")
+}
+
+fn menu_row_labels(state: &GuiState, current: usize) -> Vec<String> {
+    let Some(tab) = state.tabs.get(current) else {
+        return Vec::new();
+    };
+    tab.terminal_menu_rows
+        .iter()
+        .filter_map(|&row| tab.terminal_lines.get(row))
+        .map(|line| line.spans.iter().map(|span| span.text.as_str()).collect())
+        .collect()
+}
+
+fn append_menu_debug_log(line: &str) {
+    let path = std::env::temp_dir().join("cligj_menu_debug.log");
+    if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(path) {
+        let _ = writeln!(file, "{line}");
+    }
+}
 
 fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &mut GuiState) {
     ui.set_ws_prompt(SharedString::new());
@@ -141,5 +165,44 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         } else {
             clear_forwarded_interactive_prompt(&ui, &mut s);
         }
+    });
+
+    let st_debug = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_terminal_menu_debug(move |raw_row, hit_row, hit_start, hit_end| {
+        let Some(_ui) = app_weak.upgrade() else {
+            return;
+        };
+        let Ok(s) = st_debug.try_borrow() else {
+            return;
+        };
+        if s.current >= s.tabs.len() {
+            return;
+        }
+        let current = s.current;
+        let tab = &s.tabs[current];
+        if tab.terminal_mode != TerminalMode::InteractiveAi
+            || !is_opencode_tab(tab.cmd_type.as_str(), tab.interactive_launcher_program.as_str())
+        {
+            return;
+        }
+        let labels = menu_row_labels(&s, current);
+        append_menu_debug_log(
+            format!(
+                "cmd={} launcher={} raw_row={} hit_row={} hit_start={} hit_end={} hit_mode={:?} active={:?} pending={:?} rows={:?} labels={:?}",
+                tab.cmd_type,
+                tab.interactive_launcher_program,
+                raw_row,
+                hit_row,
+                hit_start,
+                hit_end,
+                tab.terminal_menu_hit_mode,
+                tab.terminal_menu_active_row,
+                tab.terminal_menu_pending_row,
+                tab.terminal_menu_rows,
+                labels,
+            )
+            .as_str(),
+        );
     });
 }

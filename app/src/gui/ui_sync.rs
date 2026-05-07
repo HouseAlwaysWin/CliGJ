@@ -13,7 +13,7 @@ use cligj_workspace as workspace_files;
 
 use super::slint_ui::{AppWindow, PromptImageChip};
 use super::slint_ui::{TermLine, TermSpan};
-use super::state::{TabState, TerminalMode};
+use super::state::{TabState, TerminalMenuHitMode, TerminalMode};
 use super::terminal_menu;
 use super::zoom::DEFAULT_TERMINAL_ROW_HEIGHT_PX;
 
@@ -557,13 +557,27 @@ pub(crate) fn push_terminal_view_to_ui(
     let mut menu_flags = vec![false; window_len];
     let mut menu_hit_start_cols = vec![-1; window_len];
     let mut menu_hit_end_cols = vec![-1; window_len];
+    let menu_block_hit_cols = match tab.terminal_menu_hit_mode {
+        TerminalMenuHitMode::RowOnly => None,
+        TerminalMenuHitMode::RowExact => None,
+        TerminalMenuHitMode::TextBounds => {
+            terminal_menu::menu_block_hit_cols(&tab.terminal_lines, &tab.terminal_menu_rows)
+        }
+    };
     for &row in &tab.terminal_menu_rows {
         if row >= first && row <= last {
             menu_flags[row - first] = true;
-            if let Some(line) = tab.terminal_lines.get(row) {
-                if let Some((start_col, end_col)) = terminal_menu::menu_hit_cols(line) {
-                    menu_hit_start_cols[row - first] = start_col;
-                    menu_hit_end_cols[row - first] = end_col;
+            match tab.terminal_menu_hit_mode {
+                TerminalMenuHitMode::RowOnly => {}
+                TerminalMenuHitMode::RowExact => {
+                    menu_hit_start_cols[row - first] = -2;
+                    menu_hit_end_cols[row - first] = -2;
+                }
+                TerminalMenuHitMode::TextBounds => {
+                    if let Some((start_col, end_col)) = menu_block_hit_cols {
+                        menu_hit_start_cols[row - first] = start_col;
+                        menu_hit_end_cols[row - first] = end_col;
+                    }
                 }
             }
         }
