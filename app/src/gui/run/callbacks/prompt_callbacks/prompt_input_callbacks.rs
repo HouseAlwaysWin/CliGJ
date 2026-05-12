@@ -196,6 +196,18 @@ pub(super) fn connect(
             return false;
         };
         let key_str = key.as_str();
+
+        // Debug: log Ctrl-modified keys to help diagnose shortcut issues.
+        if mod_mask as u32 & MOD_CTRL != 0 {
+            eprintln!(
+                "CliGJ DEBUG: key_route ctrl key_str={:?} bytes={:?} mod_mask={} shift={}",
+                key_str,
+                key_str.as_bytes(),
+                mod_mask,
+                shift,
+            );
+        }
+
         if handle_zoom_shortcut(
             &ui,
             &history_window_keys,
@@ -343,6 +355,7 @@ pub(super) fn connect(
     let st_pick = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_at_picker_choose(move |index| {
+        eprintln!("CliGJ DEBUG: at_picker_choose called, index={}", index);
         let Some(ui) = app_weak.upgrade() else {
             return;
         };

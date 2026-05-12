@@ -93,8 +93,8 @@ msgstr "放開以加入檔案"
 msgid "清除圖"
 msgstr "清除圖"
 
-msgid "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
-msgstr "Plan, Build, / - Ctrl+Space 搜尋檔案 - 用檔案/圖片按鈕, 或拖放, Ctrl+V 貼上"
+msgid "Plan, Build, / - Ctrl+P search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan, Build, / - Ctrl+P 搜尋檔案 - 用檔案/圖片按鈕, 或拖放, Ctrl+V 貼上"
 
 msgid "選擇指令"
 msgstr "選擇指令"

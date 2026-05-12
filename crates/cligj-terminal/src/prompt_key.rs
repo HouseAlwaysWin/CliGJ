@@ -7,7 +7,7 @@
 //! Terminal-specific keys (Up/Down for shell history, Tab for completion,
 //! Escape, Ctrl+C, PageUp/PageDown) go **directly** to the PTY.
 
-use super::key_encoding::{MOD_ALT, MOD_CTRL, MOD_SHIFT, normalize_tty_key_token};
+use super::key_encoding::{MOD_ALT, MOD_CTRL, normalize_tty_key_token};
 
 /// What to do for one `FocusScope` `capture-key-pressed` event.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -15,7 +15,7 @@ pub enum PromptKeyAction {
     /// Let `TextEdit` handle the key (insert character, etc.).
     Reject,
     Submit,
-    /// Open the Ctrl+Space workspace file picker.
+    /// Open the Ctrl+P workspace file picker.
     OpenFilePicker,
     /// Encode with `key_encoding::encode_for_pty(mod_mask, …)` then write to ConPTY.
     PtyKey(String),
@@ -25,12 +25,10 @@ pub enum PromptKeyAction {
 pub fn route_prompt_key(mod_mask: u32, key: &str, _shift: bool) -> PromptKeyAction {
     let key = normalize_tty_key_token(key);
 
-    // 1. Ctrl+Space -> open file picker
-    //    On Windows, Ctrl+Space produces NUL (\0) via the terminal convention.
-    if (mod_mask & MOD_CTRL != 0
-        && (mod_mask & (MOD_ALT | MOD_SHIFT)) == 0
-        && (key == " " || key == "Space"))
-        || key == "\0"
+    // 1. Ctrl+P -> open file picker (same as VS Code).
+    if mod_mask & MOD_CTRL != 0
+        && (mod_mask & MOD_ALT) == 0
+        && matches!(key, "p" | "P")
     {
         return PromptKeyAction::OpenFilePicker;
     }
@@ -92,18 +90,18 @@ mod tests {
     }
 
     #[test]
-    fn ctrl_space_opens_file_picker() {
+    fn ctrl_p_opens_file_picker() {
         assert_eq!(
-            route_prompt_key(m(true, false, false, false), " ", false),
+            route_prompt_key(m(true, false, false, false), "p", false),
             PromptKeyAction::OpenFilePicker
         );
         assert_eq!(
-            route_prompt_key(m(false, false, false, false), "\0", false),
+            route_prompt_key(m(true, false, false, false), "P", false),
             PromptKeyAction::OpenFilePicker
         );
-        // Plain space -> Reject (TextEdit inserts it)
+        // Plain 'p' without Ctrl -> Reject (TextEdit inserts it)
         assert_eq!(
-            route_prompt_key(m(false, false, false, false), " ", false),
+            route_prompt_key(m(false, false, false, false), "p", false),
             PromptKeyAction::Reject
         );
     }

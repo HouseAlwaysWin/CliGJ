@@ -93,8 +93,8 @@ msgstr "Release to add files"
 msgid "清除圖"
 msgstr "Clear images"
 
-msgid "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
-msgstr "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgid "Plan, Build, / - Ctrl+P search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan, Build, / - Ctrl+P search files - use file/image buttons, drag and drop, or Ctrl+V"
 
 msgid "選擇指令"
 msgstr "Choose command"
