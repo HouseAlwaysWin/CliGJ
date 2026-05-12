@@ -29,6 +29,11 @@ pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -
         return PromptKeyAction::Submit;
     }
 
+    // 2b. 統一 Escape：不論 Raw 模式與否，一律送給 PTY
+    if key == "Escape" {
+        return pty("Escape");
+    }
+
     // 3. Alt 組合鍵 (通常發送 PTY 序列)
     if mod_mask & MOD_ALT != 0 {
         match key {
@@ -54,7 +59,7 @@ pub fn route_prompt_key(raw_tty: bool, mod_mask: u32, key: &str, _shift: bool) -
     if raw_tty {
         match key {
             "UpArrow" | "DownArrow" | "RightArrow" | "LeftArrow" | "Home" | "End" | "PageUp"
-            | "PageDown" | "Delete" | "Escape" | "Backspace" => return pty(key),
+            | "PageDown" | "Delete" | "Backspace" => return pty(key),
             _ => {}
         }
     }
@@ -133,5 +138,14 @@ mod tests {
     fn raw_sends_named_keys() {
         let a = route_prompt_key(true, m(false, false, false, false), "LeftArrow", false);
         assert!(matches!(a, PromptKeyAction::PtyKey(ref s) if s == "LeftArrow"));
+    }
+
+    #[test]
+    fn escape_always_sends_to_pty() {
+        let no_mod = m(false, false, false, false);
+        let raw = route_prompt_key(true, no_mod, "Escape", false);
+        assert!(matches!(raw, PromptKeyAction::PtyKey(ref s) if s == "Escape"));
+        let composer = route_prompt_key(false, no_mod, "Escape", false);
+        assert!(matches!(composer, PromptKeyAction::PtyKey(ref s) if s == "Escape"));
     }
 }
