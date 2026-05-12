@@ -33,7 +33,6 @@ pub(crate) fn spawn_ipc_bridge_timer(
 }
 
 pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<GuiState>>) -> Timer {
-    use crate::gui::at_picker::sync_at_file_picker;
     use crate::gui::composer_sync::sync_composer_line_to_conpty;
     use crate::gui::ui_sync::tab_update_from_ui;
 
@@ -53,14 +52,12 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
             }
 
             let prompt_now = ui.get_ws_prompt().to_string();
-            let raw = ui.get_ws_raw_input();
-            let key = (s.current, prompt_now, raw);
+            let key = (s.current, prompt_now);
 
             if s.timer_snapshot.as_ref() == Some(&key) {
                 return;
             }
 
-            
             // Keep tab prompt + attachment chips synchronized on every real composer change.
             let cur = s.current;
             let old_prompt = s.tabs[cur].prompt.to_string();
@@ -77,7 +74,6 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
             tab_update_from_ui(&mut s.tabs[cur], &ui);
 
             sync_composer_line_to_conpty(&ui, &mut s);
-            sync_at_file_picker(&ui, &mut s);
 
             if s.current < s.tabs.len() {
                 s.timer_snapshot = Some(key);

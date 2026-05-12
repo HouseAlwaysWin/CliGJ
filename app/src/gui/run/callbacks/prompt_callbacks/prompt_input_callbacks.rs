@@ -5,21 +5,17 @@ use std::rc::Rc;
 use slint::{ComponentHandle, Image, Model, SharedString};
 
 use crate::gui::at_picker::commit_at_file_pick;
-use crate::gui::composer_sync::sync_composer_line_to_conpty;
 use crate::gui::interactive_commands::{self, spec_for_label};
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::terminal_menu;
-use crate::gui::ui_sync::tab_update_from_ui;
 use crate::gui::zoom::{UI_ZOOM_STEP_PERCENT, adjust_ui_zoom_percent, reset_ui_zoom_percent};
 use cligj_terminal::key_encoding::{self, MOD_ALT, MOD_CTRL, MOD_META, MOD_SHIFT};
 use cligj_terminal::prompt_key::PromptKeyAction;
-use cligj_workspace as workspace_files;
 
-use super::super::is_pty_enter_key;
 use crate::gui::run::helpers::{
     clipboard_file_paths_hdrop, clipboard_raster_image_file,
-    inject_paths_and_images_from_paths, is_local_prompt_edit_key, push_prompt_image,
+    inject_paths_and_images_from_paths, push_prompt_image,
 };
 
 fn schedule_submit_current_prompt(app_weak: slint::Weak<AppWindow>, state: Rc<RefCell<GuiState>>) {
@@ -140,14 +136,21 @@ fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &Rc<RefCell<GuiStat
     if s.current >= s.tabs.len() {
         return;
     }
-    let raw = ui.get_ws_raw_input();
     let current = s.current;
     let tab = &mut s.tabs[current];
     tab.prompt = SharedString::new();
     tab.composer_pty_mirror.clear();
     tab.history_cursor = None;
     tab.history_draft.clear();
-    s.timer_snapshot = Some((current, String::new(), raw));
+    s.timer_snapshot = Some((current, String::new()));
+}
+
+fn is_printable_char(key: &str) -> bool {
+    if key.is_empty() {
+        return false;
+    }
+    let ch = key.chars().next().unwrap();
+    !ch.is_control() && key.len() == ch.len_utf8()
 }
 
 pub(super) fn connect(
@@ -188,7 +191,7 @@ pub(super) fn connect(
     let st_keys = Rc::clone(&state);
     let history_window_keys = Rc::clone(&history_window);
     let app_weak = app.as_weak();
-    app.on_prompt_key_route(move |raw_tty, mod_mask, key, shift| {
+    app.on_prompt_key_route(move |mod_mask, key, shift| {
         let Some(ui) = app_weak.upgrade() else {
             return false;
         };
@@ -202,74 +205,9 @@ pub(super) fn connect(
         ) {
             return true;
         }
-        // App-level prompt undo/redo (prevents Slint TextInput undo-stack panic).
-        if !raw_tty
-            && !ui.get_ws_at_picker_open()
-            && (mod_mask as u32) & MOD_CTRL != 0
-            && matches!(key_str, "z" | "Z")
-            && (mod_mask as u32) & MOD_SHIFT == 0
-        {
-            let mut s = st_keys.borrow_mut();
-            if s.current < s.tabs.len() {
-                let cur = s.current;
-                let tab = &mut s.tabs[cur];
-                if let Some(prev) = tab.prompt_undo_stack.pop() {
-                    let current = tab.prompt.to_string();
-                    tab.prompt_redo_stack.push(current);
-                    tab.prompt = SharedString::from(prev.as_str());
-                    ui.set_ws_prompt(SharedString::from(prev.as_str()));
-                    tab_update_from_ui(tab, &ui);
-                    sync_composer_line_to_conpty(&ui, &mut s);
-                }
-            }
-            return true;
-        }
-        if !raw_tty
-            && !ui.get_ws_at_picker_open()
-            && (mod_mask as u32) & MOD_CTRL != 0
-            && (matches!(key_str, "y" | "Y")
-                || ((mod_mask as u32) & key_encoding::MOD_SHIFT != 0
-                    && matches!(key_str, "z" | "Z")))
-        {
-            let mut s = st_keys.borrow_mut();
-            if s.current < s.tabs.len() {
-                let cur = s.current;
-                let tab = &mut s.tabs[cur];
-                if let Some(next) = tab.prompt_redo_stack.pop() {
-                    let current = tab.prompt.to_string();
-                    tab.prompt_undo_stack.push(current);
-                    tab.prompt = SharedString::from(next.as_str());
-                    ui.set_ws_prompt(SharedString::from(next.as_str()));
-                    tab_update_from_ui(tab, &ui);
-                    sync_composer_line_to_conpty(&ui, &mut s);
-                }
-            }
-            return true;
-        }
-        // Composer: Ctrl+V — HDROP paths (images vs files), then raster → temp PNG path.
-        if !raw_tty
-            && !ui.get_ws_at_picker_open()
-            && (mod_mask as u32) & MOD_CTRL != 0
-            && matches!(key_str, "v" | "V")
-        {
-            #[cfg(target_os = "windows")]
-            if let Some(paths) = clipboard_file_paths_hdrop() {
-                schedule_clipboard_paths_attach(app_weak.clone(), Rc::clone(&st_keys), paths);
-                return true;
-            }
-            if let Some((path, img)) = clipboard_raster_image_file() {
-                schedule_clipboard_image_attach(app_weak.clone(), Rc::clone(&st_keys), path, img);
-                return true;
-            }
-        }
-        if raw_tty
-            && is_local_prompt_edit_key(mod_mask as u32, key_str)
-            && !ui.get_ws_prompt().is_empty()
-        {
-            return false;
-        }
-        
-        if ui.get_ws_at_picker_open() && !raw_tty {
+
+        // Modal file picker: when open, intercept all keys for picker interaction.
+        if ui.get_ws_at_picker_open() {
             match key_str {
                 "UpArrow" => {
                     let m = ui.get_ws_at_choices();
@@ -296,39 +234,60 @@ pub(super) fn connect(
                 "Return" | "\n" | "\r" => {
                     let mut s = st_keys.borrow_mut();
                     let choices = ui.get_ws_at_choices();
-                    if ui.get_ws_at_picker_open() && choices.row_count() > 0 {
+                    if choices.row_count() > 0 {
                         let idx = ui.get_ws_at_selected() as usize;
                         commit_at_file_pick(&ui, &mut *s, idx);
-                    } else {
-                        // 統一 Enter：不論是否 Raw，都觸發提交
-                        drop(s);
-                        schedule_submit_current_prompt(app_weak.clone(), Rc::clone(&st_keys));
                     }
                     return true;
                 }
                 "Escape" => {
-                    let prompt = ui.get_ws_prompt().to_string();
-                    let new_p = workspace_files::strip_active_at_segment(&prompt);
-                    ui.set_ws_prompt(SharedString::from(new_p.as_str()));
                     ui.set_ws_at_picker_open(false);
                     let mut s = st_keys.borrow_mut();
-                    let idx = s.current;
-                    tab_update_from_ui(&mut s.tabs[idx], &ui);
-                    sync_composer_line_to_conpty(&ui, &mut *s);
+                    s.at_picker_filter.clear();
+                    s.at_picker_query_snapshot.clear();
+                    s.at_picker_open_snapshot = false;
                     return true;
                 }
-                _ => {}
+                "Backspace" => {
+                    let mut s = st_keys.borrow_mut();
+                    s.at_picker_filter.pop();
+                    s.at_picker_query_snapshot.clear();
+                    drop(s);
+                    crate::gui::at_picker::refresh_file_picker_from_filter(&ui, &mut st_keys.borrow_mut());
+                    return true;
+                }
+                _ => {
+                    if is_printable_char(key_str) {
+                        let mut s = st_keys.borrow_mut();
+                        s.at_picker_filter.push_str(key_str);
+                        s.at_picker_query_snapshot.clear();
+                        drop(s);
+                        crate::gui::at_picker::refresh_file_picker_from_filter(&ui, &mut st_keys.borrow_mut());
+                        return true;
+                    }
+                    return true;
+                }
             }
         }
-        if !raw_tty
-            && matches!(key_str, "UpArrow" | "DownArrow")
-            && (mod_mask as u32 & (MOD_CTRL | MOD_SHIFT | MOD_ALT | MOD_META)) == MOD_ALT
-            && inject_plain_interactive_key(&ui, &st_keys, key_str)
+
+        // Ctrl+V: HDROP paths (images vs files), then raster -> temp PNG path.
+        if !ui.get_ws_at_picker_open()
+            && (mod_mask as u32) & MOD_CTRL != 0
+            && matches!(key_str, "v" | "V")
         {
-            return true;
+            #[cfg(target_os = "windows")]
+            if let Some(paths) = clipboard_file_paths_hdrop() {
+                schedule_clipboard_paths_attach(app_weak.clone(), Rc::clone(&st_keys), paths);
+                return true;
+            }
+            if let Some((path, img)) = clipboard_raster_image_file() {
+                schedule_clipboard_image_attach(app_weak.clone(), Rc::clone(&st_keys), path, img);
+                return true;
+            }
         }
-        if !raw_tty
-            && matches!(key_str, "Return" | "\n" | "\r")
+
+        // Interactive menu Enter forwarding
+        if matches!(key_str, "Return" | "\n" | "\r")
             && (mod_mask as u32 & (MOD_CTRL | MOD_SHIFT | MOD_ALT | MOD_META)) == 0
         {
             let has_menu = {
@@ -340,32 +299,20 @@ pub(super) fn connect(
                 return true;
             }
         }
-        match cligj_terminal::prompt_key::route_prompt_key(raw_tty, mod_mask as u32, key_str, shift)
+
+        match cligj_terminal::prompt_key::route_prompt_key(mod_mask as u32, key_str, shift)
         {
             PromptKeyAction::Reject => false,
-            PromptKeyAction::ToggleRawInput => {
+            PromptKeyAction::OpenFilePicker => {
                 let mut s = st_keys.borrow_mut();
-                if let Err(e) = s.toggle_raw_input_current(&ui) {
-                    eprintln!("CliGJ: raw input toggle: {e}");
-                }
+                s.at_picker_filter.clear();
+                s.at_picker_query_snapshot.clear();
+                drop(s);
+                crate::gui::at_picker::open_file_picker(&ui, &mut st_keys.borrow_mut());
                 true
             }
             PromptKeyAction::Submit => {
                 schedule_submit_current_prompt(app_weak.clone(), Rc::clone(&st_keys));
-                true
-            }
-            PromptKeyAction::HistoryPrev => {
-                let mut s = st_keys.borrow_mut();
-                if let Err(e) = s.history_prev_current_prompt(&ui) {
-                    eprintln!("CliGJ: history prev: {e}");
-                }
-                true
-            }
-            PromptKeyAction::HistoryNext => {
-                let mut s = st_keys.borrow_mut();
-                if let Err(e) = s.history_next_current_prompt(&ui) {
-                    eprintln!("CliGJ: history next: {e}");
-                }
                 true
             }
             PromptKeyAction::PtyKey(k) => {
@@ -373,42 +320,20 @@ pub(super) fn connect(
                     Some(b) => b,
                     None => return false,
                 };
-                let is_nav = matches!(
-                    k.as_str(),
-                    "LeftArrow" | "RightArrow" | "Home" | "End" | "Backspace" | "Delete"
-                );
                 let inject_ok = {
                     let mut s = st_keys.borrow_mut();
                     if s.current < s.tabs.len() {
                         let cur = s.current;
-                        let tab = &mut s.tabs[cur];
-                        // If the user is actively typing in interactive raw mode, keep following
-                        // the latest output so prompt redraws don't end up off-screen.
-                        if raw_tty
-                            && !is_nav
-                            && tab.terminal_mode == crate::gui::state::TerminalMode::InteractiveAi
+                        if s.tabs[cur].terminal_mode
+                            == crate::gui::state::TerminalMode::InteractiveAi
                         {
-                            tab.interactive_follow_output = true;
+                            s.tabs[cur].interactive_follow_output = true;
                         }
                     }
                     s.inject_bytes_into_current(&ui, &bytes)
                 };
-                match &inject_ok {
-                    Ok(()) => {
-                        if raw_tty && is_pty_enter_key(k.as_str()) {
-                            ui.set_ws_prompt(SharedString::new());
-                            let mut s = st_keys.borrow_mut();
-                            let idx = s.current;
-                            if idx < s.tabs.len() {
-                                s.tabs[idx].prompt = SharedString::new();
-                            }
-                        }
-                    }
-                    Err(e) => eprintln!("CliGJ: pty key: {e}"),
-                }
-                // 關鍵：如果是導航或刪除鍵，回傳 false 讓 Slint TextEdit 更新 GUI 游標位置
-                if is_nav {
-                    return false;
+                if let Err(e) = inject_ok {
+                    eprintln!("CliGJ: pty key: {e}");
                 }
                 true
             }

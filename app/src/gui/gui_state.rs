@@ -176,39 +176,6 @@ impl GuiState {
         Ok(())
     }
 
-    pub(crate) fn toggle_raw_input_current(&mut self, ui: &AppWindow) -> Result<(), &'static str> {
-        if self.current >= self.tabs.len() {
-            return Err("invalid current tab index");
-        }
-        tab_update_from_ui(&mut self.tabs[self.current], ui);
-        let tab = &mut self.tabs[self.current];
-        tab.raw_input_mode = !tab.raw_input_mode;
-        if tab.raw_input_mode {
-            #[cfg(target_os = "windows")]
-            {
-                let prev = std::mem::take(&mut tab.composer_pty_mirror);
-                if !prev.is_empty() {
-                    let bytes = diff_composer_to_conpty(prev.as_str(), "");
-                    if !bytes.is_empty() {
-                        if let Some(writer) = tab.pty_writer.as_mut() {
-                            let _ = writer.write_all(&bytes);
-                            let _ = writer.flush();
-                        }
-                    }
-                }
-            }
-            tab.prompt = SharedString::new();
-            tab.prompt_picked_files_abs.clear();
-            tab.prompt_picked_file_origins.clear();
-            tab.prompt_last_file_origin = None;
-            tab.prompt_picked_images.clear();
-            tab.prompt_picked_selections.clear();
-        }
-        tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
-        load_tab_to_ui(ui, tab);
-        Ok(())
-    }
-
     pub(crate) fn switch_tab(
         &mut self,
         new_index: usize,
@@ -497,7 +464,7 @@ impl GuiState {
             tab.interactive_archive_repainted_frames = spec.archive_repainted_frames;
         }
         // 立即更新快照，阻止計時器在下一毫秒發送退格鍵
-        self.timer_snapshot = Some((self.current, String::new(), ui.get_ws_raw_input()));
+        self.timer_snapshot = Some((self.current, String::new()));
         tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
         load_tab_to_ui(ui, tab);
         Ok(())

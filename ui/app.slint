@@ -63,7 +63,6 @@ export component AppWindow inherits Window {
     in-out property <[string]> ws-prompt-path-chips: [];
     in-out property <string> ws-cmd-type: "Command Prompt";
     in-out property <[string]> ws-cmd-type-choices: ["Command Prompt", "PowerShell"];
-    in-out property <bool> ws-raw-input: false;
     in-out property <string> ws-terminal-pin-lines: "0";
     in-out property <bool> ws-ipc-running: false;
     in-out property <int> ws-ipc-client-count: 0;
@@ -102,11 +101,12 @@ export component AppWindow inherits Window {
     in-out property <string> ws-ipc-warning-title: "";
     in-out property <string> ws-ipc-warning-message: "";
 
-    /// `@` workspace file picker (composer only; hidden in Raw TTY).
+    /// Ctrl+Space workspace file picker.
     in-out property <bool> ws-at-picker-open: false;
     in-out property <[string]> ws-at-choices: [];
     in-out property <int> ws-at-selected: 0;
     in property <string> ws-workspace-root-label: "";
+    in property <string> ws-at-picker-filter: "";
     in-out property <bool> ws-file-drop-visible: false;
     /// 無框視窗：與 OS 同步，用於最大化按鈕圖示（□ / 還原）。
     in-out property <bool> ws-window-maximized: false;
@@ -118,9 +118,8 @@ export component AppWindow inherits Window {
     callback submit-prompt;
     callback prompt-history-prev;
     callback prompt-history-next;
-    /// bool: raw TTY mode; int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
-    callback prompt-key-route(bool, int, string, bool) -> bool;
-    callback toggle-raw-input-requested;
+    /// int: mod mask (see `key_encoding::mod_bits`); string: `event.text`; bool: shift.
+    callback prompt-key-route(int, string, bool) -> bool;
     callback terminal-pin-lines-edited(string);
     callback toggle-ipc-server-requested;
     callback inject-file-requested;
@@ -250,12 +249,7 @@ export component AppWindow inherits Window {
                     && !is_zoom_shortcut(m, t, event.modifiers.shift)) {
                 return reject;
             }
-            // Fast path: normal typing stays in TextEdit, avoid Rust callback on every keystroke.
-            if (!root.ws-raw-input && !root.ws-at-picker-open && !root.ws-interactive-manage-open && !root.ws-shell-manage-open && m == 0
-                    && t != "" && t != "\n" && !composer_needs_rust_key(t)) {
-                return reject;
-            }
-            root.prompt-key-route(root.ws-raw-input, ws_pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
+            root.prompt-key-route(ws_pty_mod(event), LogicalKey.tty_text(event), event.modifiers.shift)
                 ? accept
                 : reject
         }
@@ -356,7 +350,6 @@ export component AppWindow inherits Window {
                         selected-context <=> root.ws-selected-context;
                         prompt <=> root.ws-prompt;
                         prompt-path-chips <=> root.ws-prompt-path-chips;
-                        raw-input-enabled <=> root.ws-raw-input;
                         terminal-pin-lines <=> root.ws-terminal-pin-lines;
                         terminal-font-family: root.ws-terminal-font-family;
                         ipc-running: root.ws-ipc-running;
@@ -367,6 +360,7 @@ export component AppWindow inherits Window {
                         at-choices <=> root.ws-at-choices;
                         at-selected <=> root.ws-at-selected;
                         workspace-root-label: root.ws-workspace-root-label;
+                        at-picker-filter: root.ws-at-picker-filter;
                         submit-requested => {
                             root.submit-prompt();
                         }
@@ -376,11 +370,8 @@ export component AppWindow inherits Window {
                         history-next-requested => {
                             root.prompt-history-next();
                         }
-                        prompt-key-route(raw, mods, key, shift) => {
-                            root.prompt-key-route(raw, mods, key, shift);
-                        }
-                        raw-input-toggle-requested => {
-                            root.toggle-raw-input-requested();
+                        prompt-key-route(mods, key, shift) => {
+                            root.prompt-key-route(mods, key, shift);
                         }
                         terminal-pin-lines-edited(value) => {
                             root.terminal-pin-lines-edited(value);

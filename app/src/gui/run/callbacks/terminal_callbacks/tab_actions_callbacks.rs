@@ -11,18 +11,6 @@ use super::super::refresh_terminal_tab_view;
 use crate::gui::run::helpers::{clear_all_prompt_images, remove_prompt_image_at};
 
 pub(super) fn connect_toggles(app: &AppWindow, state: Rc<RefCell<GuiState>>, ipc: IpcBridge) {
-    let st_raw = Rc::clone(&state);
-    let app_weak = app.as_weak();
-    app.on_toggle_raw_input_requested(move || {
-        let Some(ui) = app_weak.upgrade() else {
-            return;
-        };
-        let mut s = st_raw.borrow_mut();
-        if let Err(e) = s.toggle_raw_input_current(&ui) {
-            eprintln!("CliGJ: raw input toggle: {e}");
-        }
-    });
-
     let st_pin = Rc::clone(&state);
     let app_weak = app.as_weak();
     app.on_terminal_pin_lines_edited(move |new_text| {

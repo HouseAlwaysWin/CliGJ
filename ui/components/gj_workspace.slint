@@ -25,7 +25,6 @@ export component GjWorkspace inherits Rectangle {
     in-out property <string> selected-context;
     in-out property <string> prompt;
     in-out property <[string]> prompt-path-chips;
-    in-out property <bool> raw-input-enabled;
     in-out property <string> terminal-pin-lines: "0";
     in property <string> terminal-font-family: "DejaVu Sans Mono";
     in property <bool> ipc-running;
@@ -35,12 +34,12 @@ export component GjWorkspace inherits Rectangle {
     in-out property <[string]> at-choices;
     in-out property <int> at-selected;
     in property <string> workspace-root-label;
+    in property <string> at-picker-filter;
     in property <[string]> interactive-command-choices;
     callback submit-requested;
     callback history-prev-requested;
     callback history-next-requested;
-    callback prompt-key-route(bool, int, string, bool) -> bool;
-    callback raw-input-toggle-requested;
+    callback prompt-key-route(int, string, bool) -> bool;
     callback terminal-pin-lines-edited(string);
     callback ipc-toggle-requested;
     callback inject-file-requested;
@@ -116,7 +115,6 @@ export component GjWorkspace inherits Rectangle {
             terminal-menu-last-row: root.terminal-menu-last-row;
             auto-scroll: root.auto-scroll;
             selection-mode: root.terminal-select-mode;
-            raw-input-enabled: root.raw-input-enabled;
             selected-line <=> root.selected-line;
             selected-context <=> root.selected-context;
             selection-committed(sr, sc, er, ec) => {
@@ -154,9 +152,10 @@ export component GjWorkspace inherits Rectangle {
         }
 
         at-picker := GjAtFilePicker {
-            open: root.at-picker-open && !root.raw-input-enabled;
+            open: root.at-picker-open;
             terminal-font-family: root.terminal-font-family;
             root-label: root.workspace-root-label;
+            filter-text: root.at-picker-filter;
             choices: root.at-choices;
             selected-index <=> root.at-selected;
             choose(index) => {
@@ -168,7 +167,6 @@ export component GjWorkspace inherits Rectangle {
             prompt <=> root.prompt;
             prompt-path-chips: root.prompt-path-chips;
             interactive-command-choices: root.interactive-command-choices;
-            raw-input-enabled <=> root.raw-input-enabled;
             terminal-pin-lines <=> root.terminal-pin-lines;
             ipc-running: root.ipc-running;
             ipc-client-count: root.ipc-client-count;
@@ -184,11 +182,8 @@ export component GjWorkspace inherits Rectangle {
             history-next-requested => {
                 root.history-next-requested();
             }
-            prompt-key-route(raw, mods, key, shift) => {
-                root.prompt-key-route(raw, mods, key, shift);
-            }
-            raw-input-toggle-requested => {
-                root.raw-input-toggle-requested();
+            prompt-key-route(mods, key, shift) => {
+                root.prompt-key-route(mods, key, shift);
             }
             terminal-pin-lines-edited(value) => {
                 root.terminal-pin-lines-edited(value);

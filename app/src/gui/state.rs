@@ -116,7 +116,6 @@ pub struct TabState {
     pub(crate) terminal_text: String,
     pub(crate) auto_scroll: bool,
     pub(crate) terminal_select_mode: bool,
-    pub(crate) raw_input_mode: bool,
     pub(crate) command_history: Vec<String>,
     pub(crate) history_cursor: Option<usize>,
     pub(crate) history_draft: String,
@@ -296,7 +295,6 @@ impl TabState {
             terminal_text: String::new(),
             auto_scroll: false,
             terminal_select_mode: false,
-            raw_input_mode: false,
             command_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
@@ -467,7 +465,6 @@ impl TabState {
             terminal_text: String::new(),
             auto_scroll: false,
             terminal_select_mode: false,
-            raw_input_mode: false,
             command_history: Vec::new(),
             history_cursor: None,
             history_draft: String::new(),
@@ -770,8 +767,10 @@ pub struct GuiState {
     pub(crate) workspace_file_cache_root: Option<PathBuf>,
     pub(crate) at_picker_query_snapshot: String,
     pub(crate) at_picker_open_snapshot: bool,
-    /// When unchanged, skip composer + `@` picker timer work (avoids heavy UI reads each tick).
-    pub(crate) timer_snapshot: Option<(usize, String, bool)>,
+    /// Current filter text for the Ctrl+Space file picker (modal mode).
+    pub(crate) at_picker_filter: String,
+    /// When unchanged, skip composer + file picker timer work (avoids heavy UI reads each tick).
+    pub(crate) timer_snapshot: Option<(usize, String)>,
     /// From config `[[ui.interactive_commands]]`.
     pub(crate) interactive_commands: Vec<InteractiveCommandSpec>,
     /// Top-right terminal picker profiles from `[[ui.shell_profiles]]`: name, command, optional workspace root.

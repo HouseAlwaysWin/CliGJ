@@ -1,4 +1,4 @@
-//! `@` workspace file picker: list sync and commit.
+//! Ctrl+Space workspace file picker: list sync and commit.
 
 use slint::{Model, ModelRc, SharedString, VecModel};
 
@@ -10,53 +10,31 @@ use super::state::GuiState;
 use super::state::workspace_root_for_tab_with_profile;
 use super::ui_sync::{sync_prompt_file_chips_to_ui, tab_update_from_ui};
 
-pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
-    if ui.get_ws_raw_input() {
-        ui.set_ws_at_picker_open(false);
-        s.at_picker_open_snapshot = false;
+/// Open the file picker with the full workspace file list (Ctrl+Space).
+pub(crate) fn open_file_picker(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
         return;
     }
-    let prompt = ui.get_ws_prompt().to_string();
-    if !prompt.contains('@') {
-        ui.set_ws_at_picker_open(false);
-        s.at_picker_query_snapshot.clear();
-        s.at_picker_open_snapshot = false;
+    s.at_picker_filter.clear();
+    s.at_picker_query_snapshot.clear();
+    s.at_picker_open_snapshot = false;
+    refresh_file_list(ui, s, "");
+    ui.set_ws_at_picker_open(true);
+    ui.set_ws_at_picker_filter(SharedString::new());
+    s.at_picker_open_snapshot = true;
+}
+
+/// Refresh the file list using the current filter text (called on every keystroke while picker is open).
+pub(crate) fn refresh_file_picker_from_filter(ui: &AppWindow, s: &mut GuiState) {
+    if s.current >= s.tabs.len() {
         return;
     }
-    let query = prompt
-        .rsplit_once('@')
-        .map(|(_, q)| q.split(['\r', '\n']).next().unwrap_or(""))
-        .unwrap_or("")
-        .to_string();
-    let qtrim = query.trim();
-    let mut hint_counts: std::collections::HashMap<String, usize> =
-        std::collections::HashMap::new();
-    let tab_for_hints = &s.tabs[s.current];
-    let file_hints = tab_for_hints
-        .prompt_picked_files_abs
-        .iter()
-        .map(|p| p.as_str());
-    let image_hints = tab_for_hints
-        .prompt_picked_images
-        .iter()
-        .map(|img| img.abs_path.as_str());
-    let matches_hidden_filepath_hint = file_hints.chain(image_hints).any(|abs_path| {
-        let file_name = workspace_files::file_name_label(abs_path);
-        let count = hint_counts.entry(file_name.clone()).or_insert(0);
-        *count += 1;
-        let hint = if *count <= 1 {
-            file_name
-        } else {
-            format!("{file_name}_{}", *count)
-        };
-        qtrim == hint
-    });
-    if matches_hidden_filepath_hint {
-        ui.set_ws_at_picker_open(false);
-        s.at_picker_query_snapshot.clear();
-        s.at_picker_open_snapshot = false;
-        return;
-    }
+    let query = s.at_picker_filter.clone();
+    ui.set_ws_at_picker_filter(SharedString::from(query.as_str()));
+    refresh_file_list(ui, s, &query);
+}
+
+fn refresh_file_list(ui: &AppWindow, s: &mut GuiState, query: &str) {
     let tab = &s.tabs[s.current];
     let root = workspace_root_for_tab_with_profile(tab, s);
     let root_changed = s.workspace_file_cache_root.as_ref() != Some(&root);
@@ -64,17 +42,9 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
         s.workspace_file_cache = workspace_files::scan_workspace_files(&root);
         s.workspace_file_cache_root = Some(root.clone());
     }
-    let query_changed = s.at_picker_query_snapshot != query;
-    if query_changed {
-        s.at_picker_query_snapshot = query.clone();
-        ui.set_ws_at_selected(0);
-    }
-    if !root_changed && !query_changed && s.at_picker_open_snapshot && ui.get_ws_at_picker_open() {
-        return;
-    }
     let choices = workspace_files::filter_paths(
         &s.workspace_file_cache,
-        &query,
+        query,
         workspace_files::CHOICES_DISPLAY,
     );
     if choices.is_empty() {
@@ -95,7 +65,7 @@ pub(crate) fn sync_at_file_picker(ui: &AppWindow, s: &mut GuiState) {
     ui.invoke_ws_scroll_at_picker_into_view();
     let total_in_tree = s.workspace_file_cache.len();
     let label = format!(
-        "@ 檔案 · {} · {}/{} 筆（可捲動）",
+        "檔案 · {} · {}/{} 筆（可捲動）",
         root.display(),
         choices.len(),
         total_in_tree
@@ -113,16 +83,15 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
     let Some(picked) = m.row_data(index) else {
         return;
     };
-    let prompt = ui.get_ws_prompt().to_string();
-    let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
-    let (new_p, abs_path) =
-        workspace_files::apply_at_file_pick_hidden(&prompt, picked.as_str(), &root);
+    let picked_str = picked.to_string();
     ui.set_ws_at_picker_open(false);
     s.at_picker_query_snapshot.clear();
     s.at_picker_open_snapshot = false;
+    s.at_picker_filter.clear();
+    let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
+    let abs_path = workspace_files::absolute_path_from_pick(&picked_str, &root);
     let current = s.current;
     let tab = &mut s.tabs[current];
-    tab.prompt = SharedString::from(new_p.as_str());
     if !tab.prompt_picked_files_abs.iter().any(|p| p == &abs_path) {
         tab.prompt_picked_files_abs.push(abs_path.clone());
         tab.prompt_picked_file_origins.push(None);

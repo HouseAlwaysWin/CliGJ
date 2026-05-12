@@ -1,4 +1,4 @@
-//! Slint UI shell: tab/workspace, ConPTY, composer, `@` file picker.
+//! Slint UI shell: tab/workspace, ConPTY, composer, Ctrl+Space file picker.
 
 mod at_picker;
 mod composer_sync;

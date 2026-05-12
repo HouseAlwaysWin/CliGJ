@@ -740,7 +740,6 @@ pub(crate) fn tab_update_from_ui(tab: &mut TabState, ui: &AppWindow) {
     }
     tab.auto_scroll = ui.get_ws_auto_scroll();
     tab.terminal_select_mode = ui.get_ws_terminal_select_mode();
-    tab.raw_input_mode = ui.get_ws_raw_input();
     tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
 }
 
@@ -762,7 +761,6 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.set_ws_prompt(tab.prompt.clone());
     sync_prompt_file_chips_to_ui(ui, tab);
     ui.set_ws_cmd_type(SharedString::from(tab.cmd_type.as_str()));
-    ui.set_ws_raw_input(tab.raw_input_mode);
     ui.set_ws_terminal_menu_option_flags(ModelRc::new(VecModel::from(Vec::<bool>::new())));
     ui.set_ws_terminal_menu_hit_start_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));
     ui.set_ws_terminal_menu_hit_end_cols(ModelRc::new(VecModel::from(Vec::<i32>::new())));

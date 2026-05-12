@@ -134,6 +134,7 @@ pub fn run_gui(inject_file: Option<PathBuf>) {
         workspace_file_cache_root: None,
         at_picker_query_snapshot: String::new(),
         at_picker_open_snapshot: false,
+        at_picker_filter: String::new(),
         timer_snapshot: None,
         interactive_commands,
         shell_profiles,

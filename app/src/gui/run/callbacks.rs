@@ -15,10 +15,6 @@ use crate::gui::ui_sync::{
 mod prompt_callbacks;
 mod terminal_callbacks;
 
-fn is_pty_enter_key(k: &str) -> bool {
-    matches!(k, "Return" | "\n" | "\r")
-}
-
 fn model_interactive_editor_rows(
     m: &ModelRc<InteractiveCmdEditorRow>,
 ) -> Vec<InteractiveCmdEditorRow> {

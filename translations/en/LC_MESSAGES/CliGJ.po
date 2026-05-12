@@ -93,11 +93,8 @@ msgstr "Release to add files"
 msgid "清除圖"
 msgstr "Clear images"
 
-msgid "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
-msgstr "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
-
-msgid "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
-msgstr "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgid "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
 
 msgid "選擇指令"
 msgstr "Choose command"
@@ -114,17 +111,6 @@ msgstr "Img"
 msgid "設定"
 msgstr "Settings"
 
-msgid "R ON"
-msgstr "R ON"
-
-msgid "R OFF"
-msgstr "R OFF"
-
-msgid "原始輸入：按鍵送往終端"
-msgstr "Raw input: keys go to the terminal"
-
-msgid "行內編輯：關閉原始輸入以使用插入與組字"
-msgstr "Line composer: turn off raw input to use inject and composition"
 
 msgid "插入檔案"
 msgstr "Insert file"
@@ -135,8 +121,6 @@ msgstr "Insert image"
 msgid "固定底部"
 msgstr "Pin footer"
 
-msgid "原生 Ctrl+Shift+R"
-msgstr "Raw Ctrl+Shift+R"
 
 msgid "管理互動指令"
 msgstr "Manage interactive commands"
@@ -165,11 +149,6 @@ msgstr "Submit (Enter)"
 msgid "Enter"
 msgstr "Enter"
 
-msgid "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
-msgstr "Raw input: keys go to terminal (Ctrl+Shift+R)"
-
-msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
-msgstr "Line composer: turn off raw input for inject/composition (Ctrl+Shift+R)"
 
 msgid "重新整理"
 msgstr "Refresh"
@@ -200,3 +179,6 @@ msgstr "GitHub"
 
 msgid "作者："
 msgstr "Author:"
+
+msgid "輸入以篩選檔案…"
+msgstr "Type to filter files…"

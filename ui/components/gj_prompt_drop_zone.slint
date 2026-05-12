@@ -7,7 +7,6 @@ import { PromptImageChip } from "../term_types.slint";
 export component GjPromptDropZone inherits Rectangle {
     in-out property <string> prompt;
     in property <[string]> prompt-path-chips: [];
-    in property <bool> raw-input-enabled: false;
     in-out property <string> terminal-pin-lines: "0";
     in property <bool> ipc-running: false;
     in property <int> ipc-client-count: 0;
@@ -20,8 +19,7 @@ export component GjPromptDropZone inherits Rectangle {
     callback history-next-requested;
     /// Returns true to `accept` the key (consume); false to `reject` (default editor handling).
     /// Modifier bits: 1=Ctrl, 2=Shift, 4=Alt, 8=Meta — must match `key_encoding::mod_bits`.
-    callback prompt-key-route(bool, int, string, bool) -> bool;
-    callback raw-input-toggle-requested;
+    callback prompt-key-route(int, string, bool) -> bool;
     callback terminal-pin-lines-edited(string);
     callback ipc-toggle-requested;
     callback inject-file-requested;
@@ -439,9 +437,7 @@ export component GjPromptDropZone inherits Rectangle {
                     horizontal-stretch: 1;
                     min-height: root.editor-min-height;
                     text <=> root.prompt;
-                    placeholder-text: root.raw-input-enabled
-                        ? @tr("TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject")
-                        : @tr("Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V");
+                    placeholder-text: @tr("Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V");
                     font-family: AppTheme.ui_font_family;
                     font-size: 13px * AppTheme.ui_zoom_factor;
                     wrap: word-wrap;
@@ -674,59 +670,6 @@ export component GjPromptDropZone inherits Rectangle {
                             border-color: AppTheme.prompt_chrome_border;
                             Text {
                                 text: @tr("終端歷史");
-                                color: AppTheme.text_muted;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                                font-size: 9px * AppTheme.ui_zoom_factor;
-                            }
-                        }
-                    }
-
-                    Rectangle {
-                        width: root.toolbar-main-button-width;
-                        height: root.toolbar-height;
-                        horizontal-stretch: 0;
-                        border-width: 1px;
-                        border-color: root.raw-input-enabled ? AppTheme.accent : AppTheme.prompt_chrome_border;
-                        border-radius: 11px;
-                        background: root.raw-input-enabled ? #ff4f6f : #00000000;
-
-                        Image {
-                            width: 14px * AppTheme.ui_zoom_factor;
-                            height: 14px * AppTheme.ui_zoom_factor;
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            source: root.raw-input-enabled
-                                ? @image-url("../icons/prompt_raw_on.svg")
-                                : @image-url("../icons/prompt_raw_off.svg");
-                            colorize: root.raw-input-enabled ? AppTheme.text : AppTheme.text_muted;
-                        }
-
-                        raw_toggle_ta := TouchArea {
-                            width: parent.width;
-                            height: parent.height;
-                            accessible-role: button;
-                            accessible-label: root.raw-input-enabled
-                                ? @tr("原始輸入：按鍵送往終端（Alt+F1）")
-                                : @tr("行內編輯：關閉原始輸入以使用插入與組字（Alt+F1）");
-                            accessible-checkable: true;
-                            accessible-checked: root.raw-input-enabled;
-                            clicked => {
-                                root.raw-input-toggle-requested();
-                            }
-                        }
-
-                        if raw_toggle_ta.has-hover: Rectangle {
-                            y: -22px * AppTheme.ui_zoom_factor;
-                            x: -18px * AppTheme.ui_zoom_factor;
-                            width: 95px * AppTheme.ui_zoom_factor;
-                            height: 18px * AppTheme.ui_zoom_factor;
-                            border-radius: 4px * AppTheme.ui_zoom_factor;
-                            background: #20232b;
-                            border-width: 1px;
-                            border-color: AppTheme.prompt_chrome_border;
-                            Text {
-                                text: @tr("原生 Alt+F1");
                                 color: AppTheme.text_muted;
                                 horizontal-alignment: center;
                                 vertical-alignment: center;

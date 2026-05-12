@@ -1,10 +1,11 @@
 import { AppTheme } from "../theme.slint";
 
-/// Optional `@` file list (workspace-relative paths). Shown above the prompt `TextEdit`.
+/// Ctrl+Space file list (workspace-relative paths). Shown above the prompt `TextEdit`.
 export component GjAtFilePicker inherits Rectangle {
     in property <bool> open: false;
     in property <string> terminal-font-family: "DejaVu Sans Mono";
     in property <string> root-label;
+    in property <string> filter-text;
     in property <[string]> choices;
     in-out property <int> selected-index: 0;
     callback choose(int);
@@ -16,7 +17,7 @@ export component GjAtFilePicker inherits Rectangle {
     private property <length> list-view-h: min(row-h * visible-rows-cap, row-h * choices.length);
 
     visible: open;
-    height: open ? min(280px * AppTheme.ui_zoom_factor, 34px * AppTheme.ui_zoom_factor + list-view-h) : 0px;
+    height: open ? min(300px * AppTheme.ui_zoom_factor, 50px * AppTheme.ui_zoom_factor + list-view-h) : 0px;
     background: AppTheme.panel;
     border-width: 1px;
     border-color: AppTheme.prompt_chrome_border;
@@ -27,9 +28,38 @@ export component GjAtFilePicker inherits Rectangle {
         padding: 6px;
         spacing: 4px;
 
+        HorizontalLayout {
+            spacing: 6px;
+            alignment: start;
+
+            Text {
+                text: "🔍";
+                font-size: 12px * AppTheme.ui_zoom_factor;
+                vertical-alignment: center;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                min-height: 20px * AppTheme.ui_zoom_factor;
+                border-radius: 4px;
+                background: AppTheme.bg;
+                border-width: 1px;
+                border-color: AppTheme.prompt_chrome_border;
+
+                Text {
+                    x: 6px;
+                    text: filter-text == "" ? @tr("輸入以篩選檔案…") : filter-text;
+                    color: filter-text == "" ? AppTheme.text_muted : AppTheme.text;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
+                    font-family: root.terminal-font-family;
+                    vertical-alignment: center;
+                }
+            }
+        }
+
         if (root-label != ""): Text {
             text: root-label;
-            font-size: 11px * AppTheme.ui_zoom_factor;
+            font-size: 10px * AppTheme.ui_zoom_factor;
             color: AppTheme.text_muted;
             wrap: word-wrap;
         }

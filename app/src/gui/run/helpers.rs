@@ -9,7 +9,7 @@ use slint::{Image, Rgba8Pixel, SharedPixelBuffer, SharedString};
 use unicode_width::UnicodeWidthChar;
 
 use crate::gui::prompt_attachments::{hint_token_for_file_index, hint_token_for_image_index};
-use cligj_terminal::key_encoding;
+
 use cligj_terminal::render::ColoredLine;
 use cligj_terminal::replay::replay_raw_pty_events;
 use cligj_workspace as workspace_files;
@@ -391,16 +391,6 @@ pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
     }
     tab.terminal_saved_scroll_top_px = ui.get_ws_terminal_scroll_top_px();
     refresh_current_tab_composer_ui(ui, tab);
-}
-
-pub(crate) fn is_local_prompt_edit_key(mod_mask: u32, key: &str) -> bool {
-    if mod_mask & (key_encoding::MOD_CTRL | key_encoding::MOD_ALT | key_encoding::MOD_META) != 0 {
-        return false;
-    }
-    matches!(
-        key,
-        "Backspace" | "Delete" | "LeftArrow" | "RightArrow" | "Home" | "End"
-    )
 }
 
 fn colored_line_plain_text(line: &ColoredLine) -> String {

@@ -37,14 +37,13 @@ fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &mut GuiState) {
     if state.current >= state.tabs.len() {
         return;
     }
-    let raw = ui.get_ws_raw_input();
     let current = state.current;
     let tab = &mut state.tabs[current];
     tab.prompt = SharedString::new();
     tab.composer_pty_mirror.clear();
     tab.history_cursor = None;
     tab.history_draft.clear();
-    state.timer_snapshot = Some((current, String::new(), raw));
+    state.timer_snapshot = Some((current, String::new()));
 }
 
 pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {

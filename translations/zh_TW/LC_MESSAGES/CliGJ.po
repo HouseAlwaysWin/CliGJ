@@ -93,11 +93,8 @@ msgstr "放開以加入檔案"
 msgid "清除圖"
 msgstr "清除圖"
 
-msgid "TTY mode: keys go to terminal; @ / Shift+Tab still work. Turn off Raw mode for line composer + inject"
-msgstr "TTY 模式: 按鍵送到終端機; @ / Shift+Tab 仍可用. 關閉原始輸入可使用行內編輯與插入"
-
-msgid "Plan, Build, / - @ search files - use file/image buttons, drag and drop, or Ctrl+V"
-msgstr "Plan, Build, / - @ 搜尋檔案 - 用檔案/圖片按鈕, 或拖放, Ctrl+V 貼上"
+msgid "Plan, Build, / - Ctrl+Space search files - use file/image buttons, drag and drop, or Ctrl+V"
+msgstr "Plan, Build, / - Ctrl+Space 搜尋檔案 - 用檔案/圖片按鈕, 或拖放, Ctrl+V 貼上"
 
 msgid "選擇指令"
 msgstr "選擇指令"
@@ -114,17 +111,6 @@ msgstr "Img"
 msgid "設定"
 msgstr "設定"
 
-msgid "R ON"
-msgstr "R 開"
-
-msgid "R OFF"
-msgstr "R 關"
-
-msgid "原始輸入：按鍵送往終端"
-msgstr "原始輸入：按鍵送往終端"
-
-msgid "行內編輯：關閉原始輸入以使用插入與組字"
-msgstr "行內編輯：關閉原始輸入以使用插入與組字"
 
 msgid "插入檔案"
 msgstr "插入檔案"
@@ -135,8 +121,6 @@ msgstr "插入圖片"
 msgid "固定底部"
 msgstr "固定底部"
 
-msgid "原生 Ctrl+Shift+R"
-msgstr "原生 Ctrl+Shift+R"
 
 msgid "管理互動指令"
 msgstr "管理互動指令"
@@ -165,11 +149,6 @@ msgstr "送出（Enter）"
 msgid "Enter"
 msgstr "Enter"
 
-msgid "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
-msgstr "原始輸入：按鍵送往終端（Ctrl+Shift+R）"
-
-msgid "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
-msgstr "行內編輯：關閉原始輸入以使用插入與組字（Ctrl+Shift+R）"
 
 msgid "重新整理"
 msgstr "重新整理"
@@ -200,3 +179,6 @@ msgstr "GitHub"
 
 msgid "作者："
 msgstr "作者："
+
+msgid "輸入以篩選檔案…"
+msgstr "輸入以篩選檔案…"

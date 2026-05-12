@@ -1274,10 +1274,9 @@ mod tests {
     }
 
     #[test]
-    fn detects_command_menu_while_raw_input_mode_is_enabled() {
+    fn detects_command_menu_while_always_raw() {
         let mut tab = TabState::new_for_test();
         tab.terminal_mode = TerminalMode::InteractiveAi;
-        tab.raw_input_mode = true;
         tab.terminal_lines = vec![
             line("/help    Show help"),
             highlighted_line("/model   Choose model"),
