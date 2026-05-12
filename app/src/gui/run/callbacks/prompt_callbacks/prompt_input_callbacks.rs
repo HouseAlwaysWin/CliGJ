@@ -18,7 +18,7 @@ use cligj_workspace as workspace_files;
 
 use super::super::is_pty_enter_key;
 use crate::gui::run::helpers::{
-    clipboard_file_paths_hdrop, clipboard_raster_image_file, contains_cjk_char,
+    clipboard_file_paths_hdrop, clipboard_raster_image_file,
     inject_paths_and_images_from_paths, is_local_prompt_edit_key, push_prompt_image,
 };
 
@@ -268,13 +268,7 @@ pub(super) fn connect(
         {
             return false;
         }
-        if raw_tty && contains_cjk_char(key_str) {
-            let mut s = st_keys.borrow_mut();
-            if let Err(e) = s.toggle_raw_input_current(&ui) {
-                eprintln!("CliGJ: raw input auto-toggle (CJK): {e}");
-            }
-            return false;
-        }
+        
         if ui.get_ws_at_picker_open() && !raw_tty {
             match key_str {
                 "UpArrow" => {

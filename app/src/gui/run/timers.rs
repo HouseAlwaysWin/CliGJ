@@ -12,7 +12,7 @@ use crate::gui::ipc::{IpcBridge, IpcGuiCommand};
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalChunk};
 
-use super::helpers::{auto_disable_raw_on_cjk_prompt, inject_path_into_current};
+use super::helpers::inject_path_into_current;
 
 pub(crate) fn spawn_terminal_stream_dispatcher(
     app: &AppWindow,
@@ -60,9 +60,7 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
                 return;
             }
 
-            if !key.1.is_empty() {
-                auto_disable_raw_on_cjk_prompt(&ui, &mut s);
-            }
+            
             // Keep tab prompt + attachment chips synchronized on every real composer change.
             let cur = s.current;
             let old_prompt = s.tabs[cur].prompt.to_string();

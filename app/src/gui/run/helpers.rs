@@ -393,37 +393,6 @@ pub(crate) fn clear_all_prompt_images(ui: &AppWindow, s: &mut GuiState) {
     refresh_current_tab_composer_ui(ui, tab);
 }
 
-pub(crate) fn auto_disable_raw_on_cjk_prompt(ui: &AppWindow, s: &mut GuiState) {
-    if s.current >= s.tabs.len() {
-        return;
-    }
-    if !s.tabs[s.current].raw_input_mode {
-        return;
-    }
-    let prompt = ui.get_ws_prompt().to_string();
-    if !contains_cjk_char(&prompt) {
-        return;
-    }
-    if let Err(e) = s.toggle_raw_input_current(ui) {
-        eprintln!("CliGJ: raw input auto-toggle (prompt CJK): {e}");
-    }
-}
-
-pub(crate) fn contains_cjk_char(text: &str) -> bool {
-    text.chars().any(|ch| {
-        matches!(
-            ch as u32,
-            0x3400..=0x4DBF // CJK Unified Ideographs Extension A
-                | 0x4E00..=0x9FFF // CJK Unified Ideographs
-                | 0xF900..=0xFAFF // CJK Compatibility Ideographs
-                | 0x20000..=0x2CEAF // CJK Unified Ideographs Extension B-E
-                | 0x2EBF0..=0x2EE5F // CJK Unified Ideographs Extension I
-                | 0x3000..=0x303F // CJK Symbols and Punctuation
-                | 0xFF00..=0xFFEF // Halfwidth and Fullwidth Forms
-        )
-    })
-}
-
 pub(crate) fn is_local_prompt_edit_key(mod_mask: u32, key: &str) -> bool {
     if mod_mask & (key_encoding::MOD_CTRL | key_encoding::MOD_ALT | key_encoding::MOD_META) != 0 {
         return false;
