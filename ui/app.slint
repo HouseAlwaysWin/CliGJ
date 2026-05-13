@@ -101,7 +101,7 @@ export component AppWindow inherits Window {
     in-out property <string> ws-ipc-warning-title: "";
     in-out property <string> ws-ipc-warning-message: "";
 
-    /// Ctrl+Space workspace file picker.
+    /// Ctrl+P workspace quick-open popup.
     in-out property <bool> ws-at-picker-open: false;
     in-out property <[string]> ws-at-choices: [];
     in-out property <int> ws-at-selected: 0;
@@ -132,6 +132,7 @@ export component AppWindow inherits Window {
     callback rename-commit(int, string);
     callback rename-cancel;
     callback at-picker-choose(int);
+    callback at-picker-close-requested;
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     callback prompt-path-chip-open-editor-requested(int);
@@ -399,6 +400,9 @@ export component AppWindow inherits Window {
                         }
                         at-picker-choose(index) => {
                             root.at-picker-choose(index);
+                        }
+                        at-picker-close-requested => {
+                            root.at-picker-close-requested();
                         }
                         prompt-chip-remove-requested(index) => {
                             root.prompt-chip-remove-requested(index);

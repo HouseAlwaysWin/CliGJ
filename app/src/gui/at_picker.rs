@@ -1,4 +1,4 @@
-//! Ctrl+Space workspace file picker: list sync and commit.
+//! Ctrl+P workspace quick-open picker: list sync, dismiss, and commit.
 
 use slint::{Model, ModelRc, SharedString, VecModel};
 
@@ -10,7 +10,7 @@ use super::state::GuiState;
 use super::state::workspace_root_for_tab_with_profile;
 use super::ui_sync::{sync_prompt_file_chips_to_ui, tab_update_from_ui};
 
-/// Open the file picker with the full workspace file list (Ctrl+Space).
+/// Open the workspace quick-open popup with the full file list.
 pub(crate) fn open_file_picker(ui: &AppWindow, s: &mut GuiState) {
     if s.current >= s.tabs.len() {
         return;
@@ -18,10 +18,21 @@ pub(crate) fn open_file_picker(ui: &AppWindow, s: &mut GuiState) {
     s.at_picker_filter.clear();
     s.at_picker_query_snapshot.clear();
     s.at_picker_open_snapshot = false;
+    ui.set_ws_at_selected(0);
     refresh_file_list(ui, s, "");
     ui.set_ws_at_picker_open(true);
     ui.set_ws_at_picker_filter(SharedString::new());
     s.at_picker_open_snapshot = true;
+}
+
+/// Close the workspace quick-open popup and clear transient filter state.
+pub(crate) fn close_file_picker(ui: &AppWindow, s: &mut GuiState) {
+    ui.set_ws_at_picker_open(false);
+    ui.set_ws_at_selected(0);
+    ui.set_ws_at_picker_filter(SharedString::new());
+    s.at_picker_query_snapshot.clear();
+    s.at_picker_open_snapshot = false;
+    s.at_picker_filter.clear();
 }
 
 /// Refresh the file list using the current filter text (called on every keystroke while picker is open).
@@ -31,6 +42,7 @@ pub(crate) fn refresh_file_picker_from_filter(ui: &AppWindow, s: &mut GuiState) 
     }
     let query = s.at_picker_filter.clone();
     ui.set_ws_at_picker_filter(SharedString::from(query.as_str()));
+    ui.set_ws_at_selected(0);
     refresh_file_list(ui, s, &query);
 }
 
@@ -42,30 +54,33 @@ fn refresh_file_list(ui: &AppWindow, s: &mut GuiState, query: &str) {
         s.workspace_file_cache = workspace_files::scan_workspace_files(&root);
         s.workspace_file_cache_root = Some(root.clone());
     }
+
     let choices = workspace_files::filter_paths(
         &s.workspace_file_cache,
         query,
         workspace_files::CHOICES_DISPLAY,
     );
-    if choices.is_empty() {
-        ui.set_ws_at_picker_open(false);
-        s.at_picker_open_snapshot = false;
-        return;
-    }
     let model: Vec<SharedString> = choices
         .iter()
         .map(|x| SharedString::from(x.as_str()))
         .collect();
-    let n = model.len() as i32;
+    let count = model.len() as i32;
+
     ui.set_ws_at_choices(ModelRc::new(VecModel::from(model)));
     ui.set_ws_at_picker_open(true);
-    let sel = ui.get_ws_at_selected();
-    let clamped = if n <= 0 { 0 } else { sel.max(0).min(n - 1) };
-    ui.set_ws_at_selected(clamped);
-    ui.invoke_ws_scroll_at_picker_into_view();
+
+    if count <= 0 {
+        ui.set_ws_at_selected(0);
+    } else {
+        let sel = ui.get_ws_at_selected();
+        let clamped = sel.max(0).min(count - 1);
+        ui.set_ws_at_selected(clamped);
+        ui.invoke_ws_scroll_at_picker_into_view();
+    }
+
     let total_in_tree = s.workspace_file_cache.len();
     let label = format!(
-        "檔案 · {} · {}/{} 筆（可捲動）",
+        "Workspace: {}  Matches: {}/{} files",
         root.display(),
         choices.len(),
         total_in_tree
@@ -84,10 +99,7 @@ pub(crate) fn commit_at_file_pick(ui: &AppWindow, s: &mut GuiState, index: usize
         return;
     };
     let picked_str = picked.to_string();
-    ui.set_ws_at_picker_open(false);
-    s.at_picker_query_snapshot.clear();
-    s.at_picker_open_snapshot = false;
-    s.at_picker_filter.clear();
+    close_file_picker(ui, s);
     let root = workspace_root_for_tab_with_profile(&s.tabs[s.current], s);
     let abs_path = workspace_files::absolute_path_from_pick(&picked_str, &root);
     let current = s.current;

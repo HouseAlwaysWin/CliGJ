@@ -49,6 +49,7 @@ export component GjWorkspace inherits Rectangle {
     callback prompt-images-clear-requested;
     callback prompt-image-zoom-requested(int);
     callback at-picker-choose(int);
+    callback at-picker-close-requested;
     callback prompt-chip-remove-requested(int);
     callback prompt-chip-clear-requested;
     callback prompt-path-chip-open-editor-requested(int);
@@ -96,142 +97,183 @@ export component GjWorkspace inherits Rectangle {
         at-picker.ensure_selection_visible();
     }
 
-    VerticalLayout {
-        padding: 0px;
-        spacing: 0px;
+    Rectangle {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: parent.height;
+        background: #00000000;
 
-        viewer := GjViewer {
-            terminal-text: root.terminal-text;
-            terminal-font-family: root.terminal-font-family;
-            terminal-lines <=> root.terminal-lines;
-            terminal-pinned-lines: root.terminal-pinned-lines;
-            terminal-line-offset: root.terminal-line-offset;
-            terminal-total-lines: root.terminal-total-lines;
-            terminal-menu-option-flags: root.terminal-menu-option-flags;
-            terminal-menu-hit-start-cols: root.terminal-menu-hit-start-cols;
-            terminal-menu-hit-end-cols: root.terminal-menu-hit-end-cols;
-            terminal-menu-active-row: root.terminal-menu-active-row;
-            terminal-menu-first-row: root.terminal-menu-first-row;
-            terminal-menu-last-row: root.terminal-menu-last-row;
-            auto-scroll: root.auto-scroll;
-            selection-mode: root.terminal-select-mode;
-            selected-line <=> root.selected-line;
-            selected-context <=> root.selected-context;
-            selection-committed(sr, sc, er, ec) => {
-                root.terminal-selection-committed(sr, sc, er, ec);
+        VerticalLayout {
+            padding: 0px;
+            spacing: 0px;
+
+            viewer := GjViewer {
+                terminal-text: root.terminal-text;
+                terminal-font-family: root.terminal-font-family;
+                terminal-lines <=> root.terminal-lines;
+                terminal-pinned-lines: root.terminal-pinned-lines;
+                terminal-line-offset: root.terminal-line-offset;
+                terminal-total-lines: root.terminal-total-lines;
+                terminal-menu-option-flags: root.terminal-menu-option-flags;
+                terminal-menu-hit-start-cols: root.terminal-menu-hit-start-cols;
+                terminal-menu-hit-end-cols: root.terminal-menu-hit-end-cols;
+                terminal-menu-active-row: root.terminal-menu-active-row;
+                terminal-menu-first-row: root.terminal-menu-first-row;
+                terminal-menu-last-row: root.terminal-menu-last-row;
+                auto-scroll: root.auto-scroll;
+                selection-mode: root.terminal-select-mode;
+                selected-line <=> root.selected-line;
+                selected-context <=> root.selected-context;
+                selection-committed(sr, sc, er, ec) => {
+                    root.terminal-selection-committed(sr, sc, er, ec);
+                }
+                viewport-changed => {
+                    root.terminal-viewport-changed();
+                }
+                terminal-resize-requested(cols, rows) => {
+                    root.terminal-resize-requested(cols, rows);
+                }
+                terminal-wheel(delta) => {
+                    root.terminal-wheel(delta)
+                }
+                terminal-context-copy-requested => {
+                    root.terminal-context-copy-requested();
+                }
+                terminal-context-clear-requested => {
+                    root.terminal-context-clear-requested();
+                }
+                terminal-menu-option-hovered(row) => {
+                    root.terminal-menu-option-hovered(row);
+                }
+                terminal-menu-edge-hovered(direction) => {
+                    root.terminal-menu-edge-hovered(direction);
+                }
+                terminal-menu-option-chosen(row) => {
+                    root.terminal-menu-option-chosen(row);
+                }
+                terminal-menu-debug(raw_row, hit_row, hit_start, hit_end) => {
+                    root.terminal-menu-debug(raw_row, hit_row, hit_start, hit_end);
+                }
+                vertical-stretch: 1;
+                min-height: 0px;
             }
-            viewport-changed => {
-                root.terminal-viewport-changed();
+
+            prompt-zone := GjPromptDropZone {
+                prompt <=> root.prompt;
+                prompt-path-chips: root.prompt-path-chips;
+                interactive-command-choices: root.interactive-command-choices;
+                terminal-pin-lines <=> root.terminal-pin-lines;
+                ipc-running: root.ipc-running;
+                ipc-client-count: root.ipc-client-count;
+                ipc-status-text: root.ipc-status-text;
+                prompt-images: root.prompt-images;
+                selected-context: root.selected-context;
+                submit-requested => {
+                    root.submit-requested();
+                }
+                history-prev-requested => {
+                    root.history-prev-requested();
+                }
+                history-next-requested => {
+                    root.history-next-requested();
+                }
+                prompt-key-route(mods, key, shift) => {
+                    root.prompt-key-route(mods, key, shift);
+                }
+                terminal-pin-lines-edited(value) => {
+                    root.terminal-pin-lines-edited(value);
+                }
+                ipc-toggle-requested => {
+                    root.ipc-toggle-requested();
+                }
+                inject-file-requested => {
+                    root.inject-file-requested();
+                }
+                workspace-folder-requested => {
+                    root.workspace-folder-requested();
+                }
+                inject-image-requested => {
+                    root.inject-image-requested();
+                }
+                prompt-image-remove-requested(idx) => {
+                    root.prompt-image-remove-requested(idx);
+                }
+                prompt-images-clear-requested => {
+                    root.prompt-images-clear-requested();
+                }
+                prompt-image-zoom-requested(idx) => {
+                    root.prompt-image-zoom-requested(idx);
+                }
+                prompt-chip-remove-requested(index) => {
+                    root.prompt-chip-remove-requested(index);
+                }
+                prompt-chip-clear-requested => {
+                    root.prompt-chip-clear-requested();
+                }
+                prompt-path-chip-open-editor-requested(idx) => {
+                    root.prompt-path-chip-open-editor-requested(idx);
+                }
+                prompt-path-chip-open-explorer-requested(idx) => {
+                    root.prompt-path-chip-open-explorer-requested(idx);
+                }
+                prompt-image-open-explorer-requested(idx) => {
+                    root.prompt-image-open-explorer-requested(idx);
+                }
+                interactive-command-selected(val) => {
+                    root.interactive-command-selected(val);
+                }
+                manage-interactive-commands-requested => {
+                    root.manage-interactive-commands-requested();
+                }
+                terminal-history-requested => {
+                    root.terminal-history-requested();
+                }
             }
-            terminal-resize-requested(cols, rows) => {
-                root.terminal-resize-requested(cols, rows);
-            }
-            terminal-wheel(delta) => {
-                root.terminal-wheel(delta)
-            }
-            terminal-context-copy-requested => {
-                root.terminal-context-copy-requested();
-            }
-            terminal-context-clear-requested => {
-                root.terminal-context-clear-requested();
-            }
-            terminal-menu-option-hovered(row) => {
-                root.terminal-menu-option-hovered(row);
-            }
-            terminal-menu-edge-hovered(direction) => {
-                root.terminal-menu-edge-hovered(direction);
-            }
-            terminal-menu-option-chosen(row) => {
-                root.terminal-menu-option-chosen(row);
-            }
-            terminal-menu-debug(raw_row, hit_row, hit_start, hit_end) => {
-                root.terminal-menu-debug(raw_row, hit_row, hit_start, hit_end);
-            }
-            vertical-stretch: 1;
-            min-height: 0px;
         }
 
-        at-picker := GjAtFilePicker {
-            open: root.at-picker-open;
-            terminal-font-family: root.terminal-font-family;
-            root-label: root.workspace-root-label;
-            filter-text: root.at-picker-filter;
-            choices: root.at-choices;
-            selected-index <=> root.at-selected;
-            choose(index) => {
-                root.at-picker-choose(index);
-            }
-        }
+        picker-overlay := Rectangle {
+            visible: root.at-picker-open;
+            z: 200;
+            x: 0px;
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            background: #52000000;
 
-        prompt-zone := GjPromptDropZone {
-            prompt <=> root.prompt;
-            prompt-path-chips: root.prompt-path-chips;
-            interactive-command-choices: root.interactive-command-choices;
-            terminal-pin-lines <=> root.terminal-pin-lines;
-            ipc-running: root.ipc-running;
-            ipc-client-count: root.ipc-client-count;
-            ipc-status-text: root.ipc-status-text;
-            prompt-images: root.prompt-images;
-            selected-context: root.selected-context;
-            submit-requested => {
-                root.submit-requested();
+            TouchArea {
+                width: parent.width;
+                height: parent.height;
+                clicked => {
+                    root.at-picker-close-requested();
+                }
             }
-            history-prev-requested => {
-                root.history-prev-requested();
-            }
-            history-next-requested => {
-                root.history-next-requested();
-            }
-            prompt-key-route(mods, key, shift) => {
-                root.prompt-key-route(mods, key, shift);
-            }
-            terminal-pin-lines-edited(value) => {
-                root.terminal-pin-lines-edited(value);
-            }
-            ipc-toggle-requested => {
-                root.ipc-toggle-requested();
-            }
-            inject-file-requested => {
-                root.inject-file-requested();
-            }
-            workspace-folder-requested => {
-                root.workspace-folder-requested();
-            }
-            inject-image-requested => {
-                root.inject-image-requested();
-            }
-            prompt-image-remove-requested(idx) => {
-                root.prompt-image-remove-requested(idx);
-            }
-            prompt-images-clear-requested => {
-                root.prompt-images-clear-requested();
-            }
-            prompt-image-zoom-requested(idx) => {
-                root.prompt-image-zoom-requested(idx);
-            }
-            prompt-chip-remove-requested(index) => {
-                root.prompt-chip-remove-requested(index);
-            }
-            prompt-chip-clear-requested => {
-                root.prompt-chip-clear-requested();
-            }
-            prompt-path-chip-open-editor-requested(idx) => {
-                root.prompt-path-chip-open-editor-requested(idx);
-            }
-            prompt-path-chip-open-explorer-requested(idx) => {
-                root.prompt-path-chip-open-explorer-requested(idx);
-            }
-            prompt-image-open-explorer-requested(idx) => {
-                root.prompt-image-open-explorer-requested(idx);
-            }
-            interactive-command-selected(val) => {
-                root.interactive-command-selected(val);
-            }
-            manage-interactive-commands-requested => {
-                root.manage-interactive-commands-requested();
-            }
-            terminal-history-requested => {
-                root.terminal-history-requested();
+
+            Rectangle {
+                width: min(parent.width - 48px * AppTheme.ui_zoom_factor, 720px * AppTheme.ui_zoom_factor);
+                height: at-picker.height;
+                x: (parent.width - self.width) / 2;
+                y: 56px * AppTheme.ui_zoom_factor;
+                background: #00000000;
+
+                TouchArea {
+                    width: parent.width;
+                    height: parent.height;
+                    clicked => {}
+                }
+
+                at-picker := GjAtFilePicker {
+                    width: parent.width;
+                    open: root.at-picker-open;
+                    terminal-font-family: root.terminal-font-family;
+                    root-label: root.workspace-root-label;
+                    filter-text: root.at-picker-filter;
+                    choices: root.at-choices;
+                    selected-index <=> root.at-selected;
+                    choose(index) => {
+                        root.at-picker-choose(index);
+                    }
+                }
             }
         }
     }

@@ -1,6 +1,6 @@
 import { AppTheme } from "../theme.slint";
 
-/// Ctrl+Space file list (workspace-relative paths). Shown above the prompt `TextEdit`.
+/// Ctrl+P workspace quick-open popup with a VS Code style searchable file list.
 export component GjAtFilePicker inherits Rectangle {
     in property <bool> open: false;
     in property <string> terminal-font-family: "DejaVu Sans Mono";
@@ -10,50 +10,102 @@ export component GjAtFilePicker inherits Rectangle {
     in-out property <int> selected-index: 0;
     callback choose(int);
 
-    private property <length> row-h: 22px * AppTheme.ui_zoom_factor;
-    /// Visible rows in the list viewport (rest is scroll / wheel).
-    private property <int> visible-rows-cap: 8;
-    // Cap list viewport; inner list can be longer — Flickable scrolls.
-    private property <length> list-view-h: min(row-h * visible-rows-cap, row-h * choices.length);
+    private property <length> header-h: 28px * AppTheme.ui_zoom_factor;
+    private property <length> row-h: 28px * AppTheme.ui_zoom_factor;
+    private property <int> visible-rows-cap: 10;
+    private property <length> empty-state-h: 72px * AppTheme.ui_zoom_factor;
+    private property <length> input-pad-x: 10px * AppTheme.ui_zoom_factor;
+    private property <length> input-pad-right: 12px * AppTheme.ui_zoom_factor;
+    private property <length> caret-w: 2px * AppTheme.ui_zoom_factor;
+    private property <length> caret-h: 18px * AppTheme.ui_zoom_factor;
+    private property <length> list-view-h: choices.length == 0
+        ? empty-state-h
+        : min(row-h * visible-rows-cap, row-h * choices.length);
 
     visible: open;
-    height: open ? min(300px * AppTheme.ui_zoom_factor, 50px * AppTheme.ui_zoom_factor + list-view-h) : 0px;
-    background: AppTheme.panel;
+    height: open
+        ? min(
+            460px * AppTheme.ui_zoom_factor,
+            112px * AppTheme.ui_zoom_factor + list-view-h
+        )
+        : 0px;
+    background: #11131a;
     border-width: 1px;
     border-color: AppTheme.prompt_chrome_border;
-    border-radius: 8px;
+    border-radius: 12px * AppTheme.ui_zoom_factor;
     clip: true;
 
     VerticalLayout {
-        padding: 6px;
-        spacing: 4px;
+        padding: 10px * AppTheme.ui_zoom_factor;
+        spacing: 8px * AppTheme.ui_zoom_factor;
 
         HorizontalLayout {
-            spacing: 6px;
-            alignment: start;
+            height: root.header-h;
+            spacing: 8px * AppTheme.ui_zoom_factor;
 
             Text {
-                text: "🔍";
-                font-size: 12px * AppTheme.ui_zoom_factor;
+                text: "Quick Open";
+                color: AppTheme.text;
+                font-size: 13px * AppTheme.ui_zoom_factor;
+                font-weight: 700;
                 vertical-alignment: center;
             }
 
             Rectangle {
                 horizontal-stretch: 1;
-                min-height: 20px * AppTheme.ui_zoom_factor;
-                border-radius: 4px;
-                background: AppTheme.bg;
-                border-width: 1px;
-                border-color: AppTheme.prompt_chrome_border;
+                background: #00000000;
+            }
 
-                Text {
-                    x: 6px;
-                    text: filter-text == "" ? @tr("輸入以篩選檔案…") : filter-text;
-                    color: filter-text == "" ? AppTheme.text_muted : AppTheme.text;
-                    font-size: 12px * AppTheme.ui_zoom_factor;
-                    font-family: root.terminal-font-family;
-                    vertical-alignment: center;
-                }
+            Text {
+                text: "Ctrl+P";
+                color: AppTheme.text_muted;
+                font-size: 11px * AppTheme.ui_zoom_factor;
+                vertical-alignment: center;
+            }
+        }
+
+        input-chrome := Rectangle {
+            horizontal-stretch: 1;
+            min-height: 36px * AppTheme.ui_zoom_factor;
+            border-radius: 8px * AppTheme.ui_zoom_factor;
+            background: input-hit.has-hover ? #0d1118 : AppTheme.bg;
+            border-width: 1px;
+            border-color: input-hit.has-hover
+                ? AppTheme.prompt_submit_bg_hover
+                : AppTheme.prompt_submit_bg;
+
+            input-value := Text {
+                x: root.input-pad-x + (filter-text == "" ? 8px * AppTheme.ui_zoom_factor : 0px);
+                width: parent.width - root.input-pad-x - root.input-pad-right;
+                height: parent.height;
+                text: filter-text == "" ? "Type to search files" : filter-text;
+                color: filter-text == "" ? AppTheme.text_muted : AppTheme.text;
+                font-size: 13px * AppTheme.ui_zoom_factor;
+                font-family: root.terminal-font-family;
+                vertical-alignment: center;
+                overflow: elide;
+            }
+
+            Rectangle {
+                visible: root.open;
+                x: filter-text == ""
+                    ? root.input-pad-x
+                    : min(
+                        input-chrome.width - root.input-pad-right - root.caret-w,
+                        input-value.x + input-value.preferred-width + 1px * AppTheme.ui_zoom_factor
+                    );
+                y: (parent.height - root.caret-h) / 2;
+                width: root.caret-w;
+                height: root.caret-h;
+                border-radius: 1px * AppTheme.ui_zoom_factor;
+                background: AppTheme.text;
+            }
+
+            input-hit := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+                clicked => {}
             }
         }
 
@@ -64,34 +116,68 @@ export component GjAtFilePicker inherits Rectangle {
             wrap: word-wrap;
         }
 
-        at-flick := Flickable {
+        Rectangle {
             height: root.list-view-h;
-            viewport-width: parent.width - 12px;
-            viewport-height: inner.preferred-height;
+            border-radius: 8px * AppTheme.ui_zoom_factor;
+            background: #0d1017;
+            border-width: 1px;
+            border-color: AppTheme.prompt_chrome_border;
+            clip: true;
 
-            inner := VerticalLayout {
-                spacing: 0px;
-                alignment: start;
+            if choices.length == 0: VerticalLayout {
+                padding: 0px;
+                spacing: 4px * AppTheme.ui_zoom_factor;
+                alignment: center;
 
-                for path[idx] in choices: Rectangle {
-                    background: idx == selected-index ? AppTheme.picker_row_selected : #00000000;
-                    border-radius: 3px;
-                    height: root.row-h;
+                Text {
+                    text: "No matching files";
+                    color: AppTheme.text;
+                    font-size: 12px * AppTheme.ui_zoom_factor;
+                    horizontal-alignment: center;
+                }
 
-                    TouchArea {
-                        clicked => {
-                            root.selected-index = idx;
-                            root.choose(idx);
-                        }
+                Text {
+                    text: "Keep typing, Backspace, or press Esc";
+                    color: AppTheme.text_muted;
+                    font-size: 10px * AppTheme.ui_zoom_factor;
+                    horizontal-alignment: center;
+                }
+            }
 
-                        Text {
-                            width: parent.width;
-                            height: parent.height;
-                            text: path;
-                            color: AppTheme.text;
-                            font-size: 12px * AppTheme.ui_zoom_factor;
-                            font-family: root.terminal-font-family;
-                            vertical-alignment: center;
+            at-flick := Flickable {
+                visible: choices.length > 0;
+                width: parent.width;
+                height: root.list-view-h;
+                viewport-width: parent.width;
+                viewport-height: inner.preferred-height;
+
+                inner := VerticalLayout {
+                    spacing: 0px;
+                    alignment: start;
+
+                    for path[idx] in choices: Rectangle {
+                        background: idx == selected-index
+                            ? AppTheme.picker_row_selected
+                            : (row-ta.has-hover ? #181c25 : #00000000);
+                        height: root.row-h;
+
+                        row-ta := TouchArea {
+                            clicked => {
+                                root.selected-index = idx;
+                                root.choose(idx);
+                            }
+
+                            Text {
+                                x: 10px * AppTheme.ui_zoom_factor;
+                                width: parent.width - 20px * AppTheme.ui_zoom_factor;
+                                height: parent.height;
+                                text: path;
+                                color: AppTheme.text;
+                                font-size: 12px * AppTheme.ui_zoom_factor;
+                                font-family: root.terminal-font-family;
+                                vertical-alignment: center;
+                                overflow: elide;
+                            }
                         }
                     }
                 }

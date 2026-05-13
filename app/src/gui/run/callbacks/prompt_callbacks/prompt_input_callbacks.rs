@@ -4,7 +4,7 @@ use std::rc::Rc;
 
 use slint::{ComponentHandle, Image, Model, SharedString};
 
-use crate::gui::at_picker::commit_at_file_pick;
+use crate::gui::at_picker::{close_file_picker, commit_at_file_pick};
 use crate::gui::interactive_commands::{self, spec_for_label};
 use crate::gui::slint_ui::{AppWindow, TerminalHistoryWindow};
 use crate::gui::state::{GuiState, TerminalMode};
@@ -14,8 +14,8 @@ use cligj_terminal::key_encoding::{self, MOD_ALT, MOD_CTRL, MOD_META, MOD_SHIFT}
 use cligj_terminal::prompt_key::PromptKeyAction;
 
 use crate::gui::run::helpers::{
-    clipboard_file_paths_hdrop, clipboard_raster_image_file,
-    inject_paths_and_images_from_paths, push_prompt_image,
+    clipboard_file_paths_hdrop, clipboard_raster_image_file, inject_paths_and_images_from_paths,
+    push_prompt_image,
 };
 
 fn schedule_submit_current_prompt(app_weak: slint::Weak<AppWindow>, state: Rc<RefCell<GuiState>>) {
@@ -218,8 +218,9 @@ pub(super) fn connect(
             return true;
         }
 
-        // Modal file picker: when open, intercept all keys for picker interaction.
+        // Modal quick-open popup: when open, intercept all keys for picker interaction.
         if ui.get_ws_at_picker_open() {
+            let non_shift_mods = (mod_mask as u32) & (MOD_CTRL | MOD_ALT | MOD_META);
             match key_str {
                 "UpArrow" => {
                     let m = ui.get_ws_at_choices();
@@ -253,28 +254,34 @@ pub(super) fn connect(
                     return true;
                 }
                 "Escape" => {
-                    ui.set_ws_at_picker_open(false);
                     let mut s = st_keys.borrow_mut();
-                    s.at_picker_filter.clear();
-                    s.at_picker_query_snapshot.clear();
-                    s.at_picker_open_snapshot = false;
+                    close_file_picker(&ui, &mut *s);
                     return true;
                 }
                 "Backspace" => {
+                    if non_shift_mods != 0 {
+                        return true;
+                    }
                     let mut s = st_keys.borrow_mut();
                     s.at_picker_filter.pop();
                     s.at_picker_query_snapshot.clear();
                     drop(s);
-                    crate::gui::at_picker::refresh_file_picker_from_filter(&ui, &mut st_keys.borrow_mut());
+                    crate::gui::at_picker::refresh_file_picker_from_filter(
+                        &ui,
+                        &mut st_keys.borrow_mut(),
+                    );
                     return true;
                 }
                 _ => {
-                    if is_printable_char(key_str) {
+                    if non_shift_mods == 0 && is_printable_char(key_str) {
                         let mut s = st_keys.borrow_mut();
                         s.at_picker_filter.push_str(key_str);
                         s.at_picker_query_snapshot.clear();
                         drop(s);
-                        crate::gui::at_picker::refresh_file_picker_from_filter(&ui, &mut st_keys.borrow_mut());
+                        crate::gui::at_picker::refresh_file_picker_from_filter(
+                            &ui,
+                            &mut st_keys.borrow_mut(),
+                        );
                         return true;
                     }
                     return true;
@@ -312,8 +319,7 @@ pub(super) fn connect(
             }
         }
 
-        match cligj_terminal::prompt_key::route_prompt_key(mod_mask as u32, key_str, shift)
-        {
+        match cligj_terminal::prompt_key::route_prompt_key(mod_mask as u32, key_str, shift) {
             PromptKeyAction::Reject => false,
             PromptKeyAction::OpenFilePicker => {
                 let mut s = st_keys.borrow_mut();
@@ -364,6 +370,16 @@ pub(super) fn connect(
         }
         let mut s = st_pick.borrow_mut();
         commit_at_file_pick(&ui, &mut *s, index as usize);
+    });
+
+    let st_pick_close = Rc::clone(&state);
+    let app_weak = app.as_weak();
+    app.on_at_picker_close_requested(move || {
+        let Some(ui) = app_weak.upgrade() else {
+            return;
+        };
+        let mut s = st_pick_close.borrow_mut();
+        close_file_picker(&ui, &mut *s);
     });
 
     let st_ai = Rc::clone(&state);
