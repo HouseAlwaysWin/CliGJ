@@ -8,25 +8,38 @@ export component GjAtFilePicker inherits Rectangle {
     in property <string> filter-text;
     in property <[string]> choices;
     in-out property <int> selected-index: 0;
+    in-out property <bool> caret-visible: true;
     callback choose(int);
 
     private property <length> header-h: 28px * AppTheme.ui_zoom_factor;
     private property <length> row-h: 28px * AppTheme.ui_zoom_factor;
     private property <int> visible-rows-cap: 10;
     private property <length> empty-state-h: 72px * AppTheme.ui_zoom_factor;
+    private property <length> popup-pad: 10px * AppTheme.ui_zoom_factor;
+    private property <length> popup-gap: 8px * AppTheme.ui_zoom_factor;
+    private property <length> input-h: 36px * AppTheme.ui_zoom_factor;
     private property <length> input-pad-x: 10px * AppTheme.ui_zoom_factor;
     private property <length> input-pad-right: 12px * AppTheme.ui_zoom_factor;
     private property <length> caret-w: 2px * AppTheme.ui_zoom_factor;
     private property <length> caret-h: 18px * AppTheme.ui_zoom_factor;
+    private property <length> meta-h: root-label == "" ? 0px : 14px * AppTheme.ui_zoom_factor;
+    private property <length> list-shell-pad-y: 6px * AppTheme.ui_zoom_factor;
     private property <length> list-view-h: choices.length == 0
         ? empty-state-h
         : min(row-h * visible-rows-cap, row-h * choices.length);
+    private property <length> list-shell-h: list-view-h + list-shell-pad-y * 2;
+    private property <length> popup-shell-h: popup-pad * 2
+        + header-h
+        + input-h
+        + meta-h
+        + list-shell-h
+        + popup-gap * (root-label == "" ? 2 : 3);
 
     visible: open;
     height: open
         ? min(
-            460px * AppTheme.ui_zoom_factor,
-            112px * AppTheme.ui_zoom_factor + list-view-h
+            480px * AppTheme.ui_zoom_factor,
+            popup-shell-h
         )
         : 0px;
     background: #11131a;
@@ -35,9 +48,27 @@ export component GjAtFilePicker inherits Rectangle {
     border-radius: 12px * AppTheme.ui_zoom_factor;
     clip: true;
 
+    changed open => {
+        if (self.open) {
+            self.caret-visible = true;
+            caret-blink.restart();
+        } else {
+            self.caret-visible = false;
+            caret-blink.stop();
+        }
+    }
+
+    caret-blink := Timer {
+        interval: 530ms;
+        running: root.open;
+        triggered() => {
+            root.caret-visible = !root.caret-visible;
+        }
+    }
+
     VerticalLayout {
-        padding: 10px * AppTheme.ui_zoom_factor;
-        spacing: 8px * AppTheme.ui_zoom_factor;
+        padding: root.popup-pad;
+        spacing: root.popup-gap;
 
         HorizontalLayout {
             height: root.header-h;
@@ -66,7 +97,8 @@ export component GjAtFilePicker inherits Rectangle {
 
         input-chrome := Rectangle {
             horizontal-stretch: 1;
-            min-height: 36px * AppTheme.ui_zoom_factor;
+            min-height: root.input-h;
+            max-height: root.input-h;
             border-radius: 8px * AppTheme.ui_zoom_factor;
             background: input-hit.has-hover ? #0d1118 : AppTheme.bg;
             border-width: 1px;
@@ -87,7 +119,7 @@ export component GjAtFilePicker inherits Rectangle {
             }
 
             Rectangle {
-                visible: root.open;
+                visible: root.open && root.caret-visible;
                 x: filter-text == ""
                     ? root.input-pad-x
                     : min(
@@ -117,7 +149,7 @@ export component GjAtFilePicker inherits Rectangle {
         }
 
         Rectangle {
-            height: root.list-view-h;
+            height: root.list-shell-h;
             border-radius: 8px * AppTheme.ui_zoom_factor;
             background: #0d1017;
             border-width: 1px;
@@ -125,6 +157,8 @@ export component GjAtFilePicker inherits Rectangle {
             clip: true;
 
             if choices.length == 0: VerticalLayout {
+                y: root.list-shell-pad-y;
+                height: parent.height - root.list-shell-pad-y * 2;
                 padding: 0px;
                 spacing: 4px * AppTheme.ui_zoom_factor;
                 alignment: center;
@@ -147,6 +181,7 @@ export component GjAtFilePicker inherits Rectangle {
             at-flick := Flickable {
                 visible: choices.length > 0;
                 width: parent.width;
+                y: root.list-shell-pad-y;
                 height: root.list-view-h;
                 viewport-width: parent.width;
                 viewport-height: inner.preferred-height;
@@ -158,10 +193,16 @@ export component GjAtFilePicker inherits Rectangle {
                     for path[idx] in choices: Rectangle {
                         background: idx == selected-index
                             ? AppTheme.picker_row_selected
-                            : (row-ta.has-hover ? #181c25 : #00000000);
+                            : #00000000;
                         height: root.row-h;
 
                         row-ta := TouchArea {
+                            mouse-cursor: pointer;
+                            changed has-hover => {
+                                if (self.has-hover) {
+                                    root.selected-index = idx;
+                                }
+                            }
                             clicked => {
                                 root.selected-index = idx;
                                 root.choose(idx);
