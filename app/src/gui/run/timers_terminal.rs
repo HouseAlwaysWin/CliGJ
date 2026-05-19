@@ -105,6 +105,16 @@ pub(super) fn should_sync_interactive_prompt(
     if extracted.is_empty() || extracted == current_ui {
         return false;
     }
+    // Recovery path: if the visible composer was cleared/desynced unexpectedly but the last
+    // mirrored prompt is still known, allow the terminal prompt to repopulate the UI so local
+    // editing/backspace can resume. Explicit submit/clear paths reset `composer_pty_mirror`,
+    // so this does not revive intentionally cleared prompts.
+    if current_ui.is_empty()
+        && !composer_pty_mirror.is_empty()
+        && extracted.starts_with(composer_pty_mirror)
+    {
+        return true;
+    }
     let Some(first) = current_ui.chars().next() else {
         return false;
     };

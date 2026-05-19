@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use slint::{ComponentHandle, SharedString};
+use slint::ComponentHandle;
 
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TerminalMode};
@@ -32,18 +32,20 @@ fn append_menu_debug_log(line: &str) {
     }
 }
 
-fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &mut GuiState) {
-    ui.set_ws_prompt(SharedString::new());
+fn preserve_forwarded_interactive_prompt(ui: &AppWindow, state: &mut GuiState) {
+    let prompt_now = ui.get_ws_prompt();
     if state.current >= state.tabs.len() {
         return;
     }
     let current = state.current;
     let tab = &mut state.tabs[current];
-    tab.prompt = SharedString::new();
-    tab.composer_pty_mirror.clear();
+    tab.prompt = prompt_now.clone();
+    if tab.composer_pty_mirror.is_empty() {
+        tab.composer_pty_mirror = prompt_now.to_string();
+    }
     tab.history_cursor = None;
     tab.history_draft.clear();
-    state.timer_snapshot = Some((current, String::new()));
+    state.timer_snapshot = Some((current, prompt_now.to_string()));
 }
 
 pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>>) {
@@ -162,7 +164,7 @@ pub(super) fn connect_terminal_menu(app: &AppWindow, state: Rc<RefCell<GuiState>
         if let Err(e) = s.inject_bytes_into_current(&ui, &bytes) {
             eprintln!("CliGJ: terminal menu click: {e}");
         } else {
-            clear_forwarded_interactive_prompt(&ui, &mut s);
+            preserve_forwarded_interactive_prompt(&ui, &mut s);
         }
     });
 

@@ -162,6 +162,16 @@ fn interactive_prompt_sync_allows_terminal_to_extend_existing_ui_prompt() {
 }
 
 #[test]
+fn interactive_prompt_sync_recovers_when_ui_loses_known_mirrored_prompt() {
+    assert!(should_sync_interactive_prompt("", "/rev", "/review"));
+}
+
+#[test]
+fn interactive_prompt_sync_does_not_recover_without_known_mirror() {
+    assert!(!should_sync_interactive_prompt("", "", "/review"));
+}
+
+#[test]
 fn interactive_prompt_sync_ignores_non_command_text() {
     assert!(!should_sync_interactive_prompt(
         "Run /review",

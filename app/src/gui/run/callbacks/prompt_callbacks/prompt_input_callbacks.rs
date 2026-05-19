@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-use slint::{ComponentHandle, Image, Model, SharedString};
+use slint::{ComponentHandle, Image, Model};
 
 use crate::gui::at_picker::{close_file_picker, commit_at_file_pick};
 use crate::gui::interactive_commands::{self, spec_for_label};
@@ -130,19 +130,21 @@ fn inject_plain_interactive_key(ui: &AppWindow, state: &Rc<RefCell<GuiState>>, k
     true
 }
 
-fn clear_forwarded_interactive_prompt(ui: &AppWindow, state: &Rc<RefCell<GuiState>>) {
-    ui.set_ws_prompt(SharedString::new());
+fn preserve_forwarded_interactive_prompt(ui: &AppWindow, state: &Rc<RefCell<GuiState>>) {
+    let prompt_now = ui.get_ws_prompt();
     let mut s = state.borrow_mut();
     if s.current >= s.tabs.len() {
         return;
     }
     let current = s.current;
     let tab = &mut s.tabs[current];
-    tab.prompt = SharedString::new();
-    tab.composer_pty_mirror.clear();
+    tab.prompt = prompt_now.clone();
+    if tab.composer_pty_mirror.is_empty() {
+        tab.composer_pty_mirror = prompt_now.to_string();
+    }
     tab.history_cursor = None;
     tab.history_draft.clear();
-    s.timer_snapshot = Some((current, String::new()));
+    s.timer_snapshot = Some((current, prompt_now.to_string()));
 }
 
 fn is_printable_char(key: &str) -> bool {
@@ -314,7 +316,7 @@ pub(super) fn connect(
                 s.current < s.tabs.len() && terminal_menu::has_terminal_menu(&s.tabs[s.current])
             };
             if has_menu && inject_plain_interactive_key(&ui, &st_keys, "Return") {
-                clear_forwarded_interactive_prompt(&ui, &st_keys);
+                preserve_forwarded_interactive_prompt(&ui, &st_keys);
                 return true;
             }
         }
