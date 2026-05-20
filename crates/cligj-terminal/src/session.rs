@@ -197,10 +197,6 @@ fn run_session_loop(
                             pending_interactive_floor_reset = Some(InteractiveFloorReset::Viewport);
                         }
                     }
-                    if resize_settle_deadline.is_some() {
-                        resize_settle_deadline =
-                            Some(Instant::now() + Duration::from_millis(CONPTY_RESIZE_SETTLE_MS));
-                    }
                 }
                 InternalEvent::Control(ControlCommand::Resize { cols, rows }) => {
                     let _ = process.resize(cols, rows);
@@ -252,8 +248,11 @@ fn run_session_loop(
             resize_settle_deadline = None;
         }
 
-        if resize_settle_deadline.is_some() {
-            continue;
+        if let Some(deadline) = resize_settle_deadline {
+            if Instant::now() < deadline {
+                continue;
+            }
+            resize_settle_deadline = None;
         }
 
         let alt_screen_active = term.is_alt_screen_active();

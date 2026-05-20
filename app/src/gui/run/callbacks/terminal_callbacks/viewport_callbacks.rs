@@ -154,7 +154,26 @@ pub(super) fn connect_terminal_viewport(app: &AppWindow, state: Rc<RefCell<GuiSt
             }
             let cur = s.current;
             let tab = &mut s.tabs[cur];
-            push_terminal_view_to_ui(&ui, tab, None);
+            let scroll_top = ui.get_ws_terminal_scroll_top_px();
+            let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+
+            // Ignore the viewport change we just caused from Rust via `apply_terminal_scroll_top_px`.
+            // That path already pushed the correct visible slice, and re-reading the ScrollView here
+            // can race with intermediate geometry updates and flash the wrong band.
+            if (scroll_top - tab.last_pushed_scroll_top).abs() <= 0.5
+                && (vh - tab.last_pushed_viewport_height).abs() <= 0.5
+            {
+                return;
+            }
+
+            if tab.terminal_mode == TerminalMode::InteractiveAi {
+                let row_height = terminal_row_height_px(tab);
+                let max_scroll =
+                    ((scrollable_terminal_line_count(tab) as f32) * row_height - vh).max(0.0);
+                tab.interactive_follow_output = scroll_top >= (max_scroll - 1.0);
+            }
+            tab.terminal_saved_scroll_top_px = scroll_top;
+            push_terminal_view_to_ui(&ui, tab, Some(scroll_top));
         });
     });
 }

@@ -105,6 +105,7 @@ export component GjViewer inherits Rectangle {
 
     changed height => {
         root.sync-terminal-grid-to-pty();
+        root.viewport-changed();
     }
 
     /// 分頁載入時呼叫：強制送出 resize，忽略去抖。

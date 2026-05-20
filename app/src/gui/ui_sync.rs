@@ -52,10 +52,6 @@ fn terminal_pinned_footer_start_with_rows(tab: &TabState, pinned_rows: usize) ->
     Some(n.saturating_sub(pinned_rows))
 }
 
-pub(crate) fn terminal_pinned_footer_start(tab: &TabState) -> Option<usize> {
-    terminal_pinned_footer_start_with_rows(tab, effective_terminal_pinned_footer_lines(tab))
-}
-
 fn scrollable_terminal_line_count_with_rows(tab: &TabState, pinned_rows: usize) -> usize {
     terminal_pinned_footer_start_with_rows(tab, pinned_rows).unwrap_or(tab.terminal_lines.len())
 }
@@ -377,15 +373,85 @@ fn refresh_terminal_menu_for_visible_range(
     viewport_height: f32,
 ) -> Option<(usize, usize)> {
     let (first, last) = terminal_window_bounds(body_n, scroll_top, row_height, viewport_height)?;
-    let detect_last = if footer_start.is_some()
-        && terminal_view_near_bottom(body_n, scroll_top, row_height, viewport_height)
-    {
-        tab.terminal_lines.len().saturating_sub(1)
+    let (detect_first, detect_last) = if let Some(footer_start) = footer_start {
+        if tab.terminal_mode == TerminalMode::InteractiveAi {
+            // Interactive slash/provider menus often render inside the pinned-footer tail first.
+            // If we only scan the current body viewport, we can miss the menu entirely, keep the
+            // footer pinned, and collapse the menu to a single visible row until a resize/scroll.
+            (
+                footer_start.saturating_sub(12),
+                tab.terminal_lines.len().saturating_sub(1),
+            )
+        } else if terminal_view_near_bottom(body_n, scroll_top, row_height, viewport_height) {
+            (first, tab.terminal_lines.len().saturating_sub(1))
+        } else {
+            (first, last)
+        }
     } else {
-        last
+        (first, last)
     };
-    terminal_menu::refresh_terminal_menu_state(tab, first, detect_last);
+    terminal_menu::refresh_terminal_menu_state(tab, detect_first, detect_last);
     Some((first, last))
+}
+
+#[derive(Clone, Copy)]
+struct TerminalViewLayoutState {
+    effective_pinned_rows: usize,
+    footer_start: Option<usize>,
+    body_n: usize,
+    bounds: Option<(usize, usize)>,
+}
+
+fn terminal_view_layout_state(
+    tab: &mut TabState,
+    scroll_top: f32,
+    viewport_height: f32,
+) -> TerminalViewLayoutState {
+    let row_height = terminal_row_height_px(tab);
+    let configured_pinned_rows = tab.terminal_pinned_footer_lines;
+    let mut effective_pinned_rows = effective_terminal_pinned_footer_lines(tab);
+    let mut footer_start = terminal_pinned_footer_start_with_rows(tab, effective_pinned_rows);
+    let mut body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
+    let mut bounds = refresh_terminal_menu_for_visible_range(
+        tab,
+        body_n,
+        footer_start,
+        scroll_top,
+        row_height,
+        viewport_height,
+    );
+    let desired_pinned_rows = if terminal_menu::has_terminal_menu(tab) {
+        0
+    } else {
+        configured_pinned_rows
+    };
+    if desired_pinned_rows != effective_pinned_rows {
+        effective_pinned_rows = desired_pinned_rows;
+        footer_start = terminal_pinned_footer_start_with_rows(tab, effective_pinned_rows);
+        body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
+        bounds = refresh_terminal_menu_for_visible_range(
+            tab,
+            body_n,
+            footer_start,
+            scroll_top,
+            row_height,
+            viewport_height,
+        );
+    }
+    TerminalViewLayoutState {
+        effective_pinned_rows,
+        footer_start,
+        body_n,
+        bounds,
+    }
+}
+
+pub(crate) fn sync_terminal_menu_layout_state(
+    tab: &mut TabState,
+    scroll_top: f32,
+    viewport_height: f32,
+) {
+    let _ = terminal_view_layout_state(tab, scroll_top, viewport_height);
 }
 
 fn pin_lines_text(pinned_rows: usize) -> SharedString {
@@ -481,36 +547,11 @@ pub(crate) fn push_terminal_view_to_ui(
     tab.terminal_view_height_px = vh;
     tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
     let row_height = terminal_row_height_px(tab);
-    let configured_pinned_rows = tab.terminal_pinned_footer_lines;
-    let mut effective_pinned_rows = effective_terminal_pinned_footer_lines(tab);
-    let mut footer_start = terminal_pinned_footer_start(tab);
-    let mut body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
-    let mut bounds = refresh_terminal_menu_for_visible_range(
-        tab,
-        body_n,
-        footer_start,
-        scroll_top,
-        row_height,
-        vh,
-    );
-    let desired_pinned_rows = if terminal_menu::has_terminal_menu(tab) {
-        0
-    } else {
-        configured_pinned_rows
-    };
-    if desired_pinned_rows != effective_pinned_rows {
-        effective_pinned_rows = desired_pinned_rows;
-        footer_start = terminal_pinned_footer_start_with_rows(tab, effective_pinned_rows);
-        body_n = scrollable_terminal_line_count_with_rows(tab, effective_pinned_rows);
-        bounds = refresh_terminal_menu_for_visible_range(
-            tab,
-            body_n,
-            footer_start,
-            scroll_top,
-            row_height,
-            vh,
-        );
-    }
+    let layout = terminal_view_layout_state(tab, scroll_top, vh);
+    let effective_pinned_rows = layout.effective_pinned_rows;
+    let footer_start = layout.footer_start;
+    let body_n = layout.body_n;
+    let bounds = layout.bounds;
     ui.set_ws_terminal_pin_lines(pin_lines_text(effective_pinned_rows));
     let footer_rows: Vec<TermLine> = footer_start
         .map(|start| {
@@ -797,4 +838,85 @@ pub(crate) fn load_tab_to_ui(ui: &AppWindow, tab: &mut TabState) {
     ui.invoke_ws_apply_terminal_scroll_top_px(scroll);
     push_terminal_view_to_ui(ui, tab, Some(scroll));
     tab.terminal_scroll_resync_next = true;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        scrollable_terminal_line_count, terminal_scroll_top_for_tab, terminal_view_layout_state,
+    };
+    use crate::gui::state::{TabState, TerminalMode};
+    use cligj_terminal::render::{ColoredLine, ColoredSpan};
+
+    fn line(text: &str) -> ColoredLine {
+        ColoredLine {
+            blank: text.trim().is_empty(),
+            spans: if text.is_empty() {
+                Vec::new()
+            } else {
+                vec![ColoredSpan {
+                    text: text.to_string(),
+                    fg: [240, 240, 240],
+                    bg: [18, 18, 18],
+                }]
+            },
+        }
+    }
+
+    fn highlighted_line(text: &str) -> ColoredLine {
+        ColoredLine {
+            blank: false,
+            spans: vec![ColoredSpan {
+                text: text.to_string(),
+                fg: [18, 18, 18],
+                bg: [40, 120, 210],
+            }],
+        }
+    }
+
+    #[test]
+    fn interactive_menu_tail_unpins_before_follow_scroll_math() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.interactive_follow_output = true;
+        tab.terminal_pinned_footer_lines = 2;
+        tab.terminal_row_height_px = 18.0;
+        tab.terminal_lines = vec![
+            line("history 1"),
+            line("history 2"),
+            line("previous output"),
+            line("workspace"),
+            highlighted_line("/help      Show help"),
+            line("/stats     Show status"),
+        ];
+
+        assert_eq!(scrollable_terminal_line_count(&tab), 4);
+
+        let layout = terminal_view_layout_state(&mut tab, 0.0, 36.0);
+
+        assert_eq!(layout.effective_pinned_rows, 0);
+        assert_eq!(layout.body_n, 6);
+        assert_eq!(terminal_scroll_top_for_tab(&tab, 36.0), 72.0);
+    }
+
+    #[test]
+    fn non_menu_footer_keeps_pinned_rows() {
+        let mut tab = TabState::new_for_test();
+        tab.terminal_mode = TerminalMode::InteractiveAi;
+        tab.terminal_pinned_footer_lines = 2;
+        tab.terminal_row_height_px = 18.0;
+        tab.terminal_lines = vec![
+            line("history 1"),
+            line("history 2"),
+            line("previous output"),
+            line("workspace"),
+            line("model      gpt-5.4 xhigh"),
+            line("cwd        D:\\DotNetProjects\\CliGJ"),
+        ];
+
+        let layout = terminal_view_layout_state(&mut tab, 0.0, 36.0);
+
+        assert_eq!(layout.effective_pinned_rows, 2);
+        assert_eq!(layout.body_n, 4);
+    }
 }

@@ -13,7 +13,8 @@ use crate::gui::ipc::IpcBridge;
 use crate::gui::slint_ui::AppWindow;
 use crate::gui::state::{GuiState, TERMINAL_SCROLLBACK_CAP, TabState, TerminalChunk, TerminalMode};
 use crate::gui::ui_sync::{
-    push_terminal_view_to_ui, scrollable_terminal_line_count, terminal_scroll_top_for_tab,
+    clamp_saved_scroll_top, push_terminal_view_to_ui, scrollable_terminal_line_count,
+    sync_terminal_menu_layout_state, terminal_scroll_top_for_tab,
 };
 use cligj_terminal::render::ColoredLine;
 use cligj_terminal::types::{RawPtyEvent, ResetReason};
@@ -105,22 +106,11 @@ pub(super) fn should_sync_interactive_prompt(
     if extracted.is_empty() || extracted == current_ui {
         return false;
     }
-    // Recovery path: if the visible composer was cleared/desynced unexpectedly but the last
-    // mirrored prompt is still known, allow the terminal prompt to repopulate the UI so local
-    // editing/backspace can resume. Explicit submit/clear paths reset `composer_pty_mirror`,
-    // so this does not revive intentionally cleared prompts.
-    if current_ui.is_empty()
-        && !composer_pty_mirror.is_empty()
-        && extracted.starts_with(composer_pty_mirror)
-    {
-        return true;
-    }
     let Some(first) = current_ui.chars().next() else {
         return false;
     };
-    // Never repopulate the composer after submit/clear from an echoed terminal line.
-    // Only allow terminal -> composer sync while the terminal is extending the same
-    // command-like prompt text that already exists in the UI.
+    // UI is authoritative after clear/submit. Only allow terminal -> composer sync while the
+    // terminal is extending the same command-like prompt text that already exists in the UI.
     matches!(first, '/' | '@' | '#')
         && current_ui == composer_pty_mirror
         && extracted.starts_with(current_ui)
@@ -626,6 +616,15 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
             ui.set_ws_terminal_text(SharedString::from(tab.terminal_text.as_str()));
         }
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        if tab.terminal_mode == TerminalMode::InteractiveAi {
+            tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
+            let probe_scroll = if tab.interactive_follow_output {
+                terminal_scroll_top_for_tab(tab, vh)
+            } else {
+                clamp_saved_scroll_top(tab, vh)
+            };
+            sync_terminal_menu_layout_state(tab, probe_scroll, vh);
+        }
         let exp = terminal_scroll_top_for_tab(tab, vh);
         let n = scrollable_terminal_line_count(tab);
         let interactive = tab.terminal_mode == TerminalMode::InteractiveAi;
@@ -665,6 +664,15 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     if tab.terminal_scroll_resync_next {
         tab.terminal_scroll_resync_next = false;
         let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
+        if tab.terminal_mode == TerminalMode::InteractiveAi {
+            tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
+            let probe_scroll = if tab.interactive_follow_output {
+                terminal_scroll_top_for_tab(tab, vh)
+            } else {
+                clamp_saved_scroll_top(tab, vh)
+            };
+            sync_terminal_menu_layout_state(tab, probe_scroll, vh);
+        }
         let exp = terminal_scroll_top_for_tab(tab, vh);
         ui.invoke_ws_apply_terminal_scroll_top_px(exp);
         push_terminal_view_to_ui(ui, tab, Some(exp));
@@ -675,6 +683,8 @@ fn refresh_current_terminal(ui: &AppWindow, s: &mut GuiState, current_changed: b
     let st = ui.get_ws_terminal_scroll_top_px();
     let vh = ui.get_ws_terminal_viewport_height_px();
     if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
+        tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
+        sync_terminal_menu_layout_state(tab, st, vh.max(1.0));
         let exp = terminal_scroll_top_for_tab(tab, vh.max(1.0));
         if (tab.last_pushed_scroll_top - exp).abs() > 0.5
             || (vh - tab.last_pushed_viewport_height).abs() > 0.5

@@ -168,6 +168,10 @@ pub struct TabState {
     pub(crate) last_window_total: usize,
     /// Last `prompt` string written to ConPTY while `@` is active (composer → shell line sync).
     pub(crate) composer_pty_mirror: String,
+    /// Last native interactive prompt text observed while the UI composer stayed unchanged.
+    /// Used to confirm a persistent native/UI mismatch before force-resyncing from the UI text.
+    pub(crate) composer_native_resync_candidate: String,
+    pub(crate) composer_native_resync_candidate_ticks: u8,
     /// Local row index into `terminal_lines` for the cell cursor (matches overlay in `ui_sync`).
     pub(crate) terminal_cursor_row: Option<usize>,
     pub(crate) terminal_cursor_col: Option<usize>,
@@ -323,6 +327,8 @@ impl TabState {
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
             composer_pty_mirror: String::new(),
+            composer_native_resync_candidate: String::new(),
+            composer_native_resync_candidate_ticks: 0,
             terminal_cursor_row: None,
             terminal_cursor_col: None,
             terminal_physical_origin: 0,
@@ -493,6 +499,8 @@ impl TabState {
             last_window_last: usize::MAX,
             last_window_total: usize::MAX,
             composer_pty_mirror: String::new(),
+            composer_native_resync_candidate: String::new(),
+            composer_native_resync_candidate_ticks: 0,
             terminal_cursor_row: None,
             terminal_cursor_col: None,
             terminal_physical_origin: 0,

@@ -55,6 +55,10 @@ pub(crate) fn spawn_composer_at_sync_timer(app: &AppWindow, state: Rc<RefCell<Gu
             let key = (s.current, prompt_now);
 
             if s.timer_snapshot.as_ref() == Some(&key) {
+                // Even without a new UI edit, the native interactive prompt can drift from the
+                // mirrored composer (for example after redraws or partial deletes). Keep the
+                // UI authoritative by continuing the lightweight PTY resync path.
+                sync_composer_line_to_conpty(&ui, &mut s);
                 return;
             }
 

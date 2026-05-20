@@ -9,7 +9,8 @@ use crate::gui::ipc::IpcBridge;
 use crate::gui::slint_ui::{AppWindow, InteractiveCmdEditorRow, TerminalHistoryWindow};
 use crate::gui::state::{GuiState, TerminalMode};
 use crate::gui::ui_sync::{
-    clamp_saved_scroll_top, push_terminal_view_to_ui, terminal_scroll_top_for_tab,
+    clamp_saved_scroll_top, push_terminal_view_to_ui, sync_terminal_menu_layout_state,
+    terminal_scroll_top_for_tab,
 };
 
 mod prompt_callbacks;
@@ -33,6 +34,15 @@ fn refresh_terminal_tab_view(ui: &AppWindow, tab: &mut crate::gui::state::TabSta
     let vh = ui.get_ws_terminal_viewport_height_px().max(1.0);
     let saved = clamp_saved_scroll_top(tab, vh);
     tab.terminal_saved_scroll_top_px = saved;
+    if tab.terminal_mode == TerminalMode::InteractiveAi {
+        tab.terminal_row_height_px = ui.get_ws_terminal_row_height_px().max(1.0);
+        let probe_scroll = if tab.interactive_follow_output {
+            terminal_scroll_top_for_tab(tab, vh)
+        } else {
+            saved
+        };
+        sync_terminal_menu_layout_state(tab, probe_scroll, vh);
+    }
     let scroll =
         if tab.terminal_mode == TerminalMode::InteractiveAi && tab.interactive_follow_output {
             terminal_scroll_top_for_tab(tab, vh)
